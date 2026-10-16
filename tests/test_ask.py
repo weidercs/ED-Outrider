@@ -471,6 +471,94 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class VoiceCommands(unittest.TestCase):
+    """The list of voice commands (GET /api/ask/commands: Settings → Voice, the tablet's Voice commands…): every fixed
+    command with what it does and the phrases that ask it, from resources/ask.json, and the words that narrow one."""
+
+    def test_every_command_has_a_description(self):
+        cmds, desc = ask.read_file()
+        self.assertEqual(set(cmds), set(ask.COMMANDS))
+        self.assertEqual(set(desc), set(ask.COMMANDS))
+        for c, d in desc.items():
+            self.assertTrue(d.strip() and d.endswith("."), c)
+
+    def test_every_command_in_one_group(self):
+        listed = [c for _, members in ask.GROUPS for c in members]
+        self.assertEqual(sorted(listed), sorted(ask.COMMANDS))
+
+    def test_the_list_is_the_file(self):
+        cmds, desc = ask.read_file()
+        groups = ask.command_list()
+        rows = {r["command"]: r for g in groups for r in g["commands"]}
+        self.assertEqual([g["name"] for g in groups], [name for name, _ in ask.GROUPS])
+        self.assertEqual(set(rows), set(ask.COMMANDS))
+        phrases = ask.load_phrases()
+        for c, r in rows.items():
+            self.assertEqual(r["description"], desc[c])
+            self.assertEqual((r["title"], r["title"][:1].isupper()), (ask.title(c), True))
+            # every phrase of the file, once as it is heard ("what's left" stands for "whats left" too)
+            self.assertEqual(sorted({ask.norm(p) for p in r["phrases"]}), sorted(set(phrases[c])), c)
+            self.assertEqual(len(r["phrases"]), len(set(phrases[c])), c)
+            for p in r["phrases"]:   # and each one asks this command, not an earlier one: the list never misleads
+                self.assertEqual(ask.match(p, phrases), c, p)
+        self.assertIn("what's left", rows["whats_left"]["phrases"])
+        self.assertNotIn("whats left", rows["whats_left"]["phrases"])
+        # an edited file: a new phrase shows, a command with none left is not listed, no description is None
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "ask.json")
+            with open(path, "w") as f:
+                json.dump({"commands": {"fuel": ["fuel", "gas tank"], "unsold": [], "hush": ["hush"]}}, f)
+            got = {r["command"]: r for g in ask.command_list(ask.read_file(path)) for r in g["commands"]}
+        self.assertEqual(set(got), {"fuel", "hush"})
+        self.assertEqual((got["fuel"]["phrases"], got["fuel"]["description"]), (["fuel", "gas tank"], None))
+
+    def test_narrowing_words(self):
+        """The narrowing words listed are the ones the answers read: each service, kind and trader word makes
+        nearest_query ask for what the list says, each hush example gives its mode, "session" the latest session."""
+        rows = {r["command"]: r for g in ask.command_list() for r in g["commands"]}
+        dockw = rows["nearest_dock"]["narrowing"]
+        said = {w: n["means"] for n in dockw for w in n["words"]}
+        for w, svc in list(ask.NEAREST_WORDS.items()) + [("uc", "UC")]:
+            self.assertEqual(ask.nearest_query(f"nearest station with {w}")[0], [svc], w)
+            self.assertIn(ask.SERVICE_NAMES.get(svc, svc), said[w])
+        for w in ask.STATION_WORDS + ask.CARRIER_WORDS:
+            self.assertEqual(ask.nearest_query(f"nearest {w}")[1], "station" if w in ask.STATION_WORDS else "carrier", w)
+            self.assertIn(w, said)
+        for w, kind in ask.TRADER_WORDS.items():
+            self.assertEqual(ask.nearest_query(f"nearest {w} trader")[0], [kind], w)
+            self.assertIn(kind.lower() + " material trader", said[w])
+        self.assertEqual(said["data"], 'beside "trader": an encoded material trader')
+        self.assertEqual(ask.nearest_query("nearest trader")[0], ["Trader"])
+        hush = rows["hush"]["narrowing"]
+        self.assertEqual([n["means"].split()[0] for n in hush], ["10", "30", "until"])
+        for (mode, _, examples), n in zip(ask.HUSH_EXAMPLES, hush):
+            self.assertEqual(n["words"], list(examples))
+            for ex in examples:
+                self.assertEqual(ask.hush_mode(f"hush {ex}"), mode, ex)
+                self.assertEqual(ask.match(f"hush {ex}", ask.load_phrases()), "hush", ex)
+        self.assertEqual(ask.hush_mode("hush"), "30m")   # no time said: what the 30 minutes row says
+        self.assertEqual(rows["travel_today"]["narrowing"][0]["words"], ["session"])
+        self.assertEqual(rows["fuel"]["narrowing"], [])
+
+    def test_endpoint(self):
+        db = ed_outrider.open_db(":memory:")
+        self.addCleanup(db.close)
+        state = ed_outrider.State(db, ed_outrider.Journals(db), None, 25)
+        from aiohttp.test_utils import TestClient, TestServer
+
+        async def run():
+            async with TestClient(TestServer(ed_outrider.make_app(state))) as c:
+                r = await c.get("/api/ask/commands")
+                out = (r.status, await r.json())
+                state.assistant.update(enabled=True, base_url="http://127.0.0.1:9", model="m")
+                return out, (await (await c.get("/api/ask/commands")).json())["ai"]
+        (status, body), ai_on = asyncio.run(run())
+        self.assertEqual((status, set(body), body["ai"], ai_on), (200, {"groups", "ai"}, "off", "on"))
+        self.assertEqual(body["groups"], ask.command_list(state.ask_file))
+        self.assertEqual(sum(len(g["commands"]) for g in body["groups"]), len(ask.COMMANDS))
+        self.assertFalse(ask.tools.allowed("/api/ask/commands"))   # not one of the AI's tools: nothing it needs
+
+
 class KnownQuestions(unittest.TestCase):
     def test_every_command_is_named(self):
         """What the voice says it knows lists every command it answers: "the nearest station" was left out

@@ -52,7 +52,7 @@
   -webkit-mask: url("../emblems/alliance.svg") center / contain no-repeat; mask: url("../emblems/alliance.svg") center / contain no-repeat; }
 
 /* ---- the desktop page (Settings > Display): cockpit orange and sand ---- */
-:root[data-theme="alliance"] { --desk-pill: 4px; --desk-radius: 4px; --desk-lbl: var(--al-sand); --desk-pill-size: 13px; }
+:root[data-theme="alliance"] { --desk-pill: 4px; --desk-radius: 4px; --desk-lbl: var(--al-sand); --desk-pill-size: 12px; }
 [data-theme="alliance"] body:not(.tablet) header { border-bottom: 3px solid var(--al-orange); }
 [data-theme="alliance"] body:not(.tablet) .tile { border-color: var(--al-line); border-top: 3px solid var(--al-sand); }
 [data-theme="alliance"] body:not(.tablet) .views button { border-color: var(--al-line); }

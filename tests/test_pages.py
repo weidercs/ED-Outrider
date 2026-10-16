@@ -588,3 +588,21 @@ class ReviewBatchF(unittest.TestCase):
             asyncio.run(once())
             asyncio.run(once())
         self.assertEqual((calls, self.state.unsold_login), (["2026-01-01T01:00:00Z"], ("2026-01-01T01:00:00Z", 3)))
+
+
+class ShipNames(unittest.TestCase):
+    def test_the_page_names_the_newer_ships(self):
+        """page.js' SHIP_NAMES: the journal's ship symbols -> the names the game shows. The Lynx Highliner read
+        "MediumTransport01" in the ship list (the author, in game, 2026-10-14): the newer ships' symbols are not their
+        names."""
+        import re
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(here, "static", "page.js"), encoding="utf-8") as f:
+            table = re.search(r"const SHIP_NAMES = \{(.*?)\};", f.read(), re.S).group(1)
+        names = dict(re.findall(r'(\w+): "([^"]+)"', table))
+        for symbol, name in (("mediumtransport01", "Lynx Highliner"), ("lakonminer", "Type-11 Prospector"),
+                             ("smallcombat01_nx", "Kestrel Mk II"), ("explorer_nx", "Caspian Explorer"),
+                             ("panthermkii", "Panther Clipper Mk II"), ("python_nx", "Python Mk II"),
+                             ("cobramkv", "Cobra Mk V"), ("mandalay", "Mandalay"), ("corsair", "Corsair"),
+                             ("type8", "Type-8 Transporter"), ("type9_military", "Type-10 Defender")):
+            self.assertEqual(names.get(symbol), name, symbol)

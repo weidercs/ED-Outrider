@@ -1,78 +1,107 @@
-"""Build resources/blueprints.json (the Commander view's Engineering list) from EDCD's coriolis-data and FDevIDs tables,
-downloaded into a folder (https://github.com/EDCD/coriolis-data: modifications/blueprints.json and modules.json;
-https://github.com/EDCD/FDevIDs: material.csv): every ship-module blueprint with its materials per grade, by the journal's material names, and
-the engineers who offer each grade. Run from the repository: python -I build_blueprints.py <dl folder> <out file>."""
-import csv
-import io
+#!/usr/bin/env python3
+"""Build resources/blueprints.json (the Commander view's Engineering list) from EDCD's coriolis-data, fetched at a
+pinned commit: modifications/blueprints.json (each blueprint's materials per grade, by their English names) and
+modifications/modules.json (which blueprints each kind of module takes and the engineers offering each grade FOR THAT
+KIND: a pulse laser's Overcharged is not a cannon's). One row per kind of module and blueprint; the materials by the
+journal's own names, from outrider.materials (its names and ids are Outrider's own table: no other source needed).
+
+    .venv/bin/python scripts/build_blueprints.py            (two downloads, about 400 kB)
+
+To move to a newer coriolis-data, set COMMIT and COMMIT_DATE to its commit and run it again; it stops, writing nothing,
+on a material or a kind of module it cannot name.
+"""
 import json
 import os
 import sys
+import urllib.request
 
-sys.path.insert(0, os.getcwd())
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
 import outrider.materials as M   # noqa: E402
 
-src, out = sys.argv[1], sys.argv[2]
-bp = json.load(io.open(os.path.join(src, "blueprints.json"), encoding="utf-8"))
-mods = json.load(io.open(os.path.join(src, "modules.json"), encoding="utf-8"))
-ids = {r["name"].strip().lower(): r["symbol"].strip().lower() for r in csv.DictReader(io.open(os.path.join(src, "material.csv"), encoding="utf-8"))}
-ids["untypical shield scans"] = "shielddensityreports"
-assert "shielddensityreports" in ids.values()
+REPO = "https://github.com/EDCD/coriolis-data"
+COMMIT = "0db9234b5b9ce8c939ea84133d7ce336eea88e27"   # master, "Merge pull request #131 from EDCD/develop"
+COMMIT_DATE = "2026-04-24"
+FILES = ("modifications/blueprints.json", "modifications/modules.json")
+URL = "https://raw.githubusercontent.com/EDCD/coriolis-data/{commit}/{path}"
+# coriolis-data's LICENSE.md, as read at that commit
+LICENCE = ("coriolis-data's LICENSE.md: the data and its JSON files are the intellectual property and copyright of "
+           "Frontier Developments plc and subject to its terms and conditions (https://www.frontierstore.net/terms-and-conditions/); "
+           "only coriolis.io's own code is MIT")
+OUT = os.path.join(ROOT, "resources", "blueprints.json")
+HEADERS = {"User-Agent": "ED-Outrider blueprints build"}
 
-FIX = {"Felicty Farseer": "Felicity Farseer", "Auto field mainentance unit": "Auto field maintenance unit"}
-engineers = {}   # blueprint -> grade -> names
-by_kind = {}     # blueprint -> grade -> module kind -> names (a shared blueprint's engineers differ by kind)
-for code, kind in mods.items():
-    for name, b in (kind.get("blueprints") or {}).items():
-        for g, v in b["grades"].items():
-            names = {FIX.get(e, e) for e in v.get("engineers") or []}
-            engineers.setdefault(name, {}).setdefault(g, set()).update(names)
-            by_kind.setdefault(name, {}).setdefault(g, {}).setdefault(code, set()).update(names)
-
-# what each of coriolis-data's module kinds is called, for a blueprint shared by several ("for: missile racks, ...")
-KIND_NAMES = {
-    "bl": "beam lasers", "ul": "burst lasers", "pl": "pulse lasers", "mc": "multi-cannons", "advmc": "advanced multi-cannons",
-    "c": "cannons", "fc": "fragment cannons", "pa": "plasma accelerators", "rg": "rail guns", "mr": "missile racks",
-    "amr": "advanced missile racks", "nl": "mine launchers", "tp": "torpedo pylons",
-    "ch": "chaff launchers", "cs": "manifest scanners", "csl": "caustic sink launchers", "ec": "electronic countermeasures",
-    "hs": "heat sink launchers", "kw": "kill warrant scanners", "po": "point defence", "ws": "frame shift wake scanners",
-    "sg": "shield generators", "bsg": "bi-weave shield generators", "psg": "prismatic shield generators",
+# coriolis-data's kinds of module (its "grp" codes) in words; a kind it adds with blueprints stops the build until named
+KINDS = {
+    "am": "Auto field maintenance unit", "bh": "Bulkheads", "bl": "Beam laser", "bsg": "Bi-weave shield generator",
+    "c": "Cannon", "cc": "Collector limpet controller", "ch": "Chaff launcher", "cr": "Cargo rack", "cs": "Cargo scanner",
+    "csl": "Caustic sink launcher", "ec": "Electronic countermeasure", "fc": "Fragment cannon",
+    "fi": "Frame shift drive interdictor", "fs": "Fuel scoop", "fsd": "Frame shift drive",
+    "fx": "Fuel transfer limpet controller", "hb": "Hatch breaker limpet controller", "hr": "Hull reinforcement package",
+    "hs": "Heat sink launcher", "kw": "Kill warrant scanner", "ls": "Life support", "mc": "Multi-cannon",
+    "advmc": "Advanced multi-cannon", "mr": "Missile rack", "amr": "Advanced missile rack", "nl": "Mine launcher",
+    "pa": "Plasma accelerator", "pc": "Prospector limpet controller", "pd": "Power distributor", "pl": "Pulse laser",
+    "po": "Point defence", "pp": "Power plant", "psg": "Prismatic shield generator", "rf": "Refinery", "rg": "Rail gun",
+    "s": "Sensors", "sb": "Shield booster", "scb": "Shield cell bank", "sg": "Shield generator",
+    "ss": "Detailed surface scanner", "t": "Thrusters", "tp": "Torpedo pylon", "ul": "Burst laser",
+    "ws": "Frame shift wake scanner",
 }
-users = {}
-for code, kind in mods.items():
-    for name in kind.get("blueprints") or {}:
-        users.setdefault(name, []).append(code)
+FIX = {"Felicty Farseer": "Felicity Farseer"}   # the source's typos in engineers' names
 
-rows, unknown, unnamed = [], set(), set()
-for key, b in sorted(bp.items(), key=lambda kv: (kv[1]["modulename"][0].lower(), kv[1]["name"].lower())):
-    grades = {}
-    for g, v in sorted(b["grades"].items()):
-        need = {}
-        for name, n in (v.get("components") or {}).items():
-            mid = ids[name.strip().lower()]
-            if mid not in M.MATERIALS:
-                unknown.add(mid)
-            need[mid] = n
-        if need:   # a grade the source lists without materials is left out
-            grades[g] = {"materials": need, "engineers": sorted(engineers.get(key, {}).get(g, ()))}
-            kinds_here = by_kind.get(key, {}).get(g, {})
-            if len(users.get(key, [])) > 1 or FIX.get(b["modulename"][0], b["modulename"][0]).lower() == "weapon":
-                grades[g]["by_kind"] = {KIND_NAMES.get(k, k): sorted(v) for k, v in sorted(kinds_here.items())}
-    if not grades:
-        continue
-    module = FIX.get(b["modulename"][0], b["modulename"][0])
-    kinds = sorted(users.get(key, []))
-    # the modules a blueprint shared by several kinds is for (a weapon's: missile racks, multi-cannons...), by name
-    used_by = [KIND_NAMES.get(k, k) for k in kinds] if len(kinds) > 1 or module.lower() == "weapon" else []
-    unnamed.update(k for k in kinds if k not in KIND_NAMES and used_by)
-    rows.append({"id": key, "module": module[0].upper() + module[1:], "name": b["name"], "grades": grades, "for": used_by})
-print(len(rows), "blueprints; materials Outrider's table does not list:", sorted(unknown), "; kinds without a name:", sorted(unnamed))
-doc = {"_readme": "Ship-module engineering blueprints for the Commander view's Engineering list (outrider/commander.py): the "
-                  "materials each grade takes, by the journal's material names, and the engineers offering it. Built by "
-                  "scripts/build_blueprints.py from EDCD's coriolis-data (modifications/blueprints.json, modules.json) and FDevIDs "
-                  "(material.csv); the game data is Frontier Developments'. Experimental effects and Odyssey suit and "
-                  "weapon upgrades are not in it.",
-       "blueprints": rows}
-with io.open(out, "w", encoding="utf-8", newline="\n") as f:
-    json.dump(doc, f, ensure_ascii=False, separators=(",", ":"))
-    f.write("\n")
-print(os.path.getsize(out), "bytes")
+
+def get(path):
+    url = URL.format(commit=COMMIT, path=path)
+    with urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS), timeout=60) as r:
+        return json.loads(r.read())
+
+
+def build(bp, mods):
+    """The rows from coriolis-data's two files: [{id (the blueprint, as the journal's EngineerModifications names it),
+    kind, module, name, grades: {grade: {materials: {journal id: per roll}, engineers: [...]}}}], by module then name."""
+    by_name = {v[0].strip().lower(): k for k, v in M.MATERIALS.items()}
+    rows, unknown, kinds = [], set(), set()
+    for kind, m in mods.items():
+        for key, offered in sorted((m.get("blueprints") or {}).items()):
+            if kind not in KINDS:
+                kinds.add(kind)
+                continue
+            b = bp[key]
+            grades = {}
+            for g, v in sorted(b["grades"].items()):
+                need = {}
+                for name, n in (v.get("components") or {}).items():
+                    mid = by_name.get(name.strip().lower())
+                    if mid is None:
+                        unknown.add(name)
+                    need[mid] = n
+                who = ((offered.get("grades") or {}).get(g) or {}).get("engineers") or []
+                if need and who:   # a grade the source lists without materials or engineers is left out
+                    grades[g] = {"materials": need, "engineers": sorted({FIX.get(e, e) for e in who})}
+            if grades:
+                rows.append({"id": key, "kind": kind, "module": KINDS[kind], "name": b["name"], "grades": grades})
+    if unknown or kinds:
+        sys.exit(f"materials outrider.materials does not name: {sorted(unknown)}; kinds of module KINDS does not name: "
+                 f"{sorted(kinds)}. Nothing written")
+    rows.sort(key=lambda r: (r["module"].lower(), r["name"].lower()))
+    return rows
+
+
+def main():
+    bp, mods = (get(p) for p in FILES)
+    rows = build(bp, mods)
+    doc = {"_readme": "Ship-module engineering blueprints for the Commander view's Engineering list (outrider/commander.py): "
+                      "one row per kind of module and blueprint, the materials each grade takes (by the journal's material "
+                      "names) and the engineers offering it for that kind. Built by scripts/build_blueprints.py from EDCD's "
+                      f"coriolis-data ({REPO}, commit {COMMIT} of {COMMIT_DATE}: {', '.join(FILES)}); {LICENCE}. "
+                      "Experimental effects and Odyssey suit and weapon upgrades are not in it.",
+           "source": {"repo": REPO, "commit": COMMIT, "date": COMMIT_DATE, "files": list(FILES), "licence": LICENCE},
+           "blueprints": rows}
+    with open(OUT + ".tmp", "w", encoding="utf-8", newline="\n") as f:
+        json.dump(doc, f, ensure_ascii=False, separators=(",", ":"))
+        f.write("\n")
+    os.replace(OUT + ".tmp", OUT)
+    print(f"wrote {OUT}: {len(rows)} blueprints for {len({r['kind'] for r in rows})} kinds of module, {os.path.getsize(OUT)} bytes")
+
+
+if __name__ == "__main__":
+    main()

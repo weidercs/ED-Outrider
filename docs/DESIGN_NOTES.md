@@ -21,6 +21,99 @@ upstream project's choices, not rules of the game.
   deaths, sales; `mark()`), the system's `locate` answer changes (its region decides "new to your codex") or the bio
   rules are updated (`bio_rules_gen`); not on `scan_version`, which moves later in the tick. The carrier's fold is
   kept until its own history changes (`carrier_version`), not on every change to the ship's hold.
+- **A ship's build in EDSY and Coriolis** (2026-10-14, `outrider/shipyard_links.py`): EDMC's format, matched step by
+  step from its `plugins/edsy.py`, `plugins/coriolis.py` and `plugins/common_coreutils.py` (`shipyard_url_common`),
+  nothing copied: the Loadout reshaped as EDMC's `monitor.ship()` (canonical lower-case names, modules one per slot in
+  its order, no Health or Value, a laser's 1/1 ammo dropped, a blank ShipName left out, the hull's figures left out),
+  then compact JSON with sorted keys, gzip, URL-safe base64, '=' as `%3D`. Two differences, both on purpose: the build
+  is stamped with the Loadout's own time, not the moment of the click, and the gzip header's time is 0, so one build
+  always gives the same link (tests pin it). The links are built on the server from each ship's latest Loadout, kept
+  whole in `fleet_loadouts.loadout` (journal-derived: the release's one re-read fills it, PARSER_VERSION stays 51); a
+  ship never boarded since the journals begin has none, as nothing records its modules. Privacy differs by site:
+  **EDSY's link keeps the build in the URL's fragment** (after `#`: the browser never sends it to a server; EDSY's
+  page reads it), **Coriolis's sends it as a query parameter** (`/import?data=`: it reaches coriolis.io with the page
+  request, as with EDMC). Either way only the ship's modules and engineering go, never the commander's name. In the
+  Android app a `target="_blank"` link opens in the browser (its WebView hands every other-origin navigation over).
+- **The CMDR tab is journal-derived** (2026-10-12, `outrider/commander.py`; read from the database since
+  2026-10-14, PARSER_VERSION 51). `Journals.handle_commander` folds its lines as the reader meets them, like every other
+  part: meta keys (`COMMANDER_META`: reputation, Powerplay, squadron, the stored ships, stored modules, ship locker,
+  suit loadouts, engineers, missions), each `fresh()`-guarded so a legacy folder read late cannot put back a sold ship
+  or a handed-in mission, and `play_activity` (the fighting and mining per login). All of it is in `RESET_JOURNAL_DATA`
+  and rebuilt on a re-read; none of it is live-only. A tab's GET is a quick read on the event loop, never a scan of the
+  journal files (which read each file whole, the live folder only, and missed every older stored module). The view
+  snapshots what the game lists whole and folds the changes it logs between: the fleet from the last StoredShips plus
+  ships bought, sold, swapped, sent for and renamed (as `outrider/inara.py` reads them), each ship's value from its
+  latest Loadout; suit loadouts created, changed, upgraded or deleted; the ship locker from each ShipLocker line that
+  carries its lists (the game writes them at login and at most changes; some carry none), then ShipLocker.json whenever
+  it is newer, read in the tick only when its modification time moves (as Cargo.json). Stored modules: the last
+  StoredModules list, then ModuleStore, MassModuleStore, ModuleBuy's `StoredItem` (the old module stored, not sold),
+  ModuleRetrieve (its `SwapOutItem` stored), FetchRemoteModule (in transit until its `TransferTime` has passed, then
+  where you sent for it; a list written meanwhile keeps that) and ModuleSellRemote, until the next list replaces the
+  fold (`fresh()`-guarded like the rest); ModuleSell and ModuleBuy's `SellItem` sell from the ship and leave storage
+  alone. A module stored since the list has no value until outfitting lists it. Checked on the author's journals
+  (2026-10-14): replayed, the fold equalled the next list 341 times in 345; of the four, two were modules (probably free with the ship) the game
+  threw away when swapped out (the line does not say so) and two lists held a module no line had moved there (a gap in
+  the journals). ModuleSellRemote and MassModuleStore had no real line: Frontier's manual. A ship's hot flag (wanted)
+  is the latest line that says it, for every ship the same way: a StoredShips entry's `Hot` (always there) and the
+  Loadout's `Hot` for the ship you fly, which by Frontier's manual is there "if wanted at startup": the login's Loadout
+  without it says not hot, a later one counts only when it has it. No real journal had a hot ship or a Loadout with
+  `Hot`; the page marks one with a red ⚖ (the theme's `--bad`). A mission accepted before the journals is kept by its
+  name alone. The login-time snapshots (Missions, Reputation, EngineerProgress, Powerplay, SquadronStartup,
+  ShipLocker) are in `LOGIN_EVENTS`: loading the game is not play, so they never move `last_play_ts` (History's
+  session end, the "away" greeting). Mining in the SRV (the reader knows the vehicle) is counted apart from the ship's.
+  The Sessions tab goes by days like the rest (History's default): the logins of the last 30 days, 40 at most.
+  Ranks and statistics are as of the last login (the game writes them then); the credits and the carrier
+  are the Commander and Carrier tiles' own (one owner each). What exobiology's next rank still takes is an estimate:
+  the post-Update-14 step (the Frontier forum, 2 Jan 2023; Elite IV and V uncertain) times the share the game's own
+  percentage leaves, never Organic_Data_Profits against the totals (checked on real journals: the bands' steps hold
+  within 3 %, the totals not); every other rank shows its percentage only (no trade or exploration figures could be
+  checked the same way). EngineerProgress' Rank is the highest grade an engineer crafts for you (real journals: no
+  craft above it). A tab is asked for again when a journal line it reads is handled (`commander_version`), not on
+  a timer. The blueprint table is a copy of community data (EDCD's coriolis-data at a pinned commit, recorded in the
+  file's `_readme` and `source`; the data is Frontier's, under its terms), not the game's own: a recipe Frontier changes
+  is wrong until the table is rebuilt. One row per kind of module and blueprint, its engineers that kind's (a pulse
+  laser's Overcharged is offered by other engineers than a cannon's); the material names are matched to the journal's
+  by Outrider's own `outrider.materials` table (FDevIDs, which has no licence, is not used). A table that cannot be
+  read says so on the tab, not "Nothing matches". The field names were checked against real journals (2026-10-14:
+  every event with lines on record; DeleteSuitLoadout, RenameSuitLoadout, LoadoutEquip/RemoveModule, UpgradeSuit,
+  UpgradeWeapon, ShipyardSell, SellShipOnRebuy, PowerplayLeave/Defect and the squadron's leaving have none there and
+  follow Frontier's journal manual). A Missions list's `Expires` is the seconds left, except for a colonisation
+  mission, whose `Expires` is the time itself (a Unix time). Links go from the CMDR tab outward only (the career to
+  History, a short material to the Materials tab and the nearest trader); the header tiles stay informational. No
+  voice lines: a mission about to expire is marked on the page only.
+- **The CMDR tab's Earnings: exploration, exobiology and mining, exact** (2026-10-14, NEXT-VERSION #7 from javeliuswt's
+  GitHub discussion #7; the author's choices of that day; `outrider/earnings.py`). What Universal Cartographics, Vista
+  Genomics and a market for ore you mined paid you: trade, missions and bounties are left out (an explorer's and a
+  miner's income; Cargo and trading and the Sessions tab cover the rest). Every figure is the game's own, from each sale
+  line, per sale, month, species, station and ship. Outrider's estimates only where nothing else answers, always under
+  Estimates or "Lost (estimate)" and labelled: the systems sold by its value of your scans (the game pays per page of
+  50 systems, never per system) and the data lost to deaths. A total is `TotalEarnings`, what you were paid: a hired NPC
+  crew member's share comes off it (base + bonus − total, the totals' `crew`, said on the figure and in a note; 9 % of
+  every cartographic sale in the author's journals until the crew was fired, none of Vista Genomics'). Months are UTC,
+  as the journal's times (a local month would move sales across months with the clock and differ between devices).
+  History's Ledger stays the owner of per-trip figures and of the losses: Earnings links to History › Trips and takes
+  the Ledger's `losses` as they are, never counting them again. The ship of every jump, first scan, sample run and
+  sale is the latest `Loadout`'s (a line from before PARSER_VERSION 52 or read out of order has none: "?"). Kept per
+  period until the reader's data moves (`data_seq`, `commander_version`): on the author's three years of journals
+  (2026-10-14) the first answer took 0.7 s (most of it the Ledger), another period 30 to 80 ms, a repeat nothing.
+- **Mining income is the ore you mined, followed until it is sold** (2026-10-14, the author's rule; `Journals.note_mined`,
+  meta `mined_stock`, `mining_sales`). The journal's `MarketSell` never says whether the tons were mined or bought, so
+  the reader keeps the mined tons aboard: every `MiningRefined` adds 1 t (the ship's refinery or the SRV's), a sale
+  counts as mining up to what that holds of its commodity (its share of `TotalSale`) and the rest is trade, left out; a
+  jettison takes its tons off, a death empties it. Your carrier keeps a mined stock of its own (meta `mined_carrier`,
+  the author's call the same evening: on his journals about half the mined ore went through the carrier, so leaving
+  it out halved the figure, 0.89B of about 1.72B): a transfer to the carrier moves the mined tons there, one back to
+  the ship moves them back aboard, mined ore sold to your own carrier joins it, a new carrier starts empty. One rule,
+  two places: the Sessions tab's
+  Sold reads the same figure, in the login the sale was made in. Sales of mined ore to your own carrier are left out
+  (your own money changing pockets); cartographic and exobiology data sold at your carrier counts (the game pays it).
+  Known gaps: ore handed in to a mission (`MissionCompleted`, `CargoDepot`) or lost with a destroyed SRV stays counted
+  as mined, so bought tons of that commodity sold later can count as mined up to it; ore other players buy from your
+  carrier is not in your journal, so the carrier's mined stock is capped, when ore comes back aboard, at what the
+  carrier held of it then (`Journals.carrier_holding`: the carrier fold up to that moment, your Market.json reads and
+  Recounts included; on the author's journals osmium's 176 t fell to the 34 t his market showed). Between two market
+  reads the cap can be too high, and the stock shown between transfers is not capped. A line read out of order (a legacy
+  folder read late) changes nothing (what was aboard then is not known).
 - **Green gas giants are a guess, said as one** (2026-10-12, `outrider/ggg.py`). The seven-layer ladder model is a
   community reconstruction (Canonn's issue 222, 2026-10-05), not the game's code: a match is "potential", never a fact,
   and a codex entry replaces it. It needs the journal's own temperature (green windows can be 0.00002 K wide): yours
@@ -164,6 +257,28 @@ upstream project's choices, not rules of the game.
   `/api/nearest` stays read-only for the AI's tools. The distances are from there, each row's hover says how far from
   you; "here" is still where you are, and the finder gives no jump count from elsewhere (your laden range says nothing
   of jumps from a place you are not in). The choice is per device, with the rest of each one's filters.
+- **Nearby around another system** (2026-10-14; the ideas of Rainmangames' PR #8 "Lock System", closed, rebuilt on
+  S49's Around). Nearby's sphere is around you, or around a chosen centre: your destination, carrier or next stop
+  (followed: a new sphere when they change), "this system" locked where you are, or a system by name (both kept as fixed
+  coordinates). The choice is the server's (meta `near_around`, live-only: it survives a restart and a re-read), not the
+  browser's like Search's, because the sphere is one per server: every window and the tablet must agree on what it
+  lists. Distances keep S49's rule: Dist is from the centre, a From you column and the jump count from you (each row
+  carries its xyz, so From you follows your ship without the server rebuilding rows); what reads "from you" elsewhere
+  (the target line, scoop hints, the auto-target test's nearest system, the AI's nearby tools) uses that, and the
+  horizon line and the AI's nearest unvisited say nothing while the list is elsewhere (their claim, "nothing closer is
+  reported", holds only for a sphere around you). A centre that names nothing now (no target, no carrier) falls back to
+  you and says why.
+- **Spansh is asked when the centre changes, and on ↻ only** (the author: go easy on Spansh). The PR refreshed a locked
+  area every 10 minutes; a free service asked again and again about a sphere that rarely changes is the cost we chose
+  not to pay. ↻ asks no sooner than 2 minutes after the last ask (`NEAR_REFRESH_GAP_S`) and never while a search runs.
+  Arriving in a system inside a pinned sphere asks nothing: Spansh learns of your scans only later, through uploads, so
+  the system joins the list at once as your own (Spansh's answer did not list it) and your scans fill its rows as
+  anywhere. Known limit: away from the sphere, the system you are in is not one of its rows; Here, the briefing and the
+  overlay read it as any system outside the sphere (the cache, the target's lookup, Here's on-demand fetch). The 75 and
+  100 ly radii stay out (a 100 ly sphere is up to 64 times a 25 ly one) until Spansh's maintainer agrees;
+  `[server] radius_choices` can still offer them.
+- **Nearby's filters are per device** (the mass code, "No scan data only"): a view's filter, like show visited.
+  "No scan data" means no body reported by anyone (Spansh's "no scan data", never reported, not looked up).
 - **The Map draws the route ahead** (S50): the game's plotted route after you, then the rows of the route Outrider
   follows (the survey / trade route's or the Highway's; with both, the one plotted last, as for the clipboard), from
   where you are on it, dashed, with ◎ on its next stop (else the header's next stop). At most 300 points
@@ -436,8 +551,18 @@ upstream project's choices, not rules of the game.
   Arrange mode writes it on every drag, which would rewrite the toml again and again; copying the toml does not carry
   it, copying the database does. A panel's place is kept from the window corner nearest it, or from the middle of the
   top or bottom edge, as a share of the window, so a resolution change keeps the arrangement. Linux is where it is
-  tried (X11, and XWayland on a Wayland session, as Modern Overlay runs on GNOME); Windows has the code, untried;
+  tried (X11, and XWayland on a Wayland session, as Modern Overlay runs on GNOME); Windows works too, seen over the game
+  by two players (Kurbo26 and weidercs, reported 2026-10-15);
   native Wayland compositors, gamescope and exclusive fullscreen are out of scope.
+- **The overlay's sizes have a floor in pixels, not a percentage** (a GitHub report, 2026-10-14: too large on a 4K TV,
+  and a size under 50 % was put back to 50 %). Panels scale with the game window's height, so a panel takes the same
+  share of the screen at 4K as at 1080p, and the same percentage is unreadable on one screen and big on another (small
+  text at 50 % is about 7 px at 1080p, 13 px at 4K). So a panel's size goes down to 20 %, all panels have one size on
+  top of their own (`[overlay] panel_scale`, in the config: a setting, not an arrangement), and the window raises a
+  panel's scale so its smallest text is never under `MIN_TEXT_PX` (9 px, `overlay.effective_scale`). Settings shows the
+  figure only from a window drawing now (it alone knows the game window's height). A panel's own text size lives in
+  the layout beside its size (`text`, "" as all panels), not in an `[overlay]` list: it is per panel like the size,
+  Settings and Arrange write the layout, and an old layout reads unchanged.
 - **The overlay uses the config's levels.** The panels are built on the server, which cannot see a browser's levels:
   the system panel `body_highlight_level` and `bio_min`; the Target panel's body `high_gravity`; Now `body_highlight_level`,
   `bio_min`, `high_gravity`, `codex_interesting`, `unsold_warn` and `unsold_urgent`; Bio signals `bio_min`,
@@ -512,6 +637,19 @@ upstream project's choices, not rules of the game.
   checks run only while the setting is on and the game is not in front, kept a second (`INACTIVE_EVERY_S`). A native
   Wayland window is in no X11 list, so it is never seen covering the game (the overlay draws over it): said in the
   guide.
+- **On Linux each overlay panel has its own window** (#1, the author's trials in game, 2026-10-15, GNOME on Wayland):
+  in the DSS and on foot Elite locks the pointer, and the lock was refused while the overlay window lay over the game,
+  although it lets every click through (its X input shape is empty). Shaping it down did not help, even to one pixel in
+  the DSS (the window counts with its whole rectangle); not raising it did not; taking it away when empty did, and a window
+  only as big as the panels did, on foot too (3 of 3 with it, 0 of 3 without). One window around all the panels would
+  still cover the middle with panels at opposite edges, so `overlay_window.window_plan`: a window per panel
+  (`window_rect`: its panel plus 6 px, painted at the game window's layout through an offset), none with nothing to draw,
+  the one window over the whole game only in Arrange mode (it takes the mouse there). The lock is asked for as the mode
+  changes, so a window in the way at that moment loses it until the next change; a panel dragged to the middle would be
+  in the way again, so `[overlay] hide_mouse_lock` (Settings: "Hide the overlay on foot and in the DSS") takes the
+  overlay away there altogether, and `hide_on_foot` hides chosen panels on foot. Linux only (`FIT_WINDOW`): the Windows
+  overlay was confirmed working with one window over the whole game and this was not tried there; with nothing to draw
+  its window hides too.
 - **The overlay's Alerts panel comes from the page** (S26, the author's defaults 2026-10-12): the alerts are worded
   and switched in the browser (speech.json's personality lines, each kind's notify / sound / speak ticks in
   localStorage), so the page posts each alert it shows (POST `/api/overlay/alert`, `pc_only`) and the server keeps the
@@ -687,6 +825,22 @@ upstream project's choices, not rules of the game.
   refused EDSM or Inara key at once (the hold otherwise lasts until a new key or the switch; `State.clear_key_hold`, the
   one helper a new key also goes through) and releases an EDDN kind on hold with its refusals (else the next refusal
   holds it again); that kind's refused messages were dropped, so only new ones go.
+- **"Not reported to Spansh" only for a system Spansh was asked about** (2026-10-14, reported by Kurbo26 in GitHub
+  discussion #3: Sol's In-Game Route chip said it). Three states, one place (`State.spansh_knows`): known (the Nearby
+  search listed it, or Spansh's record is in the cache), unreported (asked, no record: inside a Nearby search Spansh
+  answered, a route hop lookup, the target's lookup), and not looked up (never asked, Spansh unreachable, or past a busy
+  region's `sphere_cut`), which claims nothing. The cache holds only what Spansh had, so its silence is not an answer;
+  an EDSM stand-in in it is not Spansh's either. The route chips (✦ only when unreported), the Nearby row's `in_spansh`
+  (a stand-in the answer did not cover reads "not looked up", never "unreported" or "Spansh doesn't have this
+  system"), the arrival briefing ("Known, not in Spansh." only when asked) and the overlay's strip ("Spansh ✗") all
+  read it. The route's hops are asked about when a route is plotted (`maybe_route_lookup`): the first 24 (the chips
+  shown) that nothing has answered, in one Spansh search by id64 (`Spansh.records_by_id`, the request `permit_ids`
+  already made), one at a time, a failure retried after 5 minutes, each answer kept in memory for a day (no table: it
+  is a display aid, and a restart asks once more). The positive answers are not cached as bases: a search-level base
+  stored for its `updated_at` would stop the refresh from ever fetching that system's bodies. Hops in the populated
+  regions are never asked (`ROUTE_LOOKUP_SKIP`, `route_hop_populated`: within 1,000 ly of Sol or 500 ly of Colonia;
+  the author, 2026-10-14): Spansh knows every system there, and those records are heavy (Sol and Colonia alone ~190
+  KB), so a bubble route would pull megabytes for an answer already known; their chips claim nothing.
 - **A lookup that fails says only "Spansh unavailable"** (S42, the author's answer, 2026-10-12): the Data tile names the
   source and nothing more ("EDSM unavailable", "GitHub unavailable"), or "No internet connection" when two or more
   sources failed by DNS or no route with no answer from anywhere between (one source's DNS failure can be that
@@ -698,6 +852,40 @@ upstream project's choices, not rules of the game.
   status ("Spansh unavailable") still keeps the unreported horizon quiet until a search answers. A card on the banner
   (the one notices board) only when it lasts: Spansh or EDSM down 10 minutes, or no network / an address not found at
   once; GitHub, EDAstro and Canonn are background checks and get none. bio.py's rules check (urllib) is not counted.
+  The one exception to "no detail" is a certificate that cannot be verified (issue #9, below): the tile says
+  "Spansh: couldn't verify spansh.co.uk's certificate (expired): check this PC's date and time; if they are right,
+  update Outrider", and the banner has one card at once for every source failing so, because the player is the one who
+  can fix it and "unavailable" would send them to wait for Spansh instead.
+- **HTTPS verifies against the system's store plus certifi's, not certifi alone** (2026-10-14, issue #9, reported by
+  Aerics84; `outrider/tls.py`). On Windows Python verifies against the Windows certificate store, and Windows fetches a
+  new or renewed root only when something asks it to: a browser does, Python does not. A site whose chain moved to a
+  root the store has not fetched yet then fails with "certificate has expired" (or "unable to get local issuer
+  certificate") while the browser on the same PC opens it fine. Every outgoing connection (the aiohttp sessions through
+  `tls.connector()`, urllib through `tls.urlopen`; a test walks the source so a new one cannot forget) uses one context:
+  `ssl.create_default_context()` (the system store) with certifi's bundle loaded into it. Not certifi alone: a
+  corporate proxy's root, or one the player added on purpose, lives only in the system store, and dropping it would
+  break those PCs instead. Not the system store alone: that is the bug. OpenSSL looks for a trusted issuer among both
+  (trusted-first), so a root that only one of them has is enough. Without certifi (an environment installed before it
+  was in `requirements.txt`, the launcher not used) it falls back to the system store, with one line in the log. A
+  certificate failure is its own kind in `outrider.health.classify` ("certificate", not "tls"), worded with the host
+  and the fix: the date and time first, because a wrong clock fails the same way for every site, then an update (an
+  Outrider from before this fix has no certifi). The floor in `requirements.txt` is `certifi>=2024.7.4`.
+- **The launchers upgrade certifi once a week** (2026-10-14, the author's decision). pip leaves an installed certifi
+  that meets the requirements floor alone, so without this the bundle would be as old as the environment.
+  `launch_outrider.sh`/`.bat`, after the requirements step, run `pip install --upgrade --quiet certifi` when
+  `.venv/.certifi-checked` (the date of the last check, compared in Python, as the .bat compares its requirements stamp)
+  is missing, 7 days old or more, unreadable or in the future. Weekly because certifi holds root certificates, which
+  change rarely (a few times a year, announced months ahead); a site's own certificate, such as Let's Encrypt's 90-day
+  ones, is not in it and is checked live against those roots, so a renewed site certificate needs no new bundle. A
+  daily check would only add a PyPI request to most starts. Never in the way of the start: pip's output is hidden, it
+  tries once (`--retries 1 --timeout 10`, so an offline start waits seconds, not a minute), a failure says "certifi:
+  could not check for a newer certificate bundle (offline?); using the installed one" and leaves the stamp, so the next
+  start tries again (a Settings Restart is a start: it may try again too). The Docker image needs no weekly check (a
+  release builds a new one, and a container's environment is the image's), but Docker's layer cache would keep the
+  certifi of the first build while the Dockerfile's pip line and the base image are unchanged: the Dockerfile upgrades
+  certifi in a step after `ARG CERTIFI_CHECKED`, and `scripts/docker_bundle.sh` passes the day's date, so a release's
+  build always asks PyPI for the newest (only that step and the source run again). An image built with
+  `docker compose up --build` has no date passed and keeps its cached certifi until the Dockerfile changes.
 - **A Nearby retry that fails again sends no payload.** A failed sphere search is asked again after 30 s, 60 s, ...
   up to every 5 minutes. With the network down each retry fails at once, the status goes straight back to "Spansh
   unavailable" and the rows are the cached ones again, yet it used to bump the payload twice: every open page (a
@@ -1162,6 +1350,7 @@ upstream project's choices, not rules of the game.
 These were built and tested with synthetic events, recorded files, fakes or headless browsers, but not
 confirmed while playing. Treat reports about them as likely real.
 
+
 - `CarrierBuy`, `CarrierDecommission` and `CarrierCancelDecommission`: written to Frontier's journal manual, never seen
   in the author's journals (the carrier was bought before them).
 - Status.json Flags2 on-foot-in-station bits (3, 13, 14) counting as docked.
@@ -1211,8 +1400,6 @@ confirmed while playing. Treat reports about them as likely real.
 - Earth-like and ammonia world routes (S52) and a sweep (S51) flown in game: the plots were probed against Spansh
   (2026-10-13, the answers in tests/fixtures), the following tested on them and on made-up routes; a sweep through more
   than a handful of systems, and Spansh's answer when more than one is unknown, only as probed.
-- Inara uploads: not yet tried live (a refusal shows in Settings in Inara's words). Built from Inara's API
-  documentation, tested with fakes (`tests/test_inara.py`).
 - The EDSM and Inara key Checks (S45): built from the APIs' documentation with their documented example answers
   (`tests/fixtures/account_checks.json`), never sent with a real key: get-credits' 203 for a wrong name or key, the
   fields of getCommanderProfile's answer (its `inaraURL`), and whether a read counts against Inara's limit are still to
@@ -1227,10 +1414,33 @@ confirmed while playing. Treat reports about them as likely real.
 - EDDN: ApproachSettlement, CarrierJump and FCMaterials messages have not been seen live on EDDN's relay yet, nor a
   planetary station's Docked with its Body.
 - The in-game overlay's real panels in live play (only the test panels have been seen over the game), Arrange mode
-  over the game, PyQt6 installed by the launcher and by Outrider, the window's restart after a crash, and the overlay
-  on Windows. The overlay pill's states over a real game (and whether, under Proton and XWayland, the active window's id
+  over the game, PyQt6 installed by the launcher and by Outrider, and the window's restart after a crash (on Windows the
+  overlay itself is confirmed by two players, 2026-10-15). The overlay pill's states over a real game (and whether, under Proton and XWayland, the active window's id
   matches wmctrl's: a mismatch would show as "not the active window" while playing), DisplaySettings.xml's
   `<FullScreen>` values, and "keep showing" with a window over the game (X11 stacking, and Windows' z-order walk).
   The Alerts panel over a real game (its timing beside the voice, and how much a busy arrival puts on it).
+  The overlay's sizes on real screens: the Size % cells' "≈ 11 px text" / "held at 9 px" figures and the 9 px floor
+  against a real 1080p and 4K game window (tested on rendered frames and a faked window height), and Ctrl + wheel in
+  Arrange mode over the game.
 - The jump line's wait for Status.json's FsdJump flag (bit 30) in a live jump; your own sound files and Volume
   through the real players; the co-pilot button choosing the throttle of a real two-part X-56.
+- The CMDR tab's **EDSY ↗ / Coriolis ↗** links opened in those sites with real builds (the tests decode the links back
+  to EDMC's shape only), and in the Android app's hand-over to the browser. Its **hot ⚖** on a wanted ship or module:
+  no real journal had a hot ship or a Loadout with `Hot` (Frontier's manual only). The **stored-module fold** between
+  Outfitting lists: ModuleSellRemote and MassModuleStore had no real line, and FetchRemoteModule's arrival time is
+  taken from its `TransferTime` without a live transfer watched.
+- Nearby's **Around** (S49's choice on Nearby, "Lock System") while flying: a locked, destination, carrier or next-stop
+  centre against live Spansh, ↻'s pace, the strip and the From you / Jumps columns on the tablet (tested with stubbed
+  Spansh answers).
+- **certifi on Windows** (issue #9): the fix on a PC that had the error (none was tried), and the .bat's weekly certifi
+  check on a real Windows (its lines checked as text, its Python run on Linux); Docker's `CERTIFI_CHECKED` rebuild
+  only through `scripts/docker_bundle.sh`.
+- The CMDR tab's **Earnings** while playing: a sale made with the tab open (asked again when History's data moves), the
+  mined stock through a live mining run (ship and SRV refinery, a transfer to the carrier, a sale), and its ⬇ CSV saved
+  from the Android app. Checked on a copy of the author's database rebuilt from his journals (2026-10-14): the
+  cartography and exobiology totals equal History's Ledger and the raw sales, mining equals the Sessions' Sold, and
+  the species add up to exobiology; the crew's share seen in the journals only. The author looked through it in game
+  on his real data (2026-10-15): fine.
+- The In-Game Route's **hop lookups**: Spansh's search by id64 was probed (2026-10-14, `tests/fixtures/spansh_ids.json`),
+  but not a real plotted route's ✦ chips out in the black, nor the bubble and Colonia skip (`ROUTE_LOOKUP_SKIP`) on a
+  route crossing its edge.

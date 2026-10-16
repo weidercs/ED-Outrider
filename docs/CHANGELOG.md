@@ -2,6 +2,842 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · Nearby keeps its status and notable columns until they really do not fit
+- In a narrow pane (the Overview's half) Nearby went from its short forms straight to compact2, which drops Jumps and
+  Known and puts the status pills and notable tags under the name and the bodies all at once, leaving much of the row
+  empty (the author). A fourth fit level, `compact3` (`COMPACT_LEVELS`; `.c3hide` / `.sf3`): Nearby's compact2 now only
+  drops Jumps and Known, and compact3 moves the pills and tags, for the whole table, never row by row. Other tables have
+  no compact3 forms, so they look as before.
+
+## 2026-10-15 · The landing pad's delay after a docking grant is a setting
+- Kurbo26 (discussion #3): 5 s suits him, but with EDCopilot some stations' controllers needed up to 13 s. **Settings →
+  Voice → Say your landing pad [5] s after docking is granted** (`[speech] pad_delay`, 0 to 20, `PAD_DELAY_MAX`):
+  written to the config and applied to the next grant at once (`LIVE_CONFIG` → `Journals.pad_delay`), in the payload as
+  `pad_delay`. With a docking computer fitted the wait stays AUTO_DOCK_WAIT_S (12 s) unless it takes over.
+
+## 2026-10-15 · The fleet carrier diagram: pads 7 and 8 inside the bow
+- Kurbo26 (discussion #3) saw pads 7 and 8's outer corners poke out of the carrier's outline: its bow ran from (0, -44)
+  to (26, -30), crossing x = 12 at y = -37.5, above the pads' top at -38. One outline now, `pads.CARRIER_OUTLINE` (the
+  bow at -46, the shoulders at -34), sent with the map and drawn by Now and the overlay alike; a test keeps every pad of
+  every carrier layout inside it by a unit.
+
+## 2026-10-15 · A flaky uploads test made steady
+- tests/test_uploads.py made up system addresses with `hash(name) % 1000`, and Python seeds a str's hash per process: in
+  about one run in a thousand two names shared an address (seed 1311: "Before" and "There"), so a jump's signals
+  counted as the system you were in and went early, failing `test_signals_before_their_jump_go_with_the_live_jump`
+  (it failed verify once, 2026-10-15). Now `addr(name)`: crc32, the same in every run (the file's 17 names all differ).
+
+## 2026-10-15 · Overlay: a window per panel on Linux, Foot boxes, "Hide the overlay on foot and in the DSS", wider Settings
+- On Linux every overlay panel has its own window, only as big as the panel (`window_plan`, `window_rect`), so panels at
+  opposite edges no longer make one window over the middle of the game, where Elite locks the mouse (#1); no window with
+  nothing to draw, on Windows too; the one window over the whole game only in Arrange mode (and on Windows).
+- Settings → In-game overlay: a **Foot** box per panel under Hide in mode (`[overlay] hide_on_foot`, none by default:
+  the author has no use for Now on foot, others may), and **Hide the overlay on foot and in the DSS** (`hide_mouse_lock`,
+  off): "overlays can break mouse lock in these situations on some systems".
+- Settings is 80 % of the screen's width on a big screen (it was at most 1560 px), in two columns of sections; three
+  only from 3200 px wide (a 4K screen at 100 %; it was from 1900 px).
+
+## 2026-10-15 · The overlay no longer breaks the game's mouse lock (DSS, on foot) on Linux (#1)
+- The author's trials (GNOME on Wayland) found it: on Linux the overlay window is now only as big as its panels
+  together (`window_rect`: their bounding box plus 6 px; drawn at the game window's layout through an offset, following
+  a panel that grows, moves or appears after each paint), and off the screen when it has nothing to draw (the DSS, the
+  FSS...); the whole game window only in Arrange mode. Windows unchanged. DESIGN_NOTES says what was tried and why.
+- The trial switches (Settings → In-game overlay → Mouse-lock trials, POST /api/overlay {trial}) are gone again.
+
+## 2026-10-15 · Mouse lock (#1): a "small" trial, the window only as big as its panels
+- The author's first trial (in the DSS): only **hide_empty** keeps the lock; **fit** does not, although in the DSS it
+  shaped the window to one corner pixel. So either XWayland counts a window's whole rectangle whatever its shape, or any
+  mapped overlay window breaks the lock. A fourth trial, **small** (`small_rect`: the window's own rectangle only
+  around its panels, painted at the game window's layout through an offset; 1x1 in the corner with none), tells the
+  two apart, and is the candidate for on foot, where the radar keeps the window up.
+
+## 2026-10-15 · The overlay and the game's mouse lock (#1): trials to find the fix in game
+- The author's tests (GNOME on Wayland, Elite under Proton): with the overlay on, the mouse is not captured on foot or
+  in the DSS (the camera turns until the cursor leaves the monitor onto the next one); off, it is. The overlay window
+  covers the whole game window and stays mapped in the DSS with nothing drawn; its X input shape is empty (clicks
+  pass), so the likely cause is Wayland's pointer lock, given only over the focused game's own surface.
+- **Settings → In-game overlay → Mouse-lock trials**, live only (POST /api/overlay {trial}, in GET /api/overlay; never
+  written to the config, forgotten at a restart): **fit** shapes the window to its panels (`fit_rects`: each panel
+  as drawn plus 6 px; the middle of the game is Elite's alone), **no_raise** raises it only as it shows,
+  **hide_empty** takes it away while it has no panel (`empty_hidden`). The one that keeps the lock becomes the default
+  and the switches go.
+
+## 2026-10-15 · Sweep fixes: the CMDR tab's places after a re-read, Nearby's Focus/Lock, crew checks, two page fixes
+A Fable sweep of everything since the last one (70156ee..c5ea3c2, 7 areas, each finding verified): 6 confirmed, 0
+refuted; all fixed here, with the Nearest dialog's labels.
+- **Commander folds** (a ship stored by ShipyardSwap/Buy/Transfer, a module fetched) took their place from the live dock
+  state, which a journal re-read keeps: a re-read run while docked (the v54 one) stamped them with that station.
+  They now use the dock state replayed in order (meta sale_dock, which also keeps the Docked line's system) and the
+  position; the next StoredShips/StoredModules list corrected them anyway, so no re-read for it.
+- **Nearby's Focus/Lock** on a carrier or target Outrider could not place yet kept saying "doesn't know where" after it
+  learnt the place under the same id64 (a carrier that jumped without you): the failure is now worked out again after
+  `NEAR_MISS_RETRY_S` (10 s).
+- POST /api/voice/crew with a row that is not a string answers 400 (was a 500); /api/say notes a crew voice that is
+  not installed in the log only for a well-formed voice name (any text a caller sent was kept and printed).
+- CMDR → Engineering: a short material's link now filters a Materials tab drawn already (its grid kept every material);
+  the held-only switch it clears is saved too.
+- Overview in Boxel mode: Focus/Lock on the Overview's bar is hidden there as on Nearby (picking it moved Nearby's
+  centre for every window, unseen).
+- The Nearest dialog's Must have labels are spaced ("shipyardmaterial trader" ran together).
+
+## 2026-10-15 · Screenshots at 2560x1440: every page view as on a 27-inch monitor
+- Every full-page desktop shot in `docs/images/` retaken at 2560x1440 to match overview.png (Elite theme, the Highway's
+  route line, a route to Colonia plotted): nearby, here, schematic, map, highway, history, samples, log, materials,
+  firsts, search, cargo (Sell on the carrier's platinum), trade, cmdr, earnings, ship-card, boxel, boxel-grid, nearest
+  and checklist. here.png and schematic.png now view Lysood TS-U d2-58 as the overview does (here.png with body 6 g's
+  panel open); boxel-grid.png folds Boxels nearby so whole rows of the boxel table sit above the sector map.
+- Not retaken: tablet.png (1920x1200, LCARS), themes.png (the 2x2 composite), overlay.png and the overlay-pad shots
+  (Qt renders), and the crops (overlay-settings, nearest-dssa, surface, banner, datatile, uploads).
+
+## 2026-10-15 · The overview shot at 2560x1440
+- `docs/images/overview.png` retaken at 2560x1440 (the author's 27-inch monitors): at that width Nearby's rows keep their
+  Status, Notable and Known columns on one line, as the page really looks on a big monitor; still pinned on Lysood
+  TS-U d2-58.
+
+## 2026-10-15 · The overview shot pinned on Lysood TS-U d2-58: a list with more in it
+- `docs/images/overview.png` retaken as before (Overview, Elite theme, 1600x1000, Here in its list view beside Nearby,
+  the route line shown) but viewing Lysood TS-U d2-58: three bio bodies with sampled species (a Stratum among them),
+  ringed bodies and a 17.5M max, where the old shot's list had little in it.
+
+## 2026-10-15 · The docking pad shot, cropped
+- `docs/images/overlay-pad-crop.png` (760x465: the starport and carrier pad panels side by side) and
+  `overlay-pad-starport.png` (the starport panel alone), cut from overlay-pad.png, for listings that crop or shrink.
+
+## 2026-10-15 · Inara uploads: confirmed live
+- The author's live trial on his test account works (2026-10-15): DESIGN_NOTES' "Inara uploads: not yet tried live"
+  line goes.
+
+## 2026-10-15 · The overlay on Windows: confirmed by players
+- Kurbo26 and weidercs report the in-game overlay working over the game on Windows: overlay.md's Windows line and
+  DESIGN_NOTES no longer call it untried ("keep showing when Elite is not the active window"'s Windows z-order walk
+  stays marked not yet tried).
+
+## 2026-10-15 · Checked in game: a carrier's pad
+- The author landed at his carrier (2026-10-15): the pad's words and the carrier diagram (bow at the top) are right,
+  as the starport's were. DESIGN_NOTES' "Not yet tried in a live game" line for the pad's place goes.
+
+## 2026-10-15 · ⛽ keeps a 5 % reserve and says when it is learning; the pad said after the station's voice
+- **The In-Game Route's ⛽** counts a hop only while it leaves `FUEL_REACH_RESERVE` (5 %) of the tank aboard: the
+  author's Caspian "made" a 27-jump route with 0.1 t left (the fuel figures are a fit to his jumps, and a little cargo
+  or a longer hop undoes 0.1 t); now "⛽ 25", 9.9 t left after it. `route_fuel_reach` gives `spare` and `reserve`, the
+  hovers say them ("keeping 8.0 t in reserve", "with 31.4 t to spare"). While the fuel model is not complete it gives
+  `{learning: n}` and the strip shows **⛽ ?** with how many more jumps (Kurbo26 saw no ⛽ at all in such a ship).
+- **The pad is said 5 s after the grant** with no docking computer fitted (`GRANT_SAY_DELAY_S`, the author; Kurbo26: it
+  talked over the station's own voice); with one fitted the 12 s hold stays (silent when it takes over); the chat
+  test commands at once. Both through `docking_hold` / `State.docking_release`.
+- Tests: the reach with the reserve, spare, learning; the delay, the test command at once; the strip's hovers and ⛽ ?.
+  Guides: views.md, voice-and-alerts.md; What's new.
+
+## 2026-10-15 · The pad's diagram sized to fit Now; the tablet to Now while docking
+From Kurbo26's try of the build (discussion #3).
+- Now's pad diagram is sized by its **height** (`min(32vh, 300px)`, width following): a carrier, drawn tall, ran off a
+  1920x1200 tablet's Now when it was sized by width; PAD's number a little smaller (`clamp(40px, 7vw, 96px)`).
+- **The tablet switches to Now when a pad is granted** and back to the page you were on once docked (the author: yes
+  to Kurbo26's idea, and back after): `tabAutoView`, the surface map's switch, now also for `data.docking.pad`; a
+  refusal does not switch, a page chosen meanwhile stays.
+- Smoke: the diagram's height rule; the tablet's switch to Now and back on a grant, none on a refusal. Guide: tablet.md;
+  What's new.
+
+## 2026-10-15 · Version 2026.10.24
+- The CMDR tab (weidercs's PR #5, reworked) with **Earnings** (exploration, exobiology and mining income by month and
+  year, every sale's place and ship, species, stations, ships, mining from the mined stock, labelled estimates, CSV) and
+  ship pictures on Inventory; **docking** (the pad said and shown, where it is and a diagram at starports and carriers,
+  quiet on auto-dock, non-obvious refusals); **routes** (🛣 to the carrier, the In-Game Route's copying chips and ⛽
+  reach, no line for one jump, the route line on every tab, 📋 paste); **Nearby's Focus/Lock** and filters (PR #8's
+  ideas); the **overlay** for big screens (All Panels, down to 20 %, a 9 px text floor, text per panel), the strip's
+  security and reputation; the game's own **icons**; certifi and plain certificate errors (issue #9); the header tile
+  picker, upkeep weeks, the voice commands list, the launcher's header; docs (every route in the agent guide).
+  What's new has its section; the first start re-reads the journals once (PARSER_VERSION 54), after a backup.
+
+## 2026-10-15 · Docs: every route in the agent guide, checked by a test; the CMDR tab by its name
+- NEXT-VERSION #11 (small docs debt). `docs/AGENT_GUIDE.md` now names every path `make_app` registers (107, the
+  Commander loop's `/api/commander/<part>` as one): 23 were missing or written only as a relative shorthand
+  ("`/api/highway` (+ `/systems`)"). Its "How data flows" step 6 has each with its body and the State method behind
+  it: `/api/radius`, `/api/hush`, `/api/copilot`, `/api/nextstop`, `/api/bookmark`, `/api/backup`, `/api/defaults`
+  (GET and POST), `/api/rigs/remove`, `/api/sites/forget`, `/api/speech/ban` and `/unban`, `/api/say/stop`,
+  `/api/sound/play`, `/api/autohonk/forget`, `/api/rail`, `/api/rail/press`, `/api/rail/sets`, `/api/riches/clear`
+  and the Highway's `systems`, `background`, `plot`, `clear` and `autotarget` written whole; then which routes are
+  `pc_only`. The Commander parts are listed by name.
+- `tests/test_docs.py` `RoutesInTheGuide` reads the registered paths from `make_app`'s source (every
+  `add_get`/`add_post`/`add_route`/`add_static`; the Commander loop's f-string read explicitly, any other f-string or
+  non-literal path refused) and fails naming each one the guide does not name whole (placeholders `{x}`/`<x>`
+  normalised; a family only as `<prefix>/*`); `test_the_rule` pins the rule.
+- "The Commander view" is "the CMDR tab" in the agent guide and the design notes, and the tab's sub-tab switch is
+  labelled "CMDR tab" for screen readers, as the tab reads. Code names (`commander_view`, `cmdrTab`, meta keys) unchanged.
+
+## 2026-10-15 · Game-style icons: the galaxy map's destination, carrier, Titan, waypoint, engineer and mission markers
+- NEXT-VERSION #13 (the author's list): the page draws the game's own galaxy-map markers where it had emoji. Every
+  target button (a route's rows and line, Nearby's rows, bookmarks, the next stop, the Carrier tile, Nearest, a
+  checklist find, a boxel's, the Map's card, the tablet's row sheet, Plot Route's Target next) shows the **destination**
+  marker instead of 🎯, its words ("target", "Target", "in 5 s") kept; an icon-only one is named by an `aria-label`
+  ("target <system>"), where 🎯 alone was its name before. The **fleet carrier** marker before the Carrier tile's name,
+  in the folded tiles' line, on Nearest's carrier rows and on History's carrier jumps; Now's pad line names a carrier
+  after the fleet or **squadron carrier** marker by the pad layout's kind. A **Titan** among the signals worth a detour
+  (Here's and Nearby's tag, Now's line) shows the Titan marker; the other signals keep 📍. The route lines' "Next:" (and
+  "Start:") follow the **waypoint** marker; the kind glyphs (🛣 💰 🧬...) stay. The CMDR tab's Engineering and Missions
+  switch labels carry the **engineer** and **mission** markers. ☆/★ stay; speech, notifications, toasts, the Log, CSV,
+  titles and the overlay keep their emoji (the Map's canvas keeps its 🚢 too: it is drawn, not markup). The Settings
+  alert row's words say "a target button", and the Map's touch hint "Target", without the emoji.
+- How: `mk(symbol, {gap, label})` (page.js, `MARKERS`), an empty span page.css's `.mk` paints in `currentColor` through
+  the marker file as a CSS mask (`mask-image: url(icons/elite/<symbol>.svg)` and `-webkit-`), so it takes the text's
+  colour in every theme and the tablet's, and grows with the font; `aria-hidden` beside words, `role="img"` with a label
+  alone (History's carrier jump). `carrierMk(layout)`, `poiGlyphs`, `poiLineHtml`.
+- The markers: Elite Dangerous Almanac's `assets/galaxy-map/` (hand-drawn 64 x 64 vectors of the in-game markers),
+  seven of them copied unchanged at the ship pictures' pinned commit `5da3bfc` into `static/icons/elite/`; Frontier's
+  designs under its media usage rules with its notice, Almanac's MIT notice kept: `static/icons/elite/CREDITS.txt`, not
+  under the GPL; a row in the README's credits. Not in `PAGE_FILES` (pictures, not page code).
+- Tests: test_tablet's `test_galaxy_map_markers` (the seven files and `MARKERS` agree, each a small 64 x 64 SVG with
+  currentColor and nothing fetched, a `.mk-<symbol>` rule each, page.html's labels and no 🎯 left there, the credits
+  naming Almanac, Frontier, MIT and the commit, served as SVG). Smoke: `markText` reads a marker as `[symbol]`; the
+  route line, Highway tab, target next, too heavy and batch 25 checks now expect the waypoint and destination markers
+  where they had 🎯; new: the riches rows' and Nearby's buttons (the marker, no words, the aria-label), the tablet
+  sheet's and the Map card's Target, the one-rule block (every kind of target button, Target next), the Carrier tile,
+  tiles line and Nearest's carrier rows, Now's pad (fleet and squadron), History's carrier jump, the Titan's tag and
+  Now line, the CMDR switch's labels. Docs: plot-route.md, views.md, tablet.md, AGENT_GUIDE (`static/icons/`).
+
+## 2026-10-15 · The route line on every tab
+- The "🛣 Next:" / survey route line under the tiles shows on every tab (History, Plot Route, Materials, CMDR...), as the
+  target and arrival lines do: the header is the header (the author). It showed on Overview, Nearby and Here only
+  (`renderHwyLine`). Smoke: the line on six other views. Guide: plot-route.md.
+
+## 2026-10-15 · CMDR Inventory: a ship's picture on a 2 s hover (tap on the tablet)
+- The CMDR tab's **Inventory**: a mouse resting 2 s on a ship's row shows a card with its type's three-quarter picture,
+  its name and type, beside the row and inside the window (`#shipCard`, fixed: the page never scrolls); it goes when the
+  pointer leaves the row, on Escape or on another sub-tab. On the tablet (no hover) a tap on the ship's name (dotted
+  underline) opens or closes it and a tap anywhere else closes it. A finger's pointer never starts the hover. A type
+  with no picture (a hull newer than `SHIP_NAMES`) shows nothing. Inventory only. `shipPicture`, `SHIP_CARD_MS`, `SC`,
+  `shipCardShow`/`shipCardHide`; the row's `data-shipimg`, the name's `.cmshipname`; a fade-in, none with reduced motion.
+- The pictures: `static/ships/<symbol>.webp`, one per `SHIP_NAMES` key (48, about 2.1 MB in all), rendered by
+  `scripts/build_ship_images.py` from Elite Dangerous Almanac's `illustration.svg` (Almanac-Core at its pinned commit
+  `5da3bfc`) with PyQt6 offscreen, 600 x 400, transparent, WebP: the SVGs themselves (up to 2 MB each) are never shipped,
+  nor any of Almanac's data. Frontier's ship designs, used under Frontier's media usage rules with its notice;
+  Almanac's MIT notice kept: `static/ships/CREDITS.txt`, not under the GPL; a row in the README's credits.
+- Tests: test_tablet's `test_ship_pictures` (a picture for every `SHIP_NAMES` type and none other, WebP, each under
+  100 kB and 4 MB in all, the credits naming Frontier, Almanac and the build's commit, served as image/webp); smoke
+  "ship pictures" (nothing before 2 s, the card after, gone on leaving, nothing for a touch or an unknown hull, Escape
+  and another sub-tab) and the tablet's `tabShip` (tap to open and close, a tap elsewhere). Docs: views.md (Inventory),
+  AGENT_GUIDE.
+
+## 2026-10-15 · Checked in game: the starport pad's place, the auto-dock silence, 📋 paste, Earnings
+- DESIGN_NOTES' "Not yet tried in a live game": the author checked at a station that the pad's words and diagram are
+  right and that the pad is said or kept quiet with the docking computer on or off; 📋 paste and the Earnings tab work
+  on his setup. Still to see: a carrier's pad (its bow), a live mining run through Earnings.
+
+## 2026-10-14 · 🛣 on the Carrier tile: a route to your carrier at once
+- Beside the carrier's 🎯 (the author's ask): **🛣** plots an exact route to its system at once (POST
+  `api/highway/plot`, Plot Route's saved exact options: injections, no neutron boosts, conservative range), without
+  opening Plot Route; shown only from 250 ly away (`CARRIER_PLOT_MIN_LY`, the author), not aboard, in its system or
+  for a decommissioned carrier. A Highway route you follow is replaced only after "replace your route to …?" →
+  Replace (`CP.ask`; Keep leaves it). While it runs the tile says "⏳ plotting a route there…" (Plot Route's own poll,
+  `loadHwy`/`hwyPoll`); a failed plot's reason is a toast. `carrierPlot`, `plotToCarrier`.
+- Smoke: hidden under 250 ly, the exact plot sent, plotting shown, a failure said, the ask with Keep and Replace.
+  Guide: cargo-and-trading.md.
+
+## 2026-10-14 · The pad in the Surface radar's place; the launcher's version line once
+- The overlay's pad (#3, #12: PAD 34, where it is, its diagram, or a refusal's words) takes the **Surface radar's**
+  place, size and switch instead of the Target panel's (the author: the radar's place is free in space); at a
+  planetary port the pad comes first until you touch down. `overlay.pad_panel(..., pid="radar")`, `State.overlay_panels`;
+  the Target panel keeps to your target.
+- Started by `launch_outrider.sh`, whose header names the version, Outrider's own "ED Outrider 2026.10.x" first line goes
+  into the log only (Show log, outrider.log), not the terminal again (the author: the same line twice); started any
+  other way it is printed as before. The header's rules run past the address's end.
+- Tests: the radar's place showing the pad (its switch, not over the galaxy map, the Target panel without it), the
+  version line under the launcher, the banner's width. Docs: overlay.md (Docking under the radar), voice-and-alerts,
+  settings, the example config.
+
+## 2026-10-14 · The system strip: security and your reputation
+- The overlay's system strip shows, in a populated system, its security level and your reputation with its controlling
+  faction on the top row's right, in the region's font (the author's ask; Hostile in red): `system_standing` keeps
+  them with the position (`pos.standing` {security, faction, rep}) from FSDJump / Location / CarrierJump
+  (`SystemSecurity_Localised`, else `SECURITY_WORDS`; the `SystemFaction`'s `MyReputation` in `Factions`);
+  `overlay.rep_level` gives the game's words (Hostile to -90, Unfriendly -35, Neutral +4, Cordial +35, Friendly +90,
+  Allied); nothing in an unpopulated system (Anarchy everywhere in the black). The window right-aligns a `runs` item
+  (`align: "right"`). Shown from the next arrival (no re-read needed).
+- Tests: the strip with and without it, Hostile's colour, the levels' edges, `system_standing` and the position.
+  Guide: overlay.md.
+
+## 2026-10-14 · The launcher's header at every start
+- `launch_outrider.sh` opens every start, and Settings' Restart (which runs it again), with a blank line and a header:
+  "ED Outrider v2026.10.23" and the GitHub address between two rules (the author's layout), the version read from
+  `outrider/__init__.py`, so each run stands out in the terminal and a service's log. Test: `LauncherBanner` runs only
+  its `banner()` function.
+
+## 2026-10-14 · No In-Game Route line for a route of one jump
+- The author: targeting a system next door showed "In-Game Route: 1 jump" (the game writes a one-jump route for it).
+  `State.route_summary` gives no route when the plotted one has a single jump (NavRoute.json's Route lists where you
+  were plus one), and `route_minimal` none for one jump left with no jump since the plot; a longer route keeps its line
+  down to its last jump. The target line says the rest.
+- Tests: test_navroute (a one-jump file, a two-jump one, flown to its last jump; the unwritten file's one jump left
+  with and without a jump since the plot). Guide: views.md.
+
+## 2026-10-14 · The carrier's mined stock capped at what it holds
+- When mined ore comes back aboard from your carrier, the carrier's mined stock of it is first capped at what the
+  carrier held then (`Journals.carrier_holding`: `outrider.cargo.carrier_fold` over its events, your Market.json reads
+  and Recounts up to that moment). Other players' purchases from your carrier write nothing in your journal, so the
+  stock ran high (the author's platinum: about 5,006 t counted, about 1,018 t on the carrier): bought tons taken back
+  aboard could have counted as mined. Re-read on the author's journals: osmium's 176 t capped to the 34 t his market
+  showed; the income figures unchanged (1.72B: no affected sale yet).
+- Test: no market read (no cap), a read showing others bought most, one showing a little gone.
+
+## 2026-10-14 · Mined ore stored on your carrier still counts; the Lynx and Kestrel's pads
+- **Your carrier keeps a mined stock of its own** (meta `mined_carrier`, the author's call after the real-data check:
+  about half his mined ore went through the carrier, so Earnings and Sessions showed 0.89B of about 1.72B): a transfer
+  to the carrier moves the mined tons there, one back to the ship or SRV moves them back aboard (then sold: mining),
+  mined ore sold to your own carrier joins it (still left out of the income), a death empties only the ship's, a new
+  carrier (CarrierBuy) starts empty. Ore other players buy from your carrier is not in the journal. PARSER_VERSION 54
+  (still unreleased: one re-read for players; the author's database re-reads again if it ran 53).
+- `outrider/cargo.SHIP_PAD`: the Lynx Highliner `mediumtransport01` medium (the author checked), the Kestrel Mk II
+  `smallcombat01_nx` small (Frontier's ship page): the nearest-place-to-dock filter knows their pads.
+- Tests: stored and sold later, part kept on the carrier through a death and a new carrier, sold to your carrier then
+  taken back and sold elsewhere, the re-read clearing the carrier's stock, the two pads. Docs: views.md, DESIGN_NOTES,
+  JOURNAL_REFERENCE.
+
+## 2026-10-14 · Earnings: the guide, design notes, and fixes from a check on real data
+NEXT-VERSION #7, batch D. A copy of the author's database, rebuilt from his journals (read only), through the summary:
+the cartography and exobiology totals equal History's Ledger (its trips' paid figures summed) and the raw sales, mining
+equals the Sessions' Sold, the species add up to exobiology, the months, years, ships and sales to the total. Fixes:
+- **The crew's share**: a hired NPC crew member takes a share of each cartographic sale (`TotalEarnings` 91 % of
+  `BaseValue` + `Bonus` in those journals until the crew was fired), so Cartography's base and bonus did not add up to
+  its total. `totals` carries each data kind's `crew` (`crew_share`); the figure says "− … crew", a note says why.
+- **A mining sale's station type** came only from data sales at that market: a station where you only sold ore had
+  none (8 of 10 in that database). `mining_sales.station_type`, from `sale_place`. PARSER_VERSION stays 53 (unreleased:
+  the release's one re-read fills it; until then the data sales' type, as before).
+- **The CSV's ships**: a ship whose name was cleared (the game keeps " ") was written "  (corsair)": now its type; a
+  ship gone from the stored ships' list takes its type's name from another ship of that type.
+- **The Lynx Highliner** read "MediumTransport01" in the ship lists (the author, in game): page.js' `SHIP_NAMES` gains
+  `mediumtransport01`.
+- Docs: the guide's CMDR section (Earnings; Sessions' Sold in its new meaning), the README's CMDR line, DESIGN_NOTES
+  (Earnings' scope, exact figures and labelled estimates, UTC months, the Ledger's ownership; the mined-stock rule and
+  its gaps; not yet tried live), JOURNAL_REFERENCE (`TotalEarnings` and the crew), AGENT_GUIDE (and its scratch server:
+  never a real journal folder as `live`, since every server writes its uploads lease there).
+- Tests: test_earnings' `FromRealData` (each fix; `crew` 0 without crew); the smoke block "earnings" (the year's
+  Cartography figure with a crew's share); test_pages' `ShipNames` (the newer ships' symbols named, the Lynx's too).
+
+## 2026-10-14 · Earnings tab: figures, period picker, monthly chart, sales, stations, species, ships, mining, estimates, CSV
+NEXT-VERSION #7, batch C: the page for batch B's answer. The CMDR tab's 6th sub-tab, **Earnings**, desktop and tablet.
+- **Figures**: total earned (and the sales), cartography and exobiology (each base + bonus), mining (tons mined), and
+  "Lost (estimate)": the data you died with, as History's Ledger values it, with the deaths. Exact figures are the
+  game's; the credits as the page writes them elsewhere (`credits()`), the exact sum in each one's title.
+- **Period** (above the pane): All time, a year with a sale, a month of that year; kept per device (store
+  `cmEarnPeriod`, in neither settings list, as `cmdrTab`). A change asks again (`?year=`, `&month=`); an older
+  period's answer arriving late is dropped (`newRequest`). Asked again too when the payload's `history_version` moves.
+- **Monthly chart** (inline SVG, no library): every month of all time, cartography / exobiology / mining stacked to one
+  scale, 3 or 4 axis steps reaching the highest month, the month labels thinned to the box's width (calendar-aligned:
+  every 2nd, 3rd... month, then years), the period's months highlighted and the rest dimmed, a title per bar with its
+  three figures; a bar picks its month. Sized to its box (bars in % of the width, a fixed height). Its colours are new
+  tokens `--earn-carto`/`--earn-bio`/`--earn-mine` (page.css: info, good, accent); Babylon 5, Centauri, Dark, Elite,
+  Minbari, Narn, Sith and Vorlon set their own where their info, accent and warn are one colour or too alike.
+- **Tables** (fitted: `FIT_TABLES`, compact short forms): Sales (when, kind, where, ship, what, base, bonus, total; "N
+  more not shown"), Where you sold, Species (exact), Ships (jumps, ly, bodies scanned, species sampled, earned, active
+  days), Mining (per commodity refined by ship / SRV, mined tons sold, earned, cr/t; where sold; best sales; the sales
+  to your own carrier left out, in a line), Most common (star classes, planet types, species found), Estimates (the
+  systems sold by Outrider's value of your scans and the data lost to deaths, the word "estimate" on every value).
+  Then the answer's notes and a line to History › Trips (the Ledger) for each trip's figures.
+- **⬇ CSV** above the pane: `api/export?what=earnings`, a server link (the Android app saves it).
+- **No sales at all**: said plainly, no chart, no figures.
+- Tablet: the same sub-tab; the CMDR sub-tabs finger-sized and wrapping, the chart's text larger (`body.tablet` rules in
+  tablet.css). The desktop's CMDR switch wraps on a narrow window instead of running off it.
+- Tests: the smoke block "earnings" (the sub-tab, the figures, the picker's years and months and their queries, kept
+  per device, an older answer overtaken, bars to scale and the empty month, the ticks, the labels, the highlight, a bar's
+  click, each table, the short forms, the CSV link, the estimates labelled, History's Trips, the empty database, the axis
+  and the labels' thinning); the tablet block (the sub-tab from Records, chart, tables, sub-tab size); `test_tablet`'s
+  chart colours (told apart in every theme, 3:1 on the background and panels). Docs: AGENT_GUIDE.
+
+## 2026-10-14 · Earnings summary: totals, months, sales, species, stations, ships, mining, estimates; CSV
+NEXT-VERSION #7, batch B of the CMDR tab's Earnings: the answer the page will show (batch C), nothing on the page yet.
+PARSER_VERSION 52 → 53 (both unreleased: one journal re-read either way).
+- **`outrider/earnings.py`**: `period` (all time, a year or a month, UTC as the journal), `read` (the period's rows, SQL
+  only) and the pure folds: `totals` (cartography and exobiology base, bonus, total; mining; sales), `month_series` (all
+  time whatever the period, the empty months between included), `sales` (every sale, the newest first; a mining sale is
+  its mined part), `species` (exact), `stations`, `per_ship` (its own jumps and ly, measured from the arrival before each;
+  bodies first scanned, sample runs, sales, active days), `mining` (refined per commodity by ship and SRV, sold, cr/t,
+  where, the best sales, and your own carrier's sales as the line left out), `common` (star classes, planet types,
+  species), `estimates` (labelled: the systems sold by Outrider's value of your scans, `State.sold_system_values` with
+  `outrider.unsold.body_value` as the Ledger's top finds; the data lost to deaths taken from the Ledger's losses, not
+  counted again) and `notes`.
+- **GET `/api/commander/earnings?year=&month=`** (`State.commander_earnings`, kept per period until the reader's data
+  moves): year four digits, month 1 to 12 only with a year, else 400 `{error, code: bad_request}`. At most 500 sales
+  listed, `more` says how many were left out. Not an AI tool yet.
+- **`/api/export?what=earnings`**: every sale as CSV (when, kind, station, station type, ship, what, base, bonus,
+  total), sales of mined ore to your own carrier left out.
+- **Exact species pay**: `bio_sales`' bio_data kept only each species and whether it paid the bonus; it now keeps each
+  entry's Value, Bonus and name (`sale_species`), so the species list is the game's figures, not an estimate. Its readers
+  (`organic_replay`, `sale_check`) take the first two by position, so an older row still reads.
+- Tests: `tests/test_earnings.py` (a year of made-up lines: the totals, a year and a month, the months with a gap, the
+  years, the sales and the cap, species, stations, ships, mining with a partial sale and one to your own carrier, the
+  most common, the estimates labelled with the Ledger's loss, the cache, an older bio sale, the route's good and bad
+  queries, the CSV); `test_spansh`'s bio_data check. Docs: AGENT_GUIDE.
+
+## 2026-10-14 · Earnings data: where and with which ship each sale, jump, scan and sample; mined stock
+NEXT-VERSION #7 (javeliuswt, GitHub discussion #7), batch A of the CMDR tab's Earnings: the data, nothing shown yet.
+PARSER_VERSION 51 → 52 (51 is unreleased: one journal re-read either way).
+- **Where and with which ship**: `sale_events` keeps `station`, `market_id`, `station_type` (where you were docked) and
+  `ship_id`; `jumps`, `own_bodies` (the first scan's ship: a rescan keeps it) and `own_organic` (the ship flown at the
+  run's last sample: on foot or in the SRV, the one you came in) keep `ship_id`. The ship is the latest `Loadout`'s
+  (`Journals.ship_at`); the place is meta `sale_dock` (`note_sale_dock`, `sale_place`), followed line by line and
+  journal-derived, not meta `docked`, which a re-read keeps at its newest. A line read out of order (a legacy folder read
+  late) gets NULL for both; old databases get the columns from `open_db`, NULL until the re-read. The sale_events,
+  own_organic and own_bodies writes name their columns.
+- **Mined stock** (meta `mined_stock` {commodity: t}, `Journals.note_mined`): every `MiningRefined` adds 1 t (the ship's
+  refinery or the SRV's), a `CargoTransfer` to your carrier and an `EjectCargo` take theirs off (never below 0), a death
+  empties it. A `MarketSell` counts as mining up to what it holds of that commodity: a new table **`mining_sales`** (ts,
+  source, commodity, tons, mined_tons, price, total, mined_total = total × mined_tons / tons, station, market_id,
+  ship_id, own_carrier: your own carrier's market, your own money), the rest of the sale is trade. Both journal-derived
+  (RESET_JOURNAL_DATA); lines older than the stock are left out (`fresh`).
+- **Sessions' Sold** (the CMDR tab) uses the same rule: the reader hands each sale's mining income to the fold
+  (`commander.activity_apply(..., mined)`), so ore mined in one session and sold in the next counts in the one it was
+  sold in (that login lists its mining with 0 t refined), bought tons sold with it no longer count, and sales to your own
+  carrier do not. Before, a sale counted whole when its commodity was refined in the same login.
+- Tests: `tests/test_earnings_data.py` (the place and ship of sales at a station, at your carrier after a docked login,
+  by Apex shuttle and out of order; a jump's and a ride's, a rescan keeping the first ship, a sample run's; the fixtures
+  read and read again; an old database's columns; the stock through refining by ship and SRV, a transfer, ejects, a
+  death; a partial sale, two sessions, your own carrier, Sessions' Sold, an older line read late, a rolled-back tick,
+  the re-read's clearing). Docs: JOURNAL_REFERENCE (MarketSell, MiningRefined, CargoTransfer, EjectCargo, the sales'
+  place), AGENT_GUIDE.
+
+## 2026-10-14 · Where your pad is: words, diagrams, quiet on auto-dock
+NEXT-VERSION #12 (the author liked the mockup), on #3's pad number. After bgol's LandingPad plugin for EDMC (GPL-2+,
+credited in `outrider/pads.py` and the README).
+- **Words**: at a starport (Coriolis, Orbis, Ocellus, asteroid base, Dodec) "at the back · up on your right" (the
+  author's wording, not a clock), at a carrier "port side, toward the bow" (a squadron carrier names the deck); shown
+  under PAD on Now and the Target panel, and said after the personality's pad line as a plain sentence. The words assume
+  the green lights on your right; the first docking of a session, then every 4th, says so ("With the green lights on
+  your right, it's …"; meta `docking_said`, live-only).
+- **Diagrams**: the starport seen from the slot looking in (12 sectors, 3 depths, the slot's red and green lights) or
+  the carrier from above, bow up, your pad filled in: the overlay's Target panel (`overlay.pad_map_items`) and Now
+  (`padMapSvg`). `[overlay] pad_diagram` (Settings → In-game overlay, on by default) turns them off; the words stay.
+- **Quiet on auto-dock** (the author): with a docking computer fitted the grant's moment is held (`docking_hold`,
+  checkpointed) and said by `State.docking_release` after 12 s (`AUTO_DOCK_WAIT_S`) unless the `Music` line
+  "DockingComputer" came first (2-10 s after the grant in the author's journals); shown at once either way.
+- **Test commands** (the plugin's): `!sppad 34`, `!fcpad 7`, `!scpad 23`, `!cspad 3` typed in game chat act as a grant
+  at a test station of that layout, said at once; any other chat is never read.
+- Tests: `tests/test_pads.py` (layouts, the 45-pad pattern, the words, carriers and squadron decks, the spoken
+  sentence, the commands), test_docking (the place, the green-lights cadence, the commands, the diagram switch, the
+  panel's drawing and the slot's lights, the docking computer's hold, a cancel, a rollback); the smoke block (the words
+  and diagram on Now, a carrier's, number only at an outpost, the setting, the sentence said). Docs: overlay.md,
+  voice-and-alerts.md, views.md, settings.md, the example config, JOURNAL_REFERENCE, AGENT_GUIDE, DESIGN_NOTES, README.
+
+## 2026-10-14 · The overlay's docking refusal wraps instead of being cut
+- `overlay.pad_panel`'s reason is flowed word by word: "no pad free for your ship: try ag…" was cut at the panel's edge
+  (seen in an offscreen render). Test: every reason at every text size, no "…".
+
+## 2026-10-14 · Docking: the pad number, big and spoken; why a station refused
+NEXT-VERSION #3 (Kurbo26, GitHub discussion #3; an EDMC plugin's job). The pad number only, no map: the journal never
+says which layout a station uses (the author: "just say pad number").
+- **DockingGranted**: the pad, said every time by the Comms Officer ("Pad 34."; speech priority 1, as an answer to your
+  own press: even while hushed), on Now in very large letters under the system (`.now-pad`, with the station), and in the
+  overlay's **Target panel** (the author: the existing panel, not a new one): "PAD 34" in a new `huge` canvas size
+  (`overlay.pad_panel`, FONT_PX 48) under the station's name, from the grant until you dock.
+- **DockingDenied**: the reason in words when it is not obvious (`DENIED_WORDS`: NoSpace, TooLarge, RestrictedAccess,
+  Hostile, Offences, ActiveFighter; never Distance), said, on Now and in the Target panel for a minute.
+- `Journals.handle_docking` (live lines only; meta `docking`, live-only), cleared by Docked, DockingCancelled,
+  DockingTimeout, SupercruiseEntry, FSDJump, LoadGame, Shutdown or Died (a moment "clear" redraws the page);
+  `State.docking_summary` (the payload's `docking`; a grant 15 min at most, none while docked).
+- A new alert row **Docking** (Comms; notify off by default; bound to the system), speech keys `docking_granted` and
+  `docking_denied`, 15 lines in each list for the author's ears.
+- Tests: `tests/test_docking.py` (granted and docked, a carrier's pad and every way it ends, the reasons said and not,
+  how long it shows, a re-read says nothing, live-only, the panel, the Target panel while docking); the smoke block
+  (PAD on Now, a refusal, the lines said, the row's tables); test_crew's short-list counts, test_state's kept keys.
+  Docs: overlay.md, voice-and-alerts.md, views.md, JOURNAL_REFERENCE, AGENT_GUIDE.
+
+## 2026-10-14 · 📋 on Search's Find a system by name
+- The seventh name field (a `type="search"` box, missed by the first count): 📋 fills it, Find still looks it up. Smoke
+  and plot-route.md follow.
+
+## 2026-10-14 · 📋 paste: system name fields filled from the game PC's clipboard
+NEXT-VERSION #5 (Kurbo26, GitHub discussion #3: a touchscreen browser window that never takes focus cannot be typed or
+pasted into, and a browser reads its own clipboard only while focused).
+- **📋** beside Plot Route's From, To and Station, and the "a system…" boxes of Nearby's Focus/Lock, Search's and the
+  Nearest finder's Around. A tap fills the field as typing would (input, then change): Plot Route only fills (no plot by
+  itself), the "a system…" boxes act on it as before.
+- The server reads the game PC's clipboard: `Clipboard.paste` (wl-paste / xclip -o, `READ_TOOLS`; Windows'
+  `winkeys.get_clipboard`), only one line of at most 100 characters with no link (`paste_name`). GET `/api/clipboard`
+  {can, why}, POST `/api/clipboard/paste` {text} | {error, code}. For this PC's own browser and the Android app (its
+  `OutriderApp/` User-Agent; the author's choice: a filter, not a lock), 403 `not_this_device` for other browsers; 409
+  on a server, under --simulate, with no tool, an empty clipboard or not a name. Not an AI tool. verify.sh blanks
+  `READ_TOOLS` too.
+- Tests: `test_clipboard_paste` (each tool's command, the filter, empty, binary, a failure, Windows),
+  `test_clipboard_paste_state`, `test_auth.Paste` (this PC, another browser, the app, a server); the smoke block (shown
+  only when allowed, the six fields, To fills without plotting, Focus/Lock acts, a refusal said). Guide: plot-route.md.
+
+## 2026-10-14 · In-Game Route: chips copy their name, ⛽ where the tank's fuel runs out
+NEXT-VERSION #4 (Kurbo26, GitHub discussion #3; the Route Scoop idea, scaled down).
+- A chip copies its system's name (the page-wide click-to-copy).
+- **Fuel reach**: the payload's `route.fuel_reach` {hops, whole} (`State.route_fuel_reach`): the hops the fuel in the
+  main tank makes without scooping, burned hop by hop as the ship lightens (`fsd.fuel_run`), a held charge on the first
+  hop only; worked out with each payload, so a scoop on the way moves it. None (no mark) while the fuel model is
+  incomplete, when the failing hop is out of the drive's reach at any fuel (a range matter), or past
+  `FUEL_RUN_MAX_HOPS` hops all going. The page draws ⛽ with a bar before the first hop it does not make, ⛽✓ at the end
+  when it makes them all, "⛽ N" after the chips when the reach is past the 24 shown.
+- Tests: `test_route_fuel_reach` (a short tank, a scoop, none, the whole route, further along, a hop out of range, the
+  look-ahead's cap); the smoke block (the copy, each mark's place). Guide: views.md.
+
+## 2026-10-14 · Nearby's Around reads "Focus/Lock"
+- The label beside the Standard / Boxel switch, and Boxel mode's hint ("Nearby's Focus/Lock (…) is for Standard"). Search's
+  and the Nearest finder's Around keep their name. Smoke and views.md follow.
+
+## 2026-10-14 · Nearby's bars: Around beside Standard / Boxel, the filters on the checkboxes' row, no ▾ This system
+- **Around** sits beside the Standard / Boxel switch: on the Overview's bar, and on Nearby's own top bar (`#nearHead`)
+  on the Nearby tab (`.nearhead` moves between them, `placeOverview`).
+- One row of options under it: **Mass** first, then **visited**, **fully explored**, **1 jump** (were "show visited",
+  "show fully explored", "one jump only"), **no scan data** (was "No scan data only") and **⧉ Copy visible**; the
+  separate filters row (`#nearFilters`) is gone.
+- The Overview's **▾ This system** fold is gone: the system pane always shows (`ovState.collapsed` dropped, a stored
+  one deleted on load).
+- Smoke: the bar's contents and the row's order, the fold's checks removed. Guide: views.md.
+
+## 2026-10-14 · Overlay settings: "Text Size", a wider Scale box, the buttons on their own line
+- The All Panels row reads "Text Size" instead of "Text Sz" (the Text column's hover and the overlay guide too).
+- The Scale box is wide enough for "100" beside its spinner (5em, was 3.4em).
+- Show test panels and Arrange panels sit on a line of their own under the row, at its left, instead of its far right.
+- Smoke: the label, the buttons' line and the box's width.
+
+## 2026-10-14 · Docs brought up to date
+A sweep over the commits since 2026.10.23 for what fell between the batches.
+- **For the curious**: the file table lists every module again (`tls.py`, `service.py`, `serverlog.py`,
+  `notices.py`, `health.py`, `game_window.py`, `readclient.py`, `backfill.py`, `edsmlog.py`) and the scripts
+  (`install.sh`, `build_blueprints.py`, `trader_probe.py`, `exact_probe.py`); the launchers' weekly certifi check; the
+  CMDR tab by its label.
+- **README**: the CMDR tab (with its EDSY / Coriolis builds), Nearby around another system, the list of voice commands.
+- **Views and settings guides**: the In-Game Route's ✦ is not asked in the bubble or around Colonia; Settings → Display
+  chooses the header tiles; "~96 wks upkeep"; `panel_scale` is multiplied with each panel's Size % (the example config
+  too).
+- **DESIGN_NOTES' "Not yet tried in a live game"**: the EDSY / Coriolis links, the hot ⚖ and the stored-module fold,
+  Nearby's Around, the overlay's px figures, certifi on Windows, the route's hop lookups.
+
+## 2026-10-14 · "All Panels: Theme · Text Sz · Scale"
+- The overlay settings' top row reads "All Panels: Theme [ ] Text Sz [ ] Scale [100 %]" (the author's wording) instead
+  of "Theme · Text size · All panels"; the hovers and the guide say the Scale is multiplied with each panel's own Size %
+  (100 %: each panel at its own size; 50 % and 50 %: 25 %), not added. The panel table's "Hide when mode" heading reads
+  "Hide in mode".
+
+## 2026-10-14 · Overlay sizes: all panels at once, down to 20 %, a 9 px text floor, text size per panel
+Answers a GitHub report: "the in-game overlay is too large on my 4K TV … below 50 % it resets to 50 %". Panels follow
+the game window's height, so the same % is tiny at 1080p and big at 4K: the floor is now in readable pixels.
+- **All panels** (`[overlay] panel_scale`, 100 %, 20 to 250): one size on top of each panel's own, in Settings → In-game
+  overlay, and **Ctrl + wheel** over any panel in Arrange mode (the wheel alone and Shift + wheel keep the two
+  opacities; the help and the window's hint say so).
+- **A panel's Size % goes down to 20 %** (`LIMITS["scale"]` 0.2; the page's field too); the window never draws text
+  under **9 px** (`overlay.MIN_TEXT_PX`): `overlay.effective_scale` raises a panel's scale to keep its smallest text
+  there, in paint and in Arrange mode's resizing.
+- **Settings says what you get**: the overlay window sends the game window's height with its requests (`&h=`); each
+  Size % cell shows "≈ 11 px text", or "held at 9 px" with a line naming those panels ("your screen is too small to go
+  lower"). No window drawing: no figure.
+- **Text size, clearer and per panel**: the lone "text" dropdown is now **Text size**, and the panel table has a
+  **Text** column (small, normal, large or as all panels), kept in the layout beside the size (an old layout reads
+  unchanged); each panel is built at its own size.
+- **One control row**: Theme, Text size and All panels, with Show test panels and Arrange panels at its far right
+  (under it on a narrow window).
+- Tests: `effective_scale` (1080p, 4K, each text size, the floor), `text_px`, `smallest_font` against `panel_font`,
+  `panel_scale` (config, POST, the window's GET), LIMITS at 20 %, the layout's `text`, the per-panel size reaching the
+  builders, the height kept from the window only, the Ctrl + wheel (`wheel_key`, `wheeled_all`), resizing with all
+  panels and the floor, a 4K frame at 25 % drawing no text under 9 px (with PyQt6); the smoke block (the figures, the
+  Text column, the one row, the posts). Docs: the overlay guide (Sizes and text), settings, the example config,
+  AGENT_GUIDE, DESIGN_NOTES.
+
+## 2026-10-14 · Nearby around another system ("Lock System") and Nearby's filters
+The ideas of Rainmangames' pull request #8 ("Nearby exploration: area locking, filters, auto-refresh"; closed, not
+merged), rebuilt on 2026.10.23's Around (S49). Thanks to Rainmangames, PR #8.
+- **Around on Nearby's bar**: you (the default: Nearby follows your ship as before), your destination, your carrier, your
+  next stop (followed: a new sphere when they change), lock this system (the sphere stays where you are now) or a
+  system by name (GET `/api/find` first, as Search's). Saved on the server (POST `/api/nearby/around`, meta
+  `near_around`, live-only: a restart and a journal re-read keep it), so every window, the Overview and the tablet agree.
+  One that names nothing now (no target, no carrier) says why and leaves the list around you.
+- **Away from you**: a strip above the list, "⌖ Around Smojooe GW-W c1-4 (locked) · 31.2 ly from you · 25 ly sphere ·
+  ↻ refresh · ✕ back to you" (the name copies); Dist is from the centre, a **From you** column and **Jumps** from you
+  (S49 kept "from you" apart); the Where tile says "known within 25 ly around …". The target line, the scoop hints and
+  the auto-target test's nearest system stay from you; the horizon line and the AI's nearest unvisited say nothing then
+  (their claim holds only around you), the AI's nearby systems measure from you and say where the list is.
+- **Spansh is asked when the centre changes, and on ↻ refresh only** (POST `/api/nearby/refresh`: never while a search
+  runs, no sooner than 2 minutes after the last ask): no timed refresh (the PR's every 10 minutes). A system you visit
+  inside a pinned sphere joins the list at once as your own; your scans fill the rows as always.
+- **Filters on Nearby's second row**, per device: Mass (all, a … h), No scan data only, ⧉ Copy visible (the names of the
+  rows shown, one per line).
+- **Spansh's cut sphere in plain words**: "Spansh returned its maximum: the list is complete only to N ly — a smaller
+  radius shows them all", in the strip above the list (and the Where tile's "complete to N ly" hover).
+- Boxel mode: Around is for Standard (the select goes; a hint says so while one is set). Not built: the PR's 75 and
+  100 ly radii (until Spansh's maintainer agrees; `[server] radius_choices` can still offer them) and its timed refresh.
+- Tests: `tests/test_nearby_around.py` (the saved choice and its checks, the centre per option, no Spansh ask without a
+  change, ↻'s pace, Dist and From you, the routes, the AI's tools); smoke blocks (the strip, the columns, the filters,
+  Copy visible, the posts, Boxel's hint; the tablet's strip and row sheet). Docs: the Views guide, DESIGN_NOTES,
+  AGENT_GUIDE.
+
+## 2026-10-14 · No route lookups in the bubble
+- The game route's hops are no longer looked up on Spansh within 1,000 ly of Sol or 500 ly of Colonia (the author's
+  ask): Spansh knows every system there and their records are heavy (Sol and Colonia alone ~190 KB), so a route
+  through the bubble pulled megabytes for an answer already known. Out in the black, where an unreported system matters,
+  nothing changes. Those hops' chips claim nothing, as for any hop not asked.
+
+## 2026-10-14 · Route chips say "not reported to Spansh" only when Spansh was asked
+Reported by Kurbo26 in GitHub discussion #3: Sol's chip on the In-Game Route line showed ✦ "not reported to Spansh".
+A hop counted as known only if it was in the Nearby list or Outrider's Spansh cache, so every system Outrider had
+never looked up (anything far away) was called unreported.
+- **Three states** (`State.spansh_knows`): known (listed by the Nearby search, or Spansh's record cached), unreported
+  (Spansh was asked and has no record: inside a Nearby search it answered, the route lookup below, the target's lookup)
+  and not looked up (no ✦, nothing said about Spansh in the hover). An EDSM stand-in in the cache is not Spansh's.
+- **The route's hops are looked up when a route is plotted**: the first 24 hops (the chips the line shows) that nothing
+  has answered yet, in one Spansh search by id64 (`Spansh.records_by_id`, the same request the permit check makes;
+  probed 2026-10-14, `tests/fixtures/spansh_ids.json`). One at a time, a failure retried after 5 minutes, each answer
+  kept in memory for a day. So the ✦ now means what it says.
+- **The same mistake elsewhere**: the arrival briefing said "Known, not in Spansh." for a system the Nearby list did not
+  have yet (it read the cache), and the overlay's strip, the Nearby badges and statuses said Spansh lacked a system
+  whenever its search had failed or a busy region's answer stopped short of it. These read the same three states: the
+  briefing says "Known.", the strip says nothing, and a route-plot system Spansh's answer did not cover shows "not
+  looked up" (never "unreported"; its "yours only" badge no longer says Spansh doesn't have it).
+- **Launcher tests that passed by luck**: three launcher tests (`test_server_mode.py` FableScriptFixes'
+  `test_no_sha256sum_needed` and `test_relative_arguments_are_the_callers`, and `test_restart.py`'s
+  `test_shell_launcher_exports_itself`) wrote their fake venv Python with the real Python's path unquoted. This checkout's
+  path has spaces, so every `-c` call failed, the requirements hash came out empty and each run went through a reinstall
+  the tests say cannot happen, while their assertions still matched. The path is quoted (as CertifiWeekly's is), the
+  fake answers `import aiohttp` itself, and each test now asserts no install ran. The launcher itself was fine.
+- Tests: `tests/test_route_spansh.py` (the three states, the lookup's one search and pacing, the briefing and strip, the
+  Nearby stand-ins after a failed or cut search); a page smoke block (chips and their titles, the briefing, the "not
+  looked up" pill). Docs: DESIGN_NOTES, AGENT_GUIDE, the Views guide.
+
+## 2026-10-14 · "wks upkeep"
+- The Carrier tile (and the CMDR tab's carrier line) say "~96 wks upkeep" instead of "~96 weeks of upkeep (as of
+  Oct 12)" (the author's ask): how old the carrier's stats are moved into the hover.
+
+## 2026-10-14 · The launchers keep certifi current, checking once a week
+Follow-up to issue #9 (the HTTPS fix): pip never upgrades an installed certifi that meets `requirements.txt`'s floor,
+so the root certificates Outrider trusts would age with the environment (the author's decision, 2026-10-14).
+- **`launch_outrider.sh` and `launch_outrider.bat`**, after the requirements step, run `pip install --upgrade --quiet
+  certifi` when `.venv/.certifi-checked` (the date of the last check, compared in Python) is missing, 7 days old or
+  more, or unreadable, then write today's date. Offline (or PyPI down) they say "certifi: could not check for a newer
+  certificate bundle (offline?); using the installed one", write no stamp (the next start tries again) and start
+  Outrider anyway; pip tries once with a short timeout. The .bat keeps its Windows line endings; its check sits at the
+  top of `:run`, reached after an install and on the fast path.
+- **Docker**: the image needs no weekly check (each release builds it), but Docker's layer cache kept the certifi of
+  the first build. The Dockerfile now upgrades certifi in a step after `ARG CERTIFI_CHECKED`, and
+  `scripts/docker_bundle.sh` passes the day's date, so a release's image always has the newest.
+- Why weekly (DESIGN_NOTES): certifi holds root certificates, which change rarely; a site's own certificate (Let's
+  Encrypt's 90-day ones) is checked live against those roots and needs no new bundle.
+- Tests (`tests/test_server_mode.py` CertifiWeekly): the shell launcher in a scratch checkout with a fake venv Python
+  (a missing stamp checks and stamps, a fresh one skips, an 8-day or future one checks, a failing pip says the line,
+  keeps no stamp and still starts); the .bat's lines checked as text and its Python run against real stamps (the same
+  lines as the shell's); the Dockerfile's ARG and the bundle's build argument. Docs: install guide, DESIGN_NOTES,
+  AGENT_GUIDE.
+
+## 2026-10-14 · CMDR tab: each ship's build in EDSY and Coriolis
+The author's request of 2026-10-14.
+- **EDSY ↗ and Coriolis ↗** beside each ship in the CMDR tab's Fleet (the ship you fly included) and Inventory's
+  Ships: they open the ship designer in a new tab with that ship's exact build loaded (in the Android app, in the
+  browser, as the page's other outside links). A ship not boarded since the journals begin says "no build", titled
+  "board it once to record its build".
+- **Each ship's latest Loadout kept whole**: `fleet_loadouts` has a `loadout` column (the line as JSON), filled by the
+  same Loadout handling and guarded the same way (an older Loadout read later changes nothing); journal-derived, in
+  `RESET_JOURNAL_DATA` with the rest of the row. PARSER_VERSION stays 51: it is unreleased, and the release's one
+  re-read fills the column (its re-read reason now names the builds).
+- **The links built on the server** (`outrider/shipyard_links.py`, pure), in the format EDMC uses: EDMC's own plugins
+  (plugins/edsy.py, plugins/coriolis.py and common_coreutils.py's `shipyard_url_common`, EDMarketConnector, read on
+  2026-10-14) were the reference, matched step by step, nothing copied. The Loadout reshaped as EDMC's
+  `monitor.ship()` does, then compact sorted JSON, gzip, URL-safe base64 with '=' as `%3D`; the gzip header's time is
+  0 and the build keeps the Loadout's own timestamp, so a build always gives the same link. EDSY's link keeps the
+  build in the URL's fragment (never sent to a server), Coriolis's sends it as a query parameter (DESIGN_NOTES).
+- Tests (`tests/test_shipyard_links.py`): a real Loadout from the author's journals, both links decoded (base64url,
+  gunzip, JSON) back to it as EDMC shapes it, EDMC's reshaping (lasers' ammo, symbols, blank names, slot order), the
+  fixed gzip header, the line kept whole and the older one ignored, a ship never boarded without links, an older
+  database given the column; smoke: the links in the Fleet and Ships lists (new tab, escaped, "no build" titled).
+  Docs: the views guide's CMDR section, DESIGN_NOTES, AGENT_GUIDE, for-developers.
+
+## 2026-10-14 · HTTPS: the system's certificates plus certifi's, and a plain certificate error
+Reported by Aerics84, issue #9: on Windows every lookup failed with `CERTIFICATE_VERIFY_FAILED … certificate has
+expired` for spansh.co.uk. Python verifies against the Windows store, which fetches a new root only when something asks
+it to (a browser does, Python does not).
+- **certifi in `requirements.txt`** (`certifi>=2024.7.4`): the launchers install it on the next start (the file
+  changed), the Docker image too.
+- **One TLS context for every outgoing HTTPS connection** (`outrider/tls.py`): `ssl.create_default_context()` (the
+  system store, so a corporate or self-added root keeps working) with certifi's bundle loaded into it; without certifi
+  the system store alone, said once in the log. Cached. The lookups' session, the assistant's, the uploads', the MCP
+  bridge's (`tls.connector()`), and the urllib downloads (the bio rules and colour tables, Piper's voice list and voices:
+  `tls.urlopen`). A test walks the source so a new session or urlopen cannot leave it out.
+- **A certificate failure said plainly**: `outrider.health.classify` has a "certificate" kind (aiohttp's
+  ClientConnectorCertificateError, ssl's SSLCertVerificationError, urllib's URLError around one); the Data tile says
+  "Spansh: couldn't verify spansh.co.uk's certificate (expired): check this PC's date and time; if they are right,
+  update Outrider" (a wrong clock gives the same error), a banner card says it at once (one card for every source
+  failing so) and so does Show log; Settings → Uploads' Recent lines and the upload outage card use the same words; a
+  failed voice or bio download says it too.
+- Tests (`tests/test_tls.py`): the context loads both sources (certifi faked, a test root in tests/fixtures), the
+  fallback without certifi or with a broken bundle, classify and the words, the tile and the banner, the uploads'
+  Recent entry, the source walk; smoke: the tile's and the Recent line's words. No network in any of them.
+  Docs: install (Windows: certificate errors), the views guide's Data tile, DESIGN_NOTES, AGENT_GUIDE.
+
+## 2026-10-14 · CMDR tab: sessions by days, hot ships, stored modules followed
+Batch 4 of the PR #5 review's plan, with the author's answers of 2026-10-14.
+- **Sessions by days**, like everything else: the Sessions tab lists the logins of the last 30 days with fighting or
+  mining, 40 at most (`commander.SESSIONS_DAYS`, `sessions_since`), and says "your sessions of the last 30 days".
+- **Hot ships**: a small red ⚖ (the theme's `--bad`, titled "hot: this ship is wanted") beside the ship you fly when the
+  game marks it hot, and beside a stored ship or module the same way (it was the word "hot" in amber). The author's
+  journals (read only) carry `Hot` on every StoredShips entry and never on a Loadout (none was hot), so a ship's flag is
+  the latest line that says it: its StoredShips entry, and for the ship you fly the Loadout's `Hot` as Frontier's
+  manual describes it ("if wanted at startup": the login's Loadout without it says not hot). The stored ships' fold
+  keeps it per ship (`hot`), Loadout joined its events.
+- **Stored modules followed between Outfitting lists**: ModuleStore, MassModuleStore, ModuleBuy's `StoredItem` (stored,
+  not sold), ModuleRetrieve (its `SwapOutItem` stored), FetchRemoteModule (in transit until it arrives, then where you
+  sent for it, kept through a list written meanwhile) and ModuleSellRemote are folded into meta stored_modules,
+  `fresh()`-guarded, until the next StoredModules list replaces it (`commander.modules_apply`); the heading says as of
+  the last change. Field names checked on the author's journals; replayed through the fold, they matched the game's next
+  list 341 times in 345 (two modules the game threw away when swapped out, two lists after a gap in the journals).
+  ModuleSellRemote and MassModuleStore had no real line: Frontier's manual. ModuleSell sells from the ship and leaves
+  storage alone.
+- No journal re-read: version 51 is unreleased and stays, though what it keeps changed shape (the ships' hot flags, the
+  modules' fold); an Outrider already on 51 picks them up from the next shipyard or outfitting visit.
+- Tests from real lines (`RealLines`: the hot flags, the modules between two lists, ModuleStore), the manual's events,
+  the 30 days; smoke: the ⚖ in both tables, its title and colour, the stored modules' heading, the sessions' wording.
+  Docs: the guide's CMDR section, DESIGN_NOTES, JOURNAL_REFERENCE, AGENT_GUIDE.
+
+## 2026-10-14 · CMDR tab: checked against real journals, links out, blueprints by module, tiles to choose
+Batch 3 of the PR #5 review's plan, with the author's answers of 2026-10-14.
+- **The field names checked against real journals** (the author's live and legacy folders, read only): every event the
+  tab folds that has lines there matched (StoredShips, ShipyardBuy/Swap/New/Transfer, SetUserShipName, StoredModules,
+  ShipLocker and ShipLocker.json, SuitLoadout, CreateSuitLoadout, EngineerProgress both forms, Reputation, Powerplay,
+  PowerplayMerits/Rank, SquadronStartup, JoinedSquadron, Missions, MissionAccepted/Completed/Abandoned/Redirected,
+  CargoDepot, Bounty, FactionKillBond, Died, Interdicted, RedeemVoucher, MiningRefined, ProspectedAsteroid,
+  AsteroidCracked, LaunchDrone, MarketSell); the events with no line there (DeleteSuitLoadout, RenameSuitLoadout,
+  LoadoutEquip/RemoveModule, UpgradeSuit/Weapon, ShipyardSell, SellShipOnRebuy, PowerplayLeave/Defect, leaving a
+  squadron) follow Frontier's manual. Three fixes, each with a test built from the real lines (`RealLines`): a
+  colonisation mission's `Expires` is a Unix time, not seconds left (it showed 2080); a mission on the login's list
+  only is named from its `Name_Localised` ("$Mission_Colonisation_Initial_Name;" before); `PowerplayRank` 0 comes just
+  before `PowerplayJoin`, at the same second, and the join no longer wipes the rank. ShipLocker lines carry their lists
+  at most changes, not only at login: the wording follows; ShipLocker.json is read in the tick only when its
+  modification time moves (a test). No journal re-read: version 51 is not released and stays.
+- **Links out of the tab, the tiles informational** (should 5): the career's History › opens History at its Career
+  row; a material Engineering is short of opens the Materials tab filtered to it, its ⇄ the nearest trader of its kind
+  (`openNearest({need})`; the blueprint rows carry each material's `category`). The Commander tile does not open it.
+- **"CMDR"** is the tab's label: the header, its ↗ window and the tablet's nav (Records). The header row at 1280 px in
+  the Default and all 11 themes (headless, a throwaway server): one row beside the title everywhere, 32-44 px
+  narrower than with "Commander".
+- **Blueprints by kind of module** (should 7): one row per kind and blueprint, each grade's engineers that kind's (a
+  pulse laser's Overcharged is Broo Tarquin's, a cannon's Tod McQuinn's; a heat sink's Lightweight is no longer filed
+  under the chaff launcher): 185 rows for 43 kinds. `scripts/build_blueprints.py` fetches coriolis-data itself at a
+  pinned commit (0db9234, 2026-04-24), records it with the licence (Frontier's terms for the data; only coriolis.io's
+  code is MIT) in the file's `_readme` and `source` and in the README's credits; FDevIDs (no licence) is dropped: the
+  material names are matched by `outrider.materials`' own table (every material the same as before).
+- **An unreadable blueprint table says so** (should 8): "Blueprint table unreadable", not "Nothing matches"
+  (`engineering`'s `unreadable`; `load_blueprints` gives None).
+- **The tablet**: `TABLET_VIEWS` in the nav's order, and a test that every nav page is in it and in exactly one
+  `TB.groups` list (should 11); the Missions and Sessions tables are fitted tables (`FIT_TABLES`, drawn into
+  `FIT_HOSTS`): short dates, spans and credits, then the faction, the lists by ship and of minerals and the limpets
+  left out.
+- **Choose the header tiles** (the author's request): Settings → Display → Header tiles shown on this device, a box
+  per tile (Where I am, Commander, Fuel, Carrier, Unsold, Data). An unticked tile is left out on this device, from the
+  one line too; the wide grid gets a column per tile shown; the last one cannot be unticked; per device (`tilesHidden`,
+  not a shared setting); one line / six tiles work as before.
+- Docs: DESIGN_NOTES, JOURNAL_REFERENCE (the traps above), AGENT_GUIDE, the guide's CMDR section and tablet page.
+  Smoke: the links, the label, the unreadable table, the fitted tables' short forms, the tile choice.
+
+## 2026-10-14 · Commander tab: read from the database
+Batch 2 of the PR #5 review's plan: the Commander tab no longer scans journal files (each read whole, the live folder
+only, a year at a time) but reads what the journal reader keeps, like every other view. A journal re-read (journal
+reader version 51) fills it from all your journals, legacy folders included.
+- **Folded as the lines are read**: `Journals.handle_commander` keeps meta reputation, powerplay, squadron,
+  stored_ships, stored_modules, ship_locker, suit_loadouts, engineers and missions (`outrider/commander.py`'s
+  `*_apply` folds, each `fresh()`-guarded: a legacy line older than the latest Missions list cannot bring a mission
+  back), and a journal-derived `play_activity` table (one row per login: its fighting and mining). All of it is in
+  `RESET_JOURNAL_DATA`; meta statistics keeps the career's sections; `fleet_loadouts` keeps each ship's value.
+  `outrider/jscan.py` is gone; the GETs are `State.commander_*`, quick reads on the event loop, registered in `make_app`.
+- **The login's snapshots are not play**: Missions, Reputation, EngineerProgress, Powerplay, SquadronStartup and
+  ShipLocker joined `LOGIN_EVENTS`, so reading them does not move `last_play_ts` (History's session end, the "away"
+  greeting).
+- **The fleet follows the shipyard** (should 1): the last StoredShips, then ships bought, sold (also on a rebuy),
+  swapped, sent for and renamed, as the Inara uploader reads them; the ship you fly is the newest Loadout, and each
+  ship's value its latest Loadout's when that is newer than the list.
+- **Suit loadouts** (should 2): created, changed (a weapon equipped or removed), upgraded, renamed and deleted, not
+  only the ones worn.
+- **The ship locker** (should 3): the login line, then ShipLocker.json whenever it is newer (read in the tick, as
+  Cargo.json), since the later journal lines carry no contents.
+- **Mining in the SRV** (should 4): the Rhino's refinery is counted apart from the ship's (its tons beside the
+  ship's, not in t/h); the Sessions tab lists the latest 40 logins with fighting or mining, not the last 30 days.
+- Tests (`tests/test_commander.py`, through `Journals.handle` on a scratch database): a legacy line older than the
+  latest Missions line is ignored, a re-read doubles nothing, the login snapshots leave `last_play_ts`, a sold ship and
+  a deleted suit loadout disappear, the SRV's mining apart, ShipLocker.json when newer; smoke: the SRV's tons.
+
+## 2026-10-14 · Commander tab: the review's fixes
+The fixes the review of PR #5 asked for before a release (batch 1 of its plan; the database move is next).
+- **One owner for credits and the carrier.** The CMDR tab shows the Commander tile's credits (the login's plus sales
+  since, with the tile's hover) and the Carrier tile's carrier (balance, weeks of upkeep, or its decommissioning in
+  red) from the payload, live; `commander.profile` no longer reads its own credits, loan or CarrierStats.
+- **Rank estimates.** Exobiology uses the post-Update-14 thresholds (Aunty Sledge's Frontier forum post of 2 Jan 2023,
+  as the wiki copies it), worded "in about N cr", Elite IV and V marked uncertain. Checked on the author's journals
+  since 2023 (each login's Progress beside its Statistics): Organic_Data_Profits moves through the Cataloguer,
+  Taxonomist, Ecologist and Geneticist bands at the table's steps within 3 %, but not from its totals (Geneticist 64 %
+  at 7.28B, where the totals give 74 %; the review's 64.1 % paired the 10-11 statistics with the 10-12 percentage), so
+  it stays the step times the game's own percentage. The trade and exploration figures could not be checked (trade
+  progress moved while Market_Profits did not; exploration has no published steps past Elite): those ranks, like
+  combat, show their percentage only.
+- **Engineering "ready"**: EngineerProgress' Rank is the highest grade the engineer crafts for you (the author's
+  journals: 944 crafts, none above the rank then; a rank-up follows the roll that earns it), so ready is rank >=
+  grade, not one past it.
+- **The page's rules**: the tab switch (the themed `.seg`), Refresh and Engineering's filter sit above the pane; green
+  and red are the theme's `--good` / `--bad` (`#cmdrView .ok` / `.short`, the Materials tab's classes; there was no
+  `.ok` colour, and `--panel2` did not exist); a tab is asked for again only when the payload's new
+  `commander_version` moves (a journal line naming an event the view reads: `COMMANDER_VIEW_EVENTS`, which also wakes
+  the page) or, for Engineering, the materials' version, instead of a 30 s timer; the missions' time left is counted
+  at each draw; the tab is kept with `store.set("cmdrTab")`; four unescaped values (Powerplay rank, G levels, a
+  material's need, rates) go through `cmNum`.
+- **Errors and threads**: no local "500 with the error" any more (it hid the traceback from Show log): `json_errors`
+  logs and answers; the engineering worker gets a copy of the materials made on the event loop.
+- **A 14th header tab** at 1280 and 1366 px in the Default and all 11 themes (measured headless on a throwaway server):
+  nothing overflows, but at 1280 px Centauri's and Alliance's rows went below the title (+41 px of header); their pills
+  are 12 px now (Centauri 8 px a side: its own padding never applied), and every row stays beside the title.
+- Smoke: the Commander block waits with `settle()` under `holdPayloads()`, checks the controls are outside the pane,
+  the colours resolve, no refetch on an unchanged payload, and reads the real `/api/commander/profile` once.
+
+## 2026-10-14 · Commander: who you are, what you own, engineering, missions, sessions (weidercs, PR #5)
+Contributed by weidercs (GitHub PR #5, written 2026-10-12), merged as is; the review's fixes follow in their own entry.
+- A new **Commander** tab (Records on the tablet), five parts, each read from the journal files when opened
+  (`outrider/commander.py`, `outrider/jscan.py`): nothing is stored, nothing is asked of anyone.
+- **CMDR**: credits, net worth, the value of your fleet and stored modules and your carrier's balance, as of your last
+  login; every rank with a bar to the next and, for trade, exploration and exobiology, about how many credits it still
+  takes (the community's figures for each rank's step: an estimate, said as one); reputation, Powerplay, squadron;
+  every ship; career figures from the game's Statistics.
+- **Inventory**: your ships (where each is, its value, what bringing it here costs), stored modules with their
+  engineering, the ship locker, the suit loadouts you have worn. Stored ships and modules are as of the last shipyard
+  or outfitting you opened: the game writes those lists then.
+- **Engineering**: 80 ship-module blueprints, grade by grade: what a roll takes against what you hold, how many rolls
+  you could make now, the engineers offering the grade and whether yours are unlocked far enough. A filter (module,
+  blueprint, material) and "only what I can craft now". `resources/blueprints.json`, built by
+  `scripts/build_blueprints.py` from EDCD's coriolis-data and FDevIDs (materials by the journal's names). No
+  experimental effects, suits or weapons.
+- **Missions**: those you hold, the soonest to expire first: where, what (and how much is delivered), the reward, the
+  time left, marked under half an hour. The login's Missions line decides what is still held.
+- **Sessions**: combat and mining of the last 30 days, each from login to logout: kills, by ship, bounties, bonds,
+  kills an hour, deaths; tons refined and of what, tons an hour, asteroids prospected and their content, limpets, and
+  what the haul sold for.
+- GET `/api/commander/profile`, `/inventory`, `/engineering`, `/missions`, `/sessions`. Not in the smoke test's
+  every-page loops (one more page there shifts later batches' timing); its own batch runs last. `__version__` is
+  left for the release.
+
+## 2026-10-14 · No page-made saves in the Android app, the list of voice commands
+The author's requests of 2026-10-14, relayed by the Android app's session.
+- The app's WebView downloads same-origin http(s) links (every `api/export?what=…` link: kept) but cannot save a
+  `blob:` or `data:` URL. The page has two such saves, both now through `saveBlob` (which refuses in the app):
+  Settings → Sharing → **Export settings** and the voice lab's **⬇ Save WAV**. In the app both are hidden with a muted
+  note in their place ("Export settings from a browser on the PC", "Save WAV from a browser on the PC"), as the file
+  pickers are: `data-blobsave` marks the control, `.nosave` its note, `drawBlobSaves()` sets them. The lab's other
+  blob URL plays a sound (no download); the copy buttons use the clipboard; nothing else makes a blob or data download.
+- **Voice commands**: every fixed command the voice answers without the AI, grouped (where you are, where to go, your
+  trip and materials, the voice), each with what it does, every phrase that asks it and the words that narrow it
+  ("nearest Vista / repair / carrier / raw … trader", "hush for ten minutes / for half an hour / until the next jump",
+  "this session"). From GET `/api/ask/commands` (`outrider.ask.command_list`): the phrases from resources/ask.json as
+  the server read it at start (one spelling of each), a new `descriptions` object there for what each does, the
+  narrowing words from the tables the answers read. On the PC: Settings → Voice's **Voice commands** fold (Find a
+  setting finds it by "voice commands", "phrases" or a phrase's words); on the tablet: Settings → **Voice commands…**,
+  a big scrolling sheet like Choose alerts….
+- Tests: test_ask's VoiceCommands (a description per command, each command in one group, the list the file's phrases
+  with each one asking its own command, the narrowing words read as listed, the endpoint); smoke checks for the app's
+  hidden saves (no visible blob:/data: download with `OutriderApp`, shown without, Export settings saving a blob), the
+  desktop list and its filter, and the tablet's sheet. Docs: tablet.md, voice-and-alerts.md, AGENT_GUIDE.
+
+## 2026-10-14 · No file picker in the Android app
+The author's decision of 2026-10-14: the Android app's WebView has no file picker and will not get one.
+- In the app (`window.OutriderApp` exists) the two controls that open a file input, Bookmarks → **Import…** and
+  Settings → Sharing → **Import settings…**, are hidden, and a muted note in their place says to import from a browser
+  on the PC. Any browser, a tablet's included, keeps both. They are the page's only file inputs (no sound, font or
+  voice control picks a file). `data-picker` marks such a control, `.nopicker` its note, `drawFilePickers()` sets them.
+- Smoke check: one control and one note per file input; hidden / shown with `OutriderApp`, the other way round without.
+  Docs: tablet.md (the app), views.md (Bookmarks), voice-and-alerts.md (settings import), AGENT_GUIDE (the app's contract).
+
 ## 2026-10-14 · Version 2026.10.23
 - The Massive Tweak Update: the crew of voices (nine roles, names, crew lines, voices kept loaded, a voice per
   personality), 🎯 on every system with the game brought forward, the overlay's Target and Alerts panels, its pill and

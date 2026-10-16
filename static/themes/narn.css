@@ -13,6 +13,7 @@
   --bg: var(--nn-bg); --panel: var(--nn-panel); --line: var(--nn-line); --text: var(--nn-text); --muted: #B8957A;
   --accent: var(--nn-ochre); --good: #C8D27A; --warn: var(--nn-amber); --bad: #FF7A5C; --info: var(--nn-ochre);
   --hot: #C8D27A; --biohot: #E0A0C8;
+  --earn-carto: #4A7FB5; --earn-bio: var(--biohot);   /* the Earnings chart's three colours, told apart in this palette */
   --tb-font: "Exo 2", system-ui, sans-serif; --tb-font-display: "Narn Display", "Exo 2", sans-serif;
   --tb-case: uppercase; --tb-track: 1px; --tb-size: 17px;
   --tb-title: var(--nn-ochre);

@@ -10,6 +10,7 @@ import unittest.mock
 
 from support import ed_outrider  # also puts the repository root on sys.path
 
+import outrider  # noqa: E402
 import outrider.auth  # noqa: E402
 
 
@@ -55,6 +56,31 @@ class Tablet(unittest.TestCase):
             self.assertIsNone(re.search(r"^:root\s*\{", css, re.M), "a theme sets nothing outside its data-theme")
             self.assertIn(f'<option value="{t}">', tablet)
 
+    def test_every_tablet_page_in_its_lists(self):
+        """Should 11 (PR #5's review): every page of the tablet's nav is in TABLET_VIEWS (else opening it falls back to
+        Now) and in exactly one TB.groups list (its group lights up), and TABLET_VIEWS is the nav's order."""
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.html"), encoding="utf-8") as f:
+            html = f.read()
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.js"), encoding="utf-8") as f:
+            js = f.read()
+        nav = re.search(r'<nav id="tabNav".*?</nav>', html, re.S).group(0)
+        pages = re.findall(r'<button type="button" class="tb-page" data-view="(\w+)"', nav)
+        views = re.findall(r'"(\w+)"', re.search(r"const TABLET_VIEWS = \[(.*?)\];", js).group(1))
+        groups = {g: re.findall(r'"(\w+)"', v) for g, v in re.findall(r'(\w+): \[([^\]]*)\]', re.search(r"groups: \{(.*?)\}", js).group(1))}
+        # this fork: page.js adds its Ship and GalNet pages to the records group on a line of their own
+        if 'TB.groups.records.splice(TB.groups.records.indexOf("cmdr"), 0, "ship")' in js:
+            groups["records"].insert(groups["records"].index("cmdr"), "ship")
+        if 'TB.groups.records.push("galnet")' in js:
+            groups["records"].append("galnet")
+        self.assertEqual(len(pages), 13 + 2)   # this fork: Ship and GalNet
+        self.assertEqual(views, pages)
+        for p in pages:
+            self.assertEqual(sum(p in v for v in groups.values()), 1, p)
+        # each group's pages sit under its own heading in the nav, in the same order
+        for g, v in groups.items():
+            block = re.search(rf'<div class="tb-pages" data-pages="{g}">(.*?)</div>', nav, re.S).group(1)
+            self.assertEqual(re.findall(r'data-view="(\w+)"', block), v, g)
+
     def test_desktop_theme_picker(self):
         """Desktop themes (the author, 2026-10-04): Settings > Display offers Default - Outrider and every tablet theme
         under the tablet's label; the browser's choice is set before the first paint (no flash of the default)."""
@@ -97,6 +123,57 @@ class Tablet(unittest.TestCase):
             for k in ("--text", "--muted", "--accent", "--good", "--warn", "--bad", "--info"):
                 for ground in ("--bg", "--panel"):
                     self.assertGreaterEqual(round(ratio(c[k], c[ground]), 2), 4.5, f"{t}: {k} {c[k]} on {ground} {c[ground]}")
+
+    def test_earnings_chart_colours(self):
+        """The CMDR tab's Earnings chart (batch C) stacks cartography, exobiology and mining in --earn-carto / -bio /
+        -mine: in every theme, light and dark Default too, the three are told apart (OKLab distance, x100, at least 14:
+        Centauri's and Narn's own info, accent and warn are one gold) and each shows on the background and the panels
+        (3:1, a graphic's minimum)."""
+        def rgb(h):
+            h = h.strip().lstrip("#")
+            return [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+
+        def lin(c):
+            return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+        def lum(h):
+            r, g, b = (lin(c) for c in rgb(h))
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+        def oklab(h):
+            r, g, b = (lin(c) for c in rgb(h))
+            lms = [(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3),
+                   (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3),
+                   (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)]
+            l_, m_, s_ = lms
+            return (0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_, 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+                    0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_)
+
+        def resolved(*blocks):
+            d = {}
+            for block in blocks:
+                d.update(re.findall(r"(--[\w-]+):\s*([^;]+);", block))
+            def res(v, n=0):
+                m = re.fullmatch(r"var\((--[\w-]+)\)", v.strip())
+                return res(d[m.group(1)], n + 1) if m and n < 10 else v.strip()
+            return {k: res(v) for k, v in d.items()}
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.css"), encoding="utf-8") as f:
+            css = f.read()
+        dark = re.search(r"^:root \{(.*?)\n\}", css, re.S | re.M).group(1)
+        light = re.search(r"prefers-color-scheme: light\) \{ :root \{(.*?)\n\}\}", css, re.S).group(1)
+        themes = {"default": resolved(dark), "default light": resolved(dark, light)}
+        for t in ed_outrider.TABLET_THEMES:
+            with open(os.path.join(ed_outrider.STATIC_DIR, "themes", f"{t}.css"), encoding="utf-8") as f:
+                themes[t] = resolved(dark, re.search(r':root\[data-theme="%s"\]\s*\{(.*?)\n\}' % t, f.read(), re.S).group(1))
+        for t, c in themes.items():
+            three = [c[k] for k in ("--earn-carto", "--earn-bio", "--earn-mine")]
+            for i in range(3):
+                for ground in ("--bg", "--panel"):
+                    la, lb = sorted((lum(three[i]), lum(c[ground])), reverse=True)
+                    self.assertGreaterEqual(round((la + 0.05) / (lb + 0.05), 2), 3, f"{t}: {three[i]} on {ground}")
+                for j in range(i + 1, 3):
+                    a, b = oklab(three[i]), oklab(three[j])
+                    self.assertGreaterEqual(100 * sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5, 14, f"{t}: {three[i]} and {three[j]}")
 
     def test_desktop_theme_sections(self):
         """Each theme has its desktop section (body:not(.tablet): the shapes and the pills' size), and the view pill
@@ -296,6 +373,87 @@ class Tablet(unittest.TestCase):
         with unittest.mock.patch.object(fr, "CONTENT_TYPES", bare):
             ed_outrider.register_static_types()
             self.assertEqual(self.client(go), [(200, "image/webp"), (200, "image/svg+xml")])
+
+    def test_ship_pictures(self):
+        """The CMDR tab's Inventory shows a ship type's picture (2026-10-15): one WebP per hull in static/ships/, named by
+        the journal's lower-case symbol, for every type in page.js's SHIP_NAMES and none for a type it does not name
+        (scripts/build_ship_images.py renders them from Elite Dangerous Almanac's illustrations), small (never the 1-2 MB
+        SVGs), credited with Frontier's notice and Almanac's terms, served as images."""
+        folder = os.path.join(ed_outrider.STATIC_DIR, "ships")
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.js"), encoding="utf-8") as f:
+            table = re.search(r"const SHIP_NAMES = \{(.*?)\};", f.read(), re.S).group(1)
+        names = set(re.findall(r"(\w+): \"", table))
+        self.assertGreaterEqual(len(names), 48)
+        pictures = {f[:-len(".webp")] for f in os.listdir(folder) if f.endswith(".webp")}
+        self.assertEqual(sorted(pictures - names), [], "a picture of a type SHIP_NAMES does not name")
+        self.assertEqual(sorted(names - pictures), [], "a type in SHIP_NAMES with no picture: run scripts/build_ship_images.py")
+        self.assertEqual(set(os.listdir(folder)) - {f"{p}.webp" for p in pictures}, {"CREDITS.txt"})
+        total = 0
+        for p in sorted(pictures):
+            with open(os.path.join(folder, f"{p}.webp"), "rb") as f:
+                b = f.read()
+            self.assertTrue(b[:4] == b"RIFF" and b[8:12] == b"WEBP", p)
+            self.assertLess(len(b), 100 * 1024, p)
+            total += len(b)
+        self.assertLess(total, 4 * 1024 * 1024)
+        with open(os.path.join(folder, "CREDITS.txt"), encoding="utf-8") as f:
+            credits = " ".join(f.read().split())   # the words, whatever the line breaks
+        for words in ("Frontier Developments plc", "Elite Dangerous Almanac", "https://github.com/Elite-Dangerous-Almanac/Almanac-Core",
+                      "not under the project's GPL", "non-commercial", "MIT License", "Copyright (c) 2026 Elite Dangerous Community",
+                      "with the permission of Frontier Developments plc"):
+            self.assertIn(words, credits)
+        with open(os.path.join(outrider.ROOT, "scripts", "build_ship_images.py"), encoding="utf-8") as f:
+            commit = re.search(r'^COMMIT = "([0-9a-f]{40})"', f.read(), re.M).group(1)
+        self.assertIn(commit, credits)   # the credits name the commit the pictures were built from
+
+        async def go(c):
+            r = await c.get("/static/ships/krait_light.webp")
+            return r.status, r.headers.get("Content-Type", "").split(";")[0]
+        self.assertEqual(self.client(go), (200, "image/webp"))
+
+    def test_galaxy_map_markers(self):
+        """The game's galaxy-map markers as page icons (NEXT-VERSION #13, 2026-10-15): the files page.js's MARKERS names,
+        copied byte for byte from Elite Dangerous Almanac at a pinned commit into static/icons/elite/, each a small 64 x 64
+        SVG painted with currentColor (page.css draws it as a mask in the text's colour: a .mk-<symbol> rule each),
+        credited with Frontier's notice, Almanac's MIT notice and the commit, served as SVG, not page code (PAGE_FILES)."""
+        commit = "5da3bfca20aba4bb39332628e220ea2acb5dbcd9"   # a newer copy: here and in CREDITS.txt
+        folder = os.path.join(ed_outrider.STATIC_DIR, "icons", "elite")
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.js"), encoding="utf-8") as f:
+            js = f.read()
+        markers = re.findall(r'"([a-z-]+)"', re.search(r"^const MARKERS = \[(.*?)\];", js, re.M).group(1))
+        self.assertEqual(sorted(markers), ["destination", "engineer", "fleet-carrier", "mission", "squadron-carrier", "titan", "waypoint"])
+        self.assertEqual(sorted(os.listdir(folder)), sorted([f"{m}.svg" for m in markers] + ["CREDITS.txt"]))
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.css"), encoding="utf-8") as f:
+            css = f.read()
+        for m in markers:
+            with open(os.path.join(folder, f"{m}.svg"), encoding="utf-8") as f:
+                svg = f.read()
+            self.assertLess(len(svg.encode()), 2048, m)
+            self.assertTrue(svg.startswith('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"'), m)
+            self.assertIn("currentColor", svg, m)
+            self.assertNotIn("<script", svg, m)
+            self.assertNotRegex(svg, r"(?:href|url)\(?=?\"?(?:https?:|data:)", m)   # nothing fetched from outside
+            self.assertEqual(len(re.findall(rf"^\.mk-{m} \{{ -webkit-mask-image: url\(icons/elite/{m}\.svg\); mask-image: url\(icons/elite/{m}\.svg\); \}}$",
+                                            css, re.M)), 1, m)
+            if m not in ("engineer", "mission"):   # those two are page.html's only (below)
+                self.assertIn(f'mk("{m}"', js, m)
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.html"), encoding="utf-8") as f:
+            html = f.read()
+        for m in ("engineer", "mission", "destination"):
+            self.assertIn(f'<span class="mk mk-{m} mkg" aria-hidden="true"></span>', html)
+        self.assertNotIn("🎯", html)   # every target button the destination marker
+        self.assertFalse([p for p in ed_outrider.PAGE_FILES if "icons" in p])   # pictures, not page code
+        with open(os.path.join(folder, "CREDITS.txt"), encoding="utf-8") as f:
+            credits = " ".join(f.read().split())
+        for words in ("Frontier Developments plc", "Elite Dangerous Almanac", "https://github.com/Elite-Dangerous-Almanac/Almanac-Core",
+                      commit, "not under the project's GPL", "non-commercial", "MIT License", "Copyright (c) 2026 Elite Dangerous Community",
+                      "with the permission of Frontier Developments plc", "media usage rules"):
+            self.assertIn(words, credits)
+
+        async def go(c):
+            r = await c.get("/static/icons/elite/destination.svg")
+            return r.status, r.headers.get("Content-Type", "").split(";")[0]
+        self.assertEqual(self.client(go), (200, "image/svg+xml"))
 
     def test_dark_theme_icons(self):
         """The dark theme's line icons are Lucide's (ISC: its licence ships beside them), inline as CSS masks written by

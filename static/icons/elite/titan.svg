@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" color="#FF0000" role="img">
+  <title>Titan</title>
+  <rect x="2" y="2" width="60" height="60" fill="none" stroke="currentColor" stroke-width="4"/>
+  <defs>
+    <path id="titan-blade" d="M21.25,22.32 L17.26,16.19 A15.02,15.02 0 0 1 18.79,14.46 L22.08,17.29 A15.02,15.02 0 0 1 35.06,10.26 L35.14,11.41 A13.87,13.87 0 0 0 21.25,22.32 Z"/>
+  </defs>
+  <g fill="currentColor">
+    <use href="#titan-blade"/>
+    <use href="#titan-blade" transform="rotate(45 32 32)"/>
+    <use href="#titan-blade" transform="rotate(90 32 32)"/>
+    <use href="#titan-blade" transform="rotate(135 32 32)"/>
+    <use href="#titan-blade" transform="rotate(180 32 32)"/>
+    <use href="#titan-blade" transform="rotate(225 32 32)"/>
+    <use href="#titan-blade" transform="rotate(270 32 32)"/>
+    <use href="#titan-blade" transform="rotate(315 32 32)"/>
+  </g>
+  <circle cx="32" cy="32" r="4.62" fill="none" stroke="currentColor" stroke-width="1"/>
+</svg>

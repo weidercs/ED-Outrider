@@ -839,9 +839,12 @@ class ReviewBatchE(unittest.TestCase):
         self.assertEqual({k: check[k] for k in ("sold", "predicted", "matched")}, {"sold": 1, "predicted": 1, "matched": 1})
         by = {(r["ts"][11:13]): r for r in self.state.organics(36500)["rows"]}
         self.assertEqual((by["02"]["state"], by["02"]["sold_ts"]), ("sold", "2026-01-02T00:00:00Z"))
-        # the sale keeps its species through a journal re-read (PARSER_VERSION 34)
+        # the sale keeps its species through a journal re-read (PARSER_VERSION 34), with what each paid (53)
         self.assertEqual(json.loads(self.db.execute("SELECT bio_data FROM bio_sales ORDER BY ts").fetchone()[0]),
-                         [[self.SP1.lower(), True]])
+                         [[self.SP1.lower(), True, 100, 400, None]])
+        # a row from before 53 ([species, bonus] only) still reads: the run it sold stays sold
+        self.db.execute("UPDATE bio_sales SET bio_data = ? WHERE ts = '2026-01-01T03:00:00Z'", (json.dumps([[self.SP1.lower(), True]]),))
+        self.assertEqual(ed_outrider.organic_replay(self.db)[0][(1, 5, self.SP1)][0], "sold")
 
     def test_run_left_aboard_dies_with_you(self):
         self.two_runs()

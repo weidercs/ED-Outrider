@@ -1,0 +1,49 @@
+The game's galaxy-map markers, used as page icons (2026-10-15): destination.svg (every button that targets a system
+in the galaxy map), fleet-carrier.svg and squadron-carrier.svg (carriers), titan.svg (a Titan among the signals worth a
+detour), waypoint.svg (the route line's next stop), engineer.svg and mission.svg (the CMDR tab's Engineering and
+Missions). The page draws each as a CSS mask in the text's own colour (page.css, .mk).
+Unofficial, non-commercial fan use: the markers' designs belong to Frontier Developments plc, and ED Outrider is not
+affiliated with Frontier. These files are not under the project's GPL: they keep the terms given here.
+
+Source
+  Elite Dangerous Almanac's galaxy-map markers (assets/galaxy-map/<symbol>.svg: hand-drawn 64 x 64 vector recreations
+  of the in-game markers, each painted with currentColor), https://github.com/Elite-Dangerous-Almanac/Almanac-Core at
+  commit 5da3bfca20aba4bb39332628e220ea2acb5dbcd9 (2026-09-26), the commit the ship pictures (static/ships/) come
+  from. Copied byte for byte, seven of its sixteen markers; nothing else of Almanac's is used here.
+
+Frontier's media usage rules
+  Almanac's ATTRIBUTIONS.md says the galaxy-map marker colours and vectors are the property of Frontier Developments
+  plc, used under Frontier's media usage rules
+  (https://forums.frontier.co.uk/threads/elite-dangerous-media-usage-rules.510879/,
+  https://customersupport.frontier.co.uk/hc/en-us/articles/4404292442642-How-can-I-use-Elite-Dangerous-media), and
+  asks those who pass them on to carry the same notice:
+
+    ED Outrider was created using assets and imagery from Elite Dangerous, with the permission of Frontier
+    Developments plc, for non-commercial purposes. It is not endorsed by nor reflects the views or opinions of
+    Frontier Developments and no employee of Frontier Developments was involved in the making of it.
+
+Elite Dangerous Almanac's licence
+  Almanac's own work is MIT-licensed (its LICENSE; that licence does not cover Frontier's game data or imagery). Its
+  notice, as its terms require:
+
+    MIT License
+
+    Copyright (c) 2026 Elite Dangerous Community
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.

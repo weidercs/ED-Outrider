@@ -16,6 +16,7 @@
   --bg: #000000; --panel: var(--sh-panel); --line: var(--sh-line); --text: var(--sh-text); --muted: #8B919B;
   --accent: #FF4255; --good: #9FD4C0;   /* the page's text accent: --sh-red as text is 3.7:1, too dark; the fills keep it */ --warn: var(--sh-amber); --bad: #FF5A6A; --info: var(--sh-steel);
   --hot: #9FD4C0; --biohot: #C8A8E8;
+  --earn-carto: var(--accent); --earn-bio: var(--biohot); --earn-mine: var(--warn);   /* the Earnings chart's three colours, told apart in this palette */
   --tb-font: "Rajdhani", system-ui, sans-serif; --tb-font-display: "Sith Display", "Share Tech Mono", monospace;
   --tb-case: uppercase; --tb-track: 1.5px; --tb-size: 18px;
   --tb-title: var(--sh-steel); --tb-frame: var(--sh-red);   /* the tablet keeps its crimson frame (the page accent is lighter) */

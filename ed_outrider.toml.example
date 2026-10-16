@@ -168,6 +168,8 @@
 # main voice is always loaded and not counted. A voice set aside waits about a second while it loads again.
 # voices_loaded = 4        # how many to keep loaded beside the main one: a number, or "all"; unset, the voices in use
 #                          # up to 4 (a value Outrider cannot read: 4, said at start)
+# pad_delay = 5            # s: your landing pad is said this long after docking is granted, after the station's own
+#                          # voice (0 to 20; Settings -> Voice); with a docking computer fitted: 12 s, unless it takes over
 # voices_preload = false   # true: load them when Outrider starts (one at a time, after the journals are read), so
 #                          # even the first line of each starts at once; false: each loads the first time it speaks
 
@@ -241,7 +243,9 @@
 # game PC (a game-PC feature: not on a server). The page's Settings -> In-game overlay switches it and arranges the panels.
 # enabled = false
 # theme = "default"         # the panels' colours: default, lcars, elite, babylon5, narn, minbari, centauri, vorlon, shadow, sith, alliance, dark
-# text_size = "normal"      # small, normal or large
+# text_size = "normal"      # small, normal or large (a panel can have its own: Settings -> In-game overlay's Text column)
+# panel_scale = 100         # all panels' size in % (20 to 250), multiplied with each panel's own Size %: lower it on a big TV;
+#                           # text is never drawn under 9 px, however small the sizes
 # system_panel = true       # the bodies worth your time, in supercruise
 # body_panel = true         # the Target panel: the body you are near or have targeted, else the system targeted (also over the galaxy map)
 # radar = true              # on a body's surface: samples, colony rings, the ship
@@ -260,6 +264,12 @@
 #                           # still shows over the galaxy map
 # show_inactive = false     # keep showing when Elite is not the active window (Settings -> In-game overlay); it still
 #                           # hides while other windows cover the game, or the game is minimised or on another desktop
+# hide_on_foot = []         # panels hidden on foot (in a station or on a planet's surface), e.g. ["now"]: any of
+#                           # system, body, radar, strip, now, bio, alerts
+# hide_mouse_lock = false   # no overlay at all on foot and in the DSS, where Elite locks the mouse: an overlay can
+#                           # break that lock on some systems
+# pad_diagram = true        # while docking at a starport or carrier: a diagram of where your pad is under PAD 34, in the
+#                           # Surface radar's place and on Now (false: the number and its words only)
 
 [mcp]
 # The MCP bridge, for asking an AI client (Claude Code, the Claude desktop app) about your game: the client starts

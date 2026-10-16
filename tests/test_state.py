@@ -3069,10 +3069,14 @@ class JournalsRegistry(unittest.TestCase):
         "bio_sales_changed": "a flag set by handling, consumed after the commit",
         "materials_changed": "a flag set by handling, consumed after the commit",
         "cmdr_changed": "a flag set by handling, consumed after the commit",
+        "commander_version": "a counter the Commander view's lines bump (the page's cue to ask again): a retry only bumps it more",
         "status_json": "the latest Status.json reading: live, re-read from the file, nothing in the database",
     }
     # meta key -> why it is NOT cleared by RESET_JOURNAL_DATA
     KEPT_THROUGH_REREAD = {
+        "docking": "live-only: the pad a station gave you just now (#3), written for live lines only; a re-read writes "
+                   "nothing to it",
+        "docking_said": "live-only: grants counted this session for #12's green-lights cadence, live lines only",
         "highway": "live-only: the Highway route (DESIGN_NOTES), cannot be rebuilt from journals",
         "riches": "live-only: the Road to Riches route (Spansh's plot), cannot be rebuilt from journals",
         "next_stop": "live-only: the player's chosen next stop (stamp_next_stop keeps it through the re-read)",

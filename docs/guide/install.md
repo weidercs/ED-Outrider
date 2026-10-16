@@ -12,9 +12,10 @@ Open **<http://127.0.0.1:8025/>** and go fly.
 
 `launch_outrider.sh` sets Outrider up the first time (a virtual environment in `.venv` with `requirements.txt`),
 installs again only when `requirements.txt` has changed (after a `git pull`) or the environment is broken, and
-otherwise starts Outrider at once; its arguments go to Outrider (`./launch_outrider.sh --port 8026`), and relative
-paths in them (`--config my.toml`) are taken from the folder you run it in. With the [in-game overlay](overlay.md) on
-(`[overlay] enabled = true`) it also installs PyQt6 (about 100 MB, into `.venv`) when it is missing; a failed install
+otherwise starts Outrider at once (once a week it first checks for a newer certificate bundle: a few seconds); its
+arguments go to Outrider (`./launch_outrider.sh --port 8026`), and relative paths in them (`--config my.toml`) are
+taken from the folder you run it in. With the [in-game overlay](overlay.md) on (`[overlay] enabled = true`) it also
+installs PyQt6 (about 100 MB, into `.venv`) when it is missing; a failed install
 never stops Outrider starting. ⚙ Settings → Server → **Restart** (after saving settings, or after a `git pull`) starts
 the launcher again in the same window, setup included; started with `python ed_outrider.py`, it starts that again; on
 Windows it needs `launch_outrider.bat` around it. By hand it is
@@ -25,6 +26,15 @@ Windows it needs `launch_outrider.bat` around it. By hand it is
 are **experimental on Windows** (they press keys the Windows way, untested against the game so far), and the
 co-pilot button is Linux only for now. Windows is less tested than Linux: if something goes wrong, an issue on GitHub
 is welcome.
+
+**Windows: certificate errors.** Older Outriders on some Windows PCs failed every lookup with `CERTIFICATE_VERIFY_FAILED
+… certificate has expired` (Spansh, EDSM, GitHub): Windows only fetches a new or renewed root certificate when
+something asks it to (a browser does, Python does not), so a site on a newer root could not be verified. Outrider now
+also trusts Mozilla's list of roots (the `certifi` package in `requirements.txt`, installed by the launcher), so this
+fixes itself after an update: no setting, no `SSL_CERT_FILE`. The launchers keep the certificate bundle current,
+checking once a week (offline, they say so in one line and start anyway). If the Data tile still says *couldn't verify …'s
+certificate*, check the PC's **date and time** first (a clock that is wrong gives the same error); if they are right,
+update Outrider.
 
 > [!TIP]
 > The first start reads all your journals (a few seconds, or a few minutes for years of them); after that it only

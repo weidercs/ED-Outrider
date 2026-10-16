@@ -28,6 +28,11 @@ Changing Outrider yourself, or with a coding agent? Start with [`docs/AGENT_GUID
 | `outrider/auth.py` | Sign-in for other devices: `[server] password`, session tokens, the sign-in rate limit |
 | `outrider/rail.py` | The tablet's control rail: the contexts (ship, SRV, Nomad, fighter, on foot), the default buttons, their states |
 | `outrider/config_edit.py` | Settings' Server settings: every config key, changed in the file in place |
+| `outrider/service.py` | Start with this computer: the systemd user unit (Linux) or the Startup folder entry (Windows); `--install-service`, `--uninstall-service` |
+| `outrider/serverlog.py` | Outrider's own log (`data/outrider.log`, shown in Settings → Server), with the passwords and keys kept out |
+| `outrider/notices.py` | The notices banner along the top of the page |
+| `outrider/tls.py` | Every outgoing HTTPS connection's certificates (this computer's plus certifi's), and a certificate failure in plain words |
+| `outrider/health.py` | What kind of failure a lookup or upload met, and which lookup services are down |
 | `outrider/fsd.py`, `outrider/highway.py`, `outrider/core.py` | The frame shift drive's maths and fuel model; the Highway's route helpers; small shared helpers |
 | `outrider/tools.py` | The read-only questions an AI may ask (one registry, used by the MCP bridge and the voice) |
 | `outrider/ask.py`, `resources/ask.json` | Questions by voice (`POST /api/ask`): the fixed phrases, then the optional AI layer |
@@ -35,6 +40,7 @@ Changing Outrider yourself, or with a coding agent? Start with [`docs/AGENT_GUID
 | `outrider/honk.py` | Auto honk (Linux; Windows experimental; optional); `--show`, `--test` |
 | `outrider/winkeys.py` | Key presses and the clipboard on Windows (`SendInput`), standing in for evdev |
 | `outrider/target.py` | The Highway's auto-target (Linux; Windows experimental; optional); `--show` |
+| `outrider/game_window.py` | Elite's window for auto-target: brought to the front before a run, checked to be in front before every key |
 | `outrider/bio.py` | The exobiology predictor; `--backtest` scores it against your journals, `--update-rules` fetches the rules by hand |
 | `resources/bio_rules.json` | Spawn rules, nebulae and regions from BioScan and klightspeed's region map; ExploData's colour variants are downloaded beside it into `bio_colours.json` on the first start, never shipped (`outrider/bio.py`) |
 | `outrider/checklist.py` | The Exo-Biology and Geology checklists: every species and site by galactic region, with what you have done with it there |
@@ -45,10 +51,16 @@ Changing Outrider yourself, or with a coding agent? Start with [`docs/AGENT_GUID
 | `outrider/codex_geo.py` | Which geology codex entries a body's volcanism could log, for the ✦ / ✪ on geology new to your codex |
 | `outrider/boxel.py` | Boxels: a procedural name's boxel, its place and its systems' addresses, for Boxel mode and the sector map |
 | `outrider/riches.py` | The survey routes (Road to Riches, Exomastery, Earth-like and ammonia worlds, sweeps), one table of their kinds: Spansh's answer as route rows, what is still to do in a system, the arrival lines |
+| `outrider/commander.py` | The CMDR tab: your ranks, money and fleet, inventory, engineering blueprints against your materials, missions, and combat and mining sessions, folded from the journals as they are read and kept in the database |
+| `outrider/shipyard_links.py` | A ship's build as an EDSY or Coriolis link (the format EDMC uses), from its latest Loadout |
+| `resources/blueprints.json` | Ship-module engineering blueprints by kind of module (materials per grade, that kind's engineers), built from EDCD's coriolis-data at a pinned commit by `scripts/build_blueprints.py` (it fetches the files itself) |
 | `outrider/uploads.py` | Uploads (opt-in, off by default): the session each journal line belongs to, the outbox, what may be sent |
 | `outrider/eddn.py` | EDDN: the messages a journal event becomes, and what EDDN's answer means |
 | `outrider/edsm.py` | EDSM's journal upload: what a line sends to your own EDSM account, and what EDSM's answer means |
 | `outrider/inara.py` | Inara: what a line sends to your own Inara profile (only what changed), and what Inara's answer means |
+| `outrider/readclient.py` | Reading your own EDSM and Inara accounts (the key Checks, EDSM's flight log), never an upload |
+| `outrider/backfill.py` | Filling a gap in your EDSM flight log from your journals |
+| `outrider/edsmlog.py` | Your EDSM flight log from before your journals, imported and counted as visits |
 | `outrider/overlay.py` | The in-game overlay, Outrider's side: what each panel draws, as draw lists the overlay window paints (GET `/api/overlay`) |
 | `outrider/overlay_runner.py` | Runs the overlay window as Outrider's child process on the game PC (restarted after a crash), installs PyQt6 when the overlay is on; `--setup` is the launchers' PyQt6 step |
 | `outrider/overlay_window.py` | The overlay window itself (PyQt6), over Elite's window; `--render <file.png>` draws one frame into a picture instead |
@@ -58,13 +70,16 @@ Changing Outrider yourself, or with a coding agent? Start with [`docs/AGENT_GUID
 | `tests/` | `python3 -m unittest discover tests`; `node tests/page_smoke.js <port> [path to node_modules with jsdom]` for the page, against a scratch server only (it refuses 8025 and a missing port) |
 | `tests/fixtures/` | Synthetic sample journals (a made-up commander and systems) for tests and scratch servers |
 | `Dockerfile`, `docker-compose.yml`, `docker/` | Running Outrider as a server in Docker (see [Running as a server](install.md#-running-as-a-server-docker)); `docker/entrypoint.sh` writes the first config and checks the folders can be written |
-| `launch_outrider.sh`, `launch_outrider.bat` | Start Outrider (Linux and macOS; Windows), making `.venv` and installing `requirements.txt` first when needed, and PyQt6 when the in-game overlay is on |
+| `launch_outrider.sh`, `launch_outrider.bat` | Start Outrider (Linux and macOS; Windows), making `.venv` and installing `requirements.txt` first when needed, checking for a newer certifi once a week, and PyQt6 when the in-game overlay is on |
 | `scripts/verify.sh` | Every check in one go: unit tests, lint, `node --check static/page.js` (the page's JavaScript syntax), the page smoke test on a throwaway server (and a clean stop) |
+| `scripts/install.sh` | Sets up `.venv` with `requirements.txt` and downloads the spoken-alert voices, without starting Outrider |
 | `scripts/docker_bundle.sh` | A Docker release bundle in `dist/` (git-ignored): the built image saved with a compose file that runs it (no checkout or build on the server) |
 | `scripts/build_codex_images.py`, `scripts/build_geo_codex.py` | Rebuild `resources/codex_images.json` and `resources/geo_codex.json` from Canonn's codex reference (read only) |
 | `scripts/riches_probe.py` | A one-off probe of Spansh's Road to Riches API that saves a real answer; not part of the tests |
 | `scripts/route_probe.py` | A one-off probe of Spansh's Earth-like / ammonia world routes and its tourist router (a sweep's), as Spansh's own pages ask them; saves the answers; not part of the tests |
 | `scripts/landmarks_probe.py` | A one-off probe of what Spansh reports about the life on a body (dumps, body search, its filters); saves the answers; not part of the tests |
+| `scripts/trader_probe.py`, `scripts/exact_probe.py` | One-off probes of Spansh's material-trader fields and of its exact plotter's jumps; save the answers; not part of the tests |
+| `scripts/build_blueprints.py` | Rebuilds `resources/blueprints.json` from EDCD's coriolis-data at its pinned commit |
 | `scripts/dark_icons.py` | Writes the tablet's Dark theme icons (Lucide, ISC) into `static/themes/dark.css` |
 | `data/` | Your own files, git-ignored: the database, `browser_defaults.json`, `speech_banned.json`, `pronounce.json`, `backups/`, `piper-voices/`, `fonts/` |
 | `docs/` | Notes for contributors and their coding agents (code map, rules, journal traps, design notes, changelog); `guide/` is this user guide, `images/` its screenshots |

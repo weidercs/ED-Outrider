@@ -21,6 +21,7 @@ import tomllib
 if __package__ in (None, ""):   # run as a file: the repository root on the path
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import outrider  # noqa: E402
+import outrider.tls as tls  # noqa: E402  (a server elsewhere behind HTTPS: the shared context, issue #9)
 import outrider.tools as tools  # noqa: E402
 
 PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")   # newest first: the client's own if we know it
@@ -73,7 +74,7 @@ def http_get(base, timeout=HTTP_TIMEOUT, password=""):
 
     async def get(path, params):
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as s:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout), connector=tls.connector()) as s:
                 for attempt in (1, 2):
                     headers = {"Authorization": f"Bearer {session['token']}"} if session["token"] else {}
                     async with s.get(base + tools.query(path, params), headers=headers) as r:

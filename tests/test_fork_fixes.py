@@ -48,13 +48,13 @@ class NewerDatabase(unittest.TestCase):
             path = os.path.join(d, "outrider.sqlite")
             db = ed_outrider.open_db(path)
             db.execute("INSERT INTO jumps (ts, id64, name, x, y, z) VALUES ('2026-10-15T10:00:00Z', 7, 'Sol', 0, 0, 0)")
-            db.execute("ALTER TABLE sale_events ADD COLUMN station TEXT")
-            db.execute("ALTER TABLE sale_events ADD COLUMN ship_id INTEGER")
-            db.execute("ALTER TABLE jumps ADD COLUMN ship_id INTEGER")
+            db.execute("ALTER TABLE sale_events ADD COLUMN zz_newer_where TEXT")
+            db.execute("ALTER TABLE sale_events ADD COLUMN zz_newer_ship INTEGER")
+            db.execute("ALTER TABLE jumps ADD COLUMN zz_newer_ship INTEGER")
             db.execute("INSERT INTO bookmarks (id64, name, x, y, z, note) VALUES (7, 'Sol', 0, 0, 0, 'home')")
             db.execute("ALTER TABLE bookmarks ADD COLUMN colour TEXT")   # a table the re-read keeps
-            db.execute("UPDATE jumps SET ship_id = 3")
-            db.execute("CREATE TABLE play_activity (login_ts TEXT, commander TEXT)")
+            db.execute("UPDATE jumps SET zz_newer_ship = 3")
+            db.execute("CREATE TABLE zz_newer_table (login_ts TEXT, commander TEXT)")
             # stamped with this version's reader number already: the first start on it stamped it, then failed on a
             # sale_events insert (the player's case, 2026-10-15)
             ed_outrider.meta_set(db, "parser_version", ed_outrider.PARSER_VERSION)
@@ -67,20 +67,50 @@ class NewerDatabase(unittest.TestCase):
             db = ed_outrider.open_db(path)
             self.addCleanup(db.close)
             cols = lambda t: [r["name"] for r in db.execute(f"PRAGMA table_info({t})")]
-            self.assertNotIn("station", cols("sale_events"))
-            self.assertNotIn("ship_id", cols("jumps"))
+            self.assertNotIn("zz_newer_where", cols("sale_events"))
+            self.assertNotIn("zz_newer_ship", cols("jumps"))
             self.assertEqual(db.execute("SELECT note FROM bookmarks WHERE id64 = 7").fetchone()["note"], "home")   # the row kept
             self.assertNotIn("colour", cols("bookmarks"))
-            self.assertEqual(cols("play_activity"), ["login_ts", "commander"])                                  # left alone
+            self.assertEqual(cols("zz_newer_table"), ["login_ts", "commander"])                                  # left alone
             self.assertEqual(sorted(x.split(" had")[0] for x in logged), ["database: bookmarks", "database: jumps", "database: sale_events"])
-            # the insert that failed ("table sale_events has 13 columns but 9 values were supplied") works again
-            db.execute("INSERT OR IGNORE INTO sale_events VALUES (?, 'carto', ?, ?, ?, ?, 0, ?, NULL)",
-                       ("2026-10-15T10:01:00Z", 100, 0, 100, 1, "live"))
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM sale_events").fetchone()[0], 1)
+            # a fitted table has exactly this version's columns, so an insert that fills a row by position fits again
+            # (the player's crash: "table sale_events has 13 columns but 9 values were supplied")
+            fresh = ed_outrider.open_db(":memory:")
+            self.addCleanup(fresh.close)
+            for t in ("sale_events", "jumps", "bookmarks"):
+                self.assertEqual(cols(t), [r["name"] for r in fresh.execute(f"PRAGMA table_info({t})")], t)
             self.assertIsNotNone(db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'jumps__newer'").fetchone() is None)
             self.assertEqual(ed_outrider.fit_newer_tables(db, logged.append), [])                               # nothing more to fit
             with self.assertRaises(sqlite3.OperationalError):
                 db.execute("SELECT * FROM jumps__newer")
+
+
+class PageSections(unittest.TestCase):
+    def test_no_view_inside_another(self):
+        """Every view's <section> is closed before the next opens: a merge that dropped GalNet's </section> put Plot
+        Route and every view after it inside GalNet's hidden section, so Plot Route never drew (2026-10-15)."""
+        from html.parser import HTMLParser
+        import os
+
+        class Walk(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.open, self.nested = [], []
+
+            def handle_starttag(self, tag, attrs):
+                if tag == "section":
+                    me = dict(attrs).get("id") or "?"
+                    if self.open:
+                        self.nested.append(f"{me} inside {self.open[-1]}")
+                    self.open.append(me)
+
+            def handle_endtag(self, tag):
+                if tag == "section" and self.open:
+                    self.open.pop()
+        w = Walk()
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.html"), encoding="utf-8") as f:
+            w.feed(f.read())
+        self.assertEqual((w.nested, w.open), ([], []))
 
 
 if __name__ == "__main__":

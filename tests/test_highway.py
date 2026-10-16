@@ -3,6 +3,7 @@
 Run all: python3 -m unittest discover tests (or scripts/verify.sh).
 """
 import argparse
+import asyncio
 import json
 import math
 import os
@@ -680,6 +681,58 @@ class HighwayH1(unittest.TestCase):
             raise OSError("no such file")
         self.assertFalse(Clipboard(True, which=which, run=boom, env={"DISPLAY": ":0"}).copy("X"))
 
+    @unittest.skipIf(os.name == "nt", "the Linux clipboard tools (wl-paste, xclip): Windows reads its own")
+    def test_clipboard_paste(self):
+        """#5's 📋: the clipboard read with wl-paste (Wayland) or xclip -o (X11), Windows' own call; only a one-line name
+        comes back; empty, a paragraph, a link, binary data, a failed or missing tool are said, never raised."""
+        ran, out = [], {"rc": 0, "stdout": "  Smojooe GW-W c1-4\n"}
+
+        def run(argv, **kw):
+            ran.append((argv, kw))
+            return types_ns(returncode=out["rc"], stdout=out["stdout"] if isinstance(out["stdout"], bytes) else out["stdout"].encode())
+        which = lambda name: "/usr/bin/" + name
+        cb = ed_outrider.Clipboard(True, which=which, run=run, env={"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"})
+        self.assertEqual((cb.read_tool, cb.read_argv), ("wl-paste", ["wl-paste", "--no-newline", "--type", "text"]))
+        self.assertEqual(cb.paste(), {"text": "Smojooe GW-W c1-4"})
+        argv, kw = ran[0]
+        self.assertEqual((kw.get("shell", False), kw["timeout"], "input" in kw), (False, 3, False))
+        x11 = ed_outrider.Clipboard(False, which=which, run=run, env={"DISPLAY": ":0"})   # [highway] clipboard off: still reads
+        self.assertEqual(x11.read_argv, ["xclip", "-selection", "clipboard", "-o"])
+        self.assertEqual(x11.paste(), {"text": "Smojooe GW-W c1-4"})
+        for text, code in [("", "empty"), ("   \n", "empty"), ("one\ntwo", "not_a_name"), ("x" * 101, "not_a_name"),
+                           ("https://spansh.co.uk/system/1", "not_a_name"), (b"\x89PNG\r\n\x1a\n\xff", "not_a_name")]:
+            out["stdout"] = text
+            self.assertEqual(cb.paste()["code"], code, text)
+        out.update(rc=1, stdout="")   # wl-paste on an empty clipboard: "Nothing is copied", exit 1
+        self.assertEqual(cb.paste()["code"], "empty")
+        out.update(rc=0, stdout="2MASS J05325612+0453185 / Smith's Reach")
+        self.assertEqual(cb.paste(), {"text": "2MASS J05325612+0453185 / Smith's Reach"})
+
+        def boom(*a, **k):
+            raise OSError("no such file")
+        self.assertEqual(ed_outrider.Clipboard(True, which=which, run=boom, env={"DISPLAY": ":0"}).paste()["code"], "failed")
+        none = ed_outrider.Clipboard(True, which=which, run=run, env={})
+        self.assertEqual(none.paste()["code"], "no_tool")
+        self.assertIn("wl-paste", none.paste_why())
+        win = ed_outrider.Clipboard(True, platform="win32", win_set=lambda t: None, win_get=lambda: "Colonia\r\n")
+        self.assertEqual((win.read_tool, win.paste()), ("Windows", {"text": "Colonia"}))
+
+    def test_clipboard_paste_state(self):
+        """#5: State.paste_info / paste: a server (no game PC), --simulate, another device and a missing tool refuse; the
+        game PC's clipboard otherwise, read on a worker."""
+        self.state.game_pc, self.state.clipboard = True, types_ns(read_tool="xclip", paste_why=lambda: None,
+                                                                  paste=lambda: {"text": "Colonia"})
+        self.assertEqual(self.state.paste_info(True), {"can": True, "why": None})
+        self.assertEqual(asyncio.run(self.state.paste(True)), ({"text": "Colonia"}, 200))
+        self.assertEqual(asyncio.run(self.state.paste(False))[0]["code"], "not_this_device")
+        self.assertEqual(asyncio.run(self.state.paste(False))[1], 403)
+        self.state.simulate = True
+        self.assertEqual(asyncio.run(self.state.paste(True)), ({"error": "not while simulating", "code": "not_game_pc"}, 409))
+        self.state.simulate, self.state.game_pc = False, False
+        self.assertEqual(self.state.paste_info(True), {"can": False, "why": ed_outrider.NOT_GAME_PC})
+        self.state.game_pc, self.state.clipboard = True, None
+        self.assertFalse(self.state.paste_info(True)["can"])
+
     def test_clipboard_on_live_arrivals_only(self):
         copied = []
         self.state.clipboard = types_ns(enabled=True, tool="xclip", copy=lambda t: copied.append(t) or True)
@@ -1049,6 +1102,42 @@ class HighwayH1(unittest.TestCase):
         self.heavy_route([("Start", 300, 0.0, 0, 1, 0), ("Ay", 301, 60.0, 60.0, 0, 1, 1), ("Far", 302, 400.0, 340.0, 1, 5)],
                          plotter="neutron", start=-10)
         self.assertEqual([(h["name"], h["scoopable"], h["mult"]) for h in self.state.route_ahead()], [("Ay", None, 1)])
+
+    def test_route_fuel_reach(self):
+        """The In-Game Route's fuel reach (Kurbo26, GitHub discussion #3): the hops the tank makes without scooping, from
+        the fuel aboard now (a scoop on the way moves it), each keeping FUEL_REACH_RESERVE of the tank aboard (the author,
+        2026-10-15: a route "made" with 0.1 t to spare is no promise), the whole route said as such; "learning" while
+        the fuel model is not complete; nothing for a hop too long at any fuel, or past the hops looked at."""
+        reach = lambda: self.state.route_summary()["fuel_reach"]
+        self.jump(-100, 300, "Start", 0)
+        self.navroute(self.DRY_NAV)   # five hops of 70 ly
+        self.fuel(10)
+        self.assertIsNone(reach())   # no Loadout: no ship at all, nothing to say
+        self.j.handle(self.loadout(self.ts(-1000), fsd="int_hyperdrive_size9_class9_unknown"))
+        self.assertEqual(reach(), {"learning": 5})   # a drive the tables lack: five of its jumps teach the model
+        self.j.handle(self.caspian_loadout(self.ts(-900)))
+        self.assertEqual(ed_outrider.FUEL_REACH_RESERVE * 160, 8.0)   # 5 % of the Caspian's 160 t
+        self.assertEqual(reach(), {"hops": 0, "whole": False, "spare": 10, "reserve": 8.0})   # one hop would leave < 8 t
+        self.fuel(20)   # scooped a little: further
+        self.assertEqual(reach(), {"hops": 2, "whole": False, "spare": 10.9, "reserve": 8.0})
+        self.fuel(30)   # every hop but the last: the fifth would dip under the reserve
+        self.assertEqual((reach()["hops"], reach()["whole"]), (4, False))
+        self.fuel(40)
+        self.assertEqual(reach(), {"hops": 5, "whole": True, "spare": 16.8, "reserve": 8.0})
+        self.jump(-40, 402, "Neutron B", 140.0)   # further along: from where you are on it
+        self.assertEqual((reach()["hops"], reach()["whole"]), (3, True))
+        # a hop beyond the drive at any fuel: a range matter, not the tank's: nothing said
+        self.jump(-30, 300, "Start", 0)
+        self.navroute([(300, "Start", "K", 0.0), (401, "Far", "K", 200.0), (402, "Farther", "K", 210.0)])
+        self.fuel(10)
+        self.assertIsNone(reach())
+        # more hops than FUEL_RUN_MAX_HOPS, every one looked at going: the end is not known
+        n = ed_outrider.FUEL_RUN_MAX_HOPS + 5
+        self.navroute([(300, "Start", "K", 0.0)] + [(500 + k, f"Hop {k}", "K", 2.0 * (k + 1)) for k in range(n)])
+        self.fuel(160)
+        self.assertIsNone(reach())
+        self.navroute([(300, "Start", "K", 0.0)] + [(500 + k, f"Hop {k}", "K", 2.0 * (k + 1)) for k in range(3)])
+        self.assertEqual((reach()["hops"], reach()["whole"]), (3, True))
 
     def test_last_scoopable_star(self):
         """S2 on the game's own route: here a K star, three stars after it known not to scoop, and too little fuel for

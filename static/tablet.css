@@ -275,6 +275,9 @@ body.tablet.tb-norail #tabRail { display: none !important; }
 .tb-tog { min-height: var(--tb-touch); min-width: 128px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px;
   border: 1px solid var(--line); border-radius: 999px; font-size: 17px; cursor: pointer; }
 .tb-tog input { width: 26px; height: 26px; }
+/* the voice commands (Settings > Voice commands…): the same list as the PC's, in the alerts' big sheet, at the sheet's size */
+.tb-cmds .vclist { font-size: 17px; display: block; }
+.tb-cmds .vclist .vcrow { padding: 8px 0; }
 /* the exobiology checklist: the view fills the page, and the species boxes and a species' details (with its map) each
    scroll on their own (the author, 2026-10-09); stacked on a narrow tablet, each takes about half */
 body.tablet main > #bioView.check:not([hidden]) { display: flex; flex-direction: column; height: var(--tb-view-h); overflow: hidden; }
@@ -287,3 +290,12 @@ body.tablet #bioView.check .clgrid, body.tablet #bioView.check .clside { min-hei
   body.tablet #bioView.check .clgrid { flex: 1 1 55%; }
   body.tablet #bioView.check .clside { flex: 1 1 45%; }
 }
+/* the CMDR tab: its sub-tabs (six with Earnings) finger-sized, wrapping on a narrow tablet; Earnings' chart text and the
+   figures' parts at arm's length (the month labels are thinned for this size: emLabelStep) */
+body.tablet #cmdrTabs .seg label { padding: 8px 12px; }
+body.tablet .emchart text { font-size: 13px; }
+body.tablet .emlegend, body.tablet .cmfig .emsub, body.tablet .emnotes { font-size: 14px; }
+/* Inventory's ship pictures: no hover here, a tap on the ship's name opens the card (dotted underline: tappable), and a
+   tap on the card itself closes it rather than reaching what lies under it */
+body.tablet #cmdrBody .cmshipname { text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
+body.tablet #shipCard { pointer-events: auto; }

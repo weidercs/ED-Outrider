@@ -330,7 +330,8 @@ class Server(unittest.TestCase):
         self.assertEqual(st.locate(101), ("Gamma Old", 10.0, 0.0, 0.0))
         st.journals.pos = {"id64": 3, "name": "Beta", "x": 5.0, "y": 0.0, "z": 0.0}
         ed_outrider.meta_set(self.db, "route", {"hops": [{"id64": 3, "name": "Beta", "x": 5, "y": 0, "z": 0},
-                                                         {"id64": 101, "name": "Gamma Old", "x": 10, "y": 0, "z": 0, "star_class": "K"}]})
+                                                         {"id64": 101, "name": "Gamma Old", "x": 10, "y": 0, "z": 0, "star_class": "K"},
+                                                         {"id64": 909, "name": "Beyond", "x": 20, "y": 0, "z": 0, "star_class": "K"}]})
         self.assertTrue(st.route_summary()["hops"][0]["visited"])
         m = asyncio.run(st.map_payload(50, 10))
         pt = next(p for p in m["points"] if p["id"] == "101")

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" color="#FF2800" role="img">
+  <title>Fleet carrier</title>
+  <rect x="2" y="2" width="60" height="60" fill="none" stroke="currentColor" stroke-width="4"/>
+  <path fill="currentColor" fill-rule="evenodd" d="M28,10 H36 L52.85,43.7 43.55,54 H39.15 L34.6,49 H29.4 L24.85,54 H20.45 L11.15,43.7 Z M43.5,34.5 A11.5,11.5 0 1 0 20.5,34.5 A11.5,11.5 0 1 0 43.5,34.5 Z M39.8,34.5 A7.8,7.8 0 1 0 24.2,34.5 A7.8,7.8 0 1 0 39.8,34.5 Z M27.25,32.75 H36.75 V36.25 H27.25 Z"/>
+</svg>

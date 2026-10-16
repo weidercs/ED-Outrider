@@ -174,6 +174,62 @@ class Arranging(unittest.TestCase):
         self.assertEqual(W.wheeled(e, "alpha", 3)["alpha"], 1.0)
         self.assertEqual(W.wheeled(e, "alpha", -100)["alpha"], O.LIMITS["alpha"][0])
 
+    def test_wheel_for_all_panels(self):
+        """The 4K TV report (2026-10-14): Ctrl + wheel over any panel sizes all of them ([overlay] panel_scale, in 5 %
+        notches within PANEL_SCALE_LIMITS); the wheel alone and with Shift keep their opacities."""
+        self.assertEqual([W.wheel_key(False, False), W.wheel_key(True, False), W.wheel_key(False, True),
+                          W.wheel_key(True, True)], ["bg", "alpha", "all", "all"])
+        self.assertEqual(W.wheeled_all(100, -2), 90)
+        self.assertEqual(W.wheeled_all(100, 1.5), 108)                               # a smooth wheel: whole percents
+        self.assertEqual((W.wheeled_all(30, -9), W.wheeled_all(240, 9)), O.PANEL_SCALE_LIMITS)
+        self.assertEqual((W.panel_scale_of({"panel_scale": 50}), W.panel_scale_of({"panel_scale": 50}, 80),
+                          W.panel_scale_of({}), W.panel_scale_of(None), W.panel_scale_of({"panel_scale": "big"})),
+                         (0.5, 0.8, 1.0, 1.0, 1.0))
+
+    def test_drag_corner_with_all_panels_and_the_floor(self):
+        """Sizing a panel draws it as paint does: times all panels' size, and never under the text floor."""
+        e = dict(O.LAYOUT_DEFAULT["system"])
+        s = O.effective_scale(2160, 0.5, 1.0, O.FONT_PX["normal"])
+        start = W.panel_rect(e, 400, 100, 3840, 2160, s)
+        self.assertAlmostEqual(start[2], 400 * 2.25 * 0.5)
+        bigger = W.dragged(e, start, start[2] / 2, 0, "resize", 400, 100, 3840, 2160, 0.5, O.FONT_PX["normal"])
+        x, y, w, h = W.panel_rect(bigger, 400, 100, 3840, 2160, O.effective_scale(2160, 0.5, bigger["scale"], O.FONT_PX["normal"]))
+        self.assertAlmostEqual((bigger["scale"], x, y, w), (1.5, start[0], start[1], start[2] * 1.5), places=3)
+        # far smaller on a 1080p window: the scale goes to its least, the panel stays at the text floor's size
+        tiny = W.dragged(e, start, -99999, 0, "resize", 400, 100, 1920, 1080, 0.5, O.FONT_PX["small"])
+        self.assertEqual(tiny["scale"], O.LIMITS["scale"][0])
+
+
+class GameMouseLock(unittest.TestCase):
+    """#1: on Linux a window per panel, each only as big as its panel, and none when there is nothing to draw (the game's
+    pointer lock is refused while a window lies over it). Pure parts; the windows themselves are checked in game."""
+
+    def test_linux_only(self):
+        self.assertEqual(W.FIT_WINDOW, sys.platform.startswith("linux"))
+
+    def test_window_rect(self):
+        """The panels' bounding box, each grown by PANEL_PAD, inside the game window, whole pixels; one corner pixel
+        when none is drawn (or none lies inside)."""
+        geoms = [("radar", (1500.4, 800.0, 300.0, 200.0)), ("strip", (100.0, 0.0, 1700.0, 30.0))]
+        self.assertEqual(W.window_rect(geoms, 1920, 1080, pad=6), (94, 0, 1713, 1006))
+        self.assertEqual(W.window_rect(geoms[:1], 1920, 1080, pad=6), (1494, 794, 313, 212))
+        self.assertEqual(W.window_rect([("now", (1900.0, 1070.0, 50.0, 50.0))], 1920, 1080, pad=6), (1894, 1064, 26, 16))
+        self.assertEqual(W.window_rect([], 1920, 1080), (0, 0, 1, 1))
+        self.assertEqual(W.window_rect([("x", (2000.0, 10.0, 50.0, 50.0))], 1920, 1080), (0, 0, 1, 1))
+
+    def test_window_plan(self):
+        """No window out of sight or with nothing to draw; one over the whole game in Arrange mode (it takes the mouse)
+        or where not FIT_WINDOW; else one per panel, in the feed's order."""
+        two = {"panels": [{"id": "radar"}, {"id": "strip"}]}
+        self.assertEqual(W.window_plan(two, True, False, fit=True), ("panels", ["radar", "strip"]))
+        self.assertEqual(W.window_plan(two, True, False, fit=False), ("all", []))
+        self.assertEqual(W.window_plan(two, True, True, fit=True), ("all", []))
+        self.assertEqual(W.window_plan({"panels": []}, True, True, fit=True), ("all", []))   # arranging: the frames and Done
+        self.assertEqual(W.window_plan(two, False, False, fit=True), ("none", []))
+        for empty in ({"panels": []}, None, {}):
+            for fit in (True, False):
+                self.assertEqual(W.window_plan(empty, True, False, fit=fit), ("none", []))
+
 
 class Tracking(unittest.TestCase):
     WMCTRL = ("0x04400003  0 0    0    2560 1440 steam_app_359320.steam_app_359320  pc Elite - Dangerous (CLIENT)\n"
@@ -413,8 +469,10 @@ class ClientAndFeed(unittest.TestCase):
         self.assertEqual(op.seen[0], ("GET", "http://127.0.0.1:8025/api/overlay", "outrider-overlay"))   # the window's own UA
         c.view("v1", "behind")
         c.view(None, "no_window")
+        c.view("v1", "drawing", 2160)   # the game window's height: Settings' "≈ N px text"
         self.assertEqual([u for _, u, _ in op.seen[2:]], ["http://127.0.0.1:8025/api/overlay?since=v1&w=behind",
-                                                          "http://127.0.0.1:8025/api/overlay?w=no_window"])
+                                                          "http://127.0.0.1:8025/api/overlay?w=no_window",
+                                                          "http://127.0.0.1:8025/api/overlay?since=v1&w=drawing&h=2160"])
 
     def test_feed_keeps_the_last_answer_and_drops_it_when_gone(self):
         op = FakeOpener()
@@ -426,6 +484,9 @@ class ClientAndFeed(unittest.TestCase):
         feed.track = "covered"   # what the window sees goes with the next GET (S8)
         feed.fetch_once()
         self.assertTrue(op.seen[-1][1].endswith("?since=v1&w=covered"))
+        feed.height = 1440
+        feed.fetch_once()
+        self.assertTrue(op.seen[-1][1].endswith("?since=v1&w=covered&h=1440"))
 
         class Gone:
             def open(self, req, timeout=None):
@@ -485,3 +546,33 @@ class Drawing(unittest.TestCase):
             # the system panel's background is drawn at its top-left place, not the stand-in's colour
             x, y, w, h = W.panel_rect(data["layout"]["system"], data["panels"][0]["w"], data["panels"][0]["h"], 1280, 720)
             self.assertNotEqual(img.pixelColor(int(x + 4), int(y + h / 2)).name(), "#14181e")
+
+    def test_text_floor_on_a_4k_window(self):
+        """The 4K TV report (2026-10-14): a 4K window with all panels at 25 % draws every panel smaller than at 100 %,
+        yet no text under MIN_TEXT_PX: each panel's scale times its smallest font is at least the floor, the small-text
+        radar held exactly there, and its background is drawn as big as the floor makes it."""
+        import importlib.util
+        if importlib.util.find_spec("PyQt6") is None:
+            self.skipTest("PyQt6 not installed (pip install -r requirements-overlay.txt)")
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PyQt6.QtGui import QColor, QImage, QPainter
+        W_, H_ = 3840, 2160
+        panels = O.test_panels(O.palette(), "small")
+        data = {"layout": O.clean_layout(None), "panels": panels, "panel_scale": 25}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "frame.png")
+            self.assertTrue(W.render_png(data, path, W_, H_))   # the whole frame draws
+            img = QImage(W_, H_, QImage.Format.Format_ARGB32)
+            img.fill(QColor(20, 24, 30))
+            painter = QPainter(img)
+            try:
+                geoms = dict(W.paint(painter, data, W_, H_))
+            finally:
+                painter.end()
+        for p in panels:
+            x, y, w, h = geoms[p["id"]]
+            drawn = w / p["w"]                                         # canvas units to pixels, as painted
+            self.assertGreaterEqual(drawn * O.smallest_font(p), O.MIN_TEXT_PX - 1e-6, p["id"])
+            self.assertLess(drawn, W.base_scale(H_), p["id"])          # yet smaller than at 100 %
+            self.assertAlmostEqual(drawn, O.MIN_TEXT_PX / O.FONT_PX["small"], places=6)   # 2.25 x 0.25 is under it
+            self.assertNotEqual(img.pixelColor(int(x + 4), int(y + h - 4)).name(), "#14181e", p["id"])   # filled to there

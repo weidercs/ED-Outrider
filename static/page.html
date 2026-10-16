@@ -17,14 +17,14 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 <header>
   <div class="topbar">
     <h1>ED Outrider</h1>
-    <span class="views"><button data-view="overview">Overview</button><button data-view="near">Nearby</button><button data-view="here">Here</button><button data-view="bio" title="exobiology and geology: your sample runs, the Exo-Biology checklist and the Geology one">Bio/Geo</button><button data-view="bm" id="bmViewBtn">Bookmarks</button><button data-view="search">Search</button><button data-view="map">Map</button><button data-view="hwy" title="plot a route with Spansh (the Neutron Highway, or a Road to Riches) and follow it as you fly">Plot Route</button><button data-view="hist">History</button><button data-view="log">Log</button><button data-view="mat">Materials</button><button data-view="ship" title="the ship you fly: its figures and every module with its engineering, from the journal's Loadout">Ship</button><button data-view="cmdr" title="what you own, what engineering takes, the missions you hold, your combat and mining sessions">Commander</button><button data-view="firsts">My firsts</button><button data-view="galnet" title="GalNet News: the game's latest news article, and earlier ones">GalNet</button><button data-view="now" title="big text for a second monitor (or open the page with ?mode=now)">Now</button><button id="nowPop" title="open Now in a window of its own, to drag to another monitor (it stays on Now)">↗</button></span><button type="button" id="viewWinBack" class="viewback" hidden title="back to this window's own view"></button>
+    <span class="views"><button data-view="overview">Overview</button><button data-view="near">Nearby</button><button data-view="here">Here</button><button data-view="bio" title="exobiology and geology: your sample runs, the Exo-Biology checklist and the Geology one">Bio/Geo</button><button data-view="bm" id="bmViewBtn">Bookmarks</button><button data-view="search">Search</button><button data-view="map">Map</button><button data-view="hwy" title="plot a route with Spansh (the Neutron Highway, or a Road to Riches) and follow it as you fly">Plot Route</button><button data-view="hist">History</button><button data-view="log">Log</button><button data-view="mat">Materials</button><button data-view="ship" title="the ship you fly: its figures and every module with its engineering, from the journal's Loadout">Ship</button><button data-view="cmdr" title="your ranks, credits and fleet, what you own, what engineering takes, the missions you hold, your combat and mining sessions, what exploration, exobiology and mining earned you">CMDR</button><button data-view="firsts">My firsts</button><button data-view="galnet" title="GalNet News: the game's latest news article, and earlier ones">GalNet</button><button data-view="now" title="big text for a second monitor (or open the page with ?mode=now)">Now</button><button id="nowPop" title="open Now in a window of its own, to drag to another monitor (it stays on Now)">↗</button></span><button type="button" id="viewWinBack" class="viewback" hidden title="back to this window's own view"></button>
     <span class="icons"><button type="button" id="audioPill" class="audiopill" hidden title="the browser holds back Outrider's voice and sounds until you click on the page: click here">🔇 Click Here To Allow Audio</button><button type="button" id="updPill" class="updpill" hidden title="a newer Outrider is out: click for what's new and how to update">⬆ Update</button><span id="linkPill" class="linkpill" role="status" title="the page's link to Outrider"></span><span id="ovPill" class="linkpill ovpill pcOnly" role="status" hidden></span><button id="sound" class="icon" title="sounds">🔊</button><button id="speechBtn" class="icon" title="spoken alerts">🗣</button><span class="hushwrap"><button id="hushBtn" class="icon hushbtn" title="hush the voice for a while (danger lines still speak)" aria-haspopup="true">▾</button><span id="hushLbl" class="hushlbl" hidden></span>
       <span id="hushMenu" class="hushmenu" hidden><b>Hush the voice</b><button type="button" data-hush="10m">10 minutes</button><button type="button" data-hush="30m">30 minutes</button><button type="button" data-hush="jump">until the next jump</button><button type="button" data-hush="off">cancel the hush</button><span class="unk">hull, heat, interdiction and fuel still speak, and what you ask for</span></span></span><button id="alertsBtn" class="icon" title="settings: alerts, voice, thresholds, the server">⚙</button><span id="lastSaidLine" class="lastsaid" hidden><button type="button" id="lastSaidBtn" class="icon" title="say it again">▶</button><span id="lastSaidText"></span></span></span>
   </div>
   <div class="tilewrap">
   <div class="tiles" id="tiles">
     <div class="tile" id="tWhere"><div class="lbl">Where I Am Currently:</div><div class="val" id="here">loading…</div><div class="ln" id="refLn" title="distance from Sol and from Colonia (Eol Prou RS-T d3-94)"></div>
-      <div class="ln" id="sub"><b id="subKnown">…</b> known within <select id="radiusSel" title="how far around you Nearby lists systems (a bigger sphere takes longer to fill in the first time)"></select> ly · <b id="subUnvisited">…</b> not visited<span id="subCut"></span></div>
+      <div class="ln" id="sub"><b id="subKnown">…</b> known within <select id="radiusSel" title="how far around you Nearby lists systems (a bigger sphere takes longer to fill in the first time)"></select> ly<span id="subAround"></span> · <b id="subUnvisited">…</b> not visited<span id="subCut"></span></div>
       <div class="ln" id="whereLn"></div><div class="ln" id="streakLn"></div><div class="ln" id="nextStopLn"></div></div>
     <div class="tile" id="tCmdr"><div class="lbl" id="cmdrLbl">Commander</div><div id="cmdrLine"></div></div>
     <div class="tile" id="tFuel" data-fuel><div class="lbl">Fuel</div><div id="fuelLine"></div></div>
@@ -54,7 +54,6 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 <main>
 <section id="overView" hidden>
   <div class="ovbar">
-    <button id="ovCollapse" type="button">▾ This system</button>
     <details class="ovmenu"><summary title="layout">⚙ layout</summary>
       <div class="menu">
         <label><input type="radio" name="ovLayout" value="side" checked> side by side</label>
@@ -71,20 +70,27 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   </div>
 </section>
 <div id="nearWrap">
-  <div class="tablebar" id="nearOpts">
+  <div class="tablebar" id="nearHead"><span class="nearhead">
     <span class="nearmode" role="radiogroup" aria-label="exploration">
       <label title="the systems around you"><input type="radio" name="nearMode" value="standard"> Standard</label>
       <label title="the boxel you are in (or one you keep): its systems by number, and boxels nearby"><input type="radio" name="nearMode" value="boxel"> Boxel</label></span>
-    <label class="stdonly"><input type="checkbox" id="showVisited" checked> show visited</label>
-    <label class="stdonly"><input type="checkbox" id="showExplored" checked> show fully explored</label>
-    <label class="stdonly"><input type="checkbox" id="oneJump"> one jump only</label>
+    <span class="stdonly nearAround"><span class="lbl">Focus/Lock</span><select id="nearAround" aria-label="Nearby's focus or lock" title="the system Nearby lists the systems around: you (it follows your ship), your destination, carrier or next stop (it follows them), this system (locked where you are now) or a system by name. Saved for every window and the tablet"></select><input type="text" id="nearAroundName" placeholder="system name" size="18" aria-label="The system Nearby lists around" hidden><button type="button" class="mini pastebtn" title="paste the system name on the game PC's clipboard" aria-label="paste">📋</button></span>
+    <span class="unk" id="nearAroundBx" hidden></span></span></div>
+  <div class="tablebar" id="nearOpts">
+    <label class="stdonly" title="only the systems of this mass code (the letter before the number in a procedural name: a the lightest, h the heaviest); named systems have none">Mass <select id="nearMass" aria-label="Mass code"><option value="">all</option><option>a</option><option>b</option><option>c</option><option>d</option><option>e</option><option>f</option><option>g</option><option>h</option></select></label>
+    <label class="stdonly"><input type="checkbox" id="showVisited" checked> visited</label>
+    <label class="stdonly"><input type="checkbox" id="showExplored" checked> fully explored</label>
+    <label class="stdonly"><input type="checkbox" id="oneJump"> 1 jump</label>
+    <label class="stdonly" title="only the systems nobody has reported a scan of: no scan data, never reported, not looked up"><input type="checkbox" id="nearNoScan"> no scan data</label>
+    <button type="button" class="mini stdonly" id="nearCopy" title="copy the names of the systems the list shows, one per line, in its order">⧉ Copy visible</button>
     <span class="unk stdonly">click a column heading to sort</span>
   </div>
+  <div class="stdonly" id="nearStrip" hidden></div>
 <div class="pane" id="nearPane">
 <table id="nearTable">
   <thead><tr>
-    <th></th><th data-sort="name">System</th><th class="num" data-sort="distance">Dist</th><th class="num hide-sm c2hide" title="jumps at your max range">Jumps</th><th class="c2hide">Status</th><th>Main star</th>
-    <th>Bodies</th><th class="c2hide">Notable</th><th class="num hide-sm" data-sort="value" title="what selling now would pay for data you hold from this system / the most it could pay once fully scanned, mapped and sampled">Value now / max</th><th class="num hide-sm c2hide">Known</th>
+    <th></th><th data-sort="name">System</th><th class="num" data-sort="distance" id="nearDistTh">Dist</th><th class="num fromcol" data-sort="from" title="how far it is from you now (Dist is from the system Nearby is around)">From you</th><th class="num hide-sm c2hide" title="jumps from you at your max range">Jumps</th><th class="c3hide">Status</th><th>Main star</th>
+    <th>Bodies</th><th class="c3hide">Notable</th><th class="num hide-sm" data-sort="value" title="what selling now would pay for data you hold from this system / the most it could pay once fully scanned, mapped and sampled">Value now / max</th><th class="num hide-sm c2hide">Known</th>
   </tr></thead>
   <tbody id="rows"></tbody>
 </table>
@@ -114,9 +120,6 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 <section id="shipView" hidden>
   <div class="pane" id="shipPane"><div id="shipBody"></div></div>
 </section>
-<section id="cmdrView" hidden>
-  <div class="pane" id="cmdrPane"><div class="srow" id="cmdrTabs"></div><div id="cmdrBody"></div></div>
-</section>
 <section id="galnetView" hidden>
   <div class="srow"><b>GalNet News</b>
     <button type="button" class="mini" id="gnRefresh" title="ask GalNet for new articles now">Refresh</button>
@@ -125,6 +128,19 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <div class="pane" id="gnListPane"><div id="gnList" class="gnlist"></div></div>
     <div class="pane" id="gnPane"><article id="gnArticle"></article></div>
   </div>
+</section>
+<section id="cmdrView" hidden>
+  <div class="srow" id="cmdrTabs">
+    <span class="seg" role="radiogroup" aria-label="CMDR tab"><label title="your ranks and the way to the next, credits and assets, your fleet, your career"><input type="radio" name="cmdrTab" value="profile" checked>CMDR</label><label title="your ships, stored modules, ship locker and suit loadouts"><input type="radio" name="cmdrTab" value="inventory">Inventory</label><label title="every ship-module blueprint against the materials you hold"><input type="radio" name="cmdrTab" value="engineering"><span class="mk mk-engineer mkg" aria-hidden="true"></span>Engineering</label><label title="the missions you hold, the soonest to expire first"><input type="radio" name="cmdrTab" value="missions"><span class="mk mk-mission mkg" aria-hidden="true"></span>Missions</label><label title="your combat and mining sessions of the last weeks"><input type="radio" name="cmdrTab" value="sessions">Sessions</label><label title="what exploration, exobiology and mining paid you: when, where, with which ship and for what"><input type="radio" name="cmdrTab" value="earnings">Earnings</label></span>
+    <span id="cmEngCtl" class="cmfilter" hidden><input type="search" id="cmFilter" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="filter: module, blueprint or material" class="filter">
+      <label title="only the grades you hold every material for"><input type="checkbox" id="cmCraft"> only what I can craft now</label></span>
+    <span id="cmEarnCtl" class="cmfilter" hidden><label title="the period the figures and tables cover (the chart always shows every month)">Period <select id="cmEarnYear"><option value="">All time</option></select></label>
+      <select id="cmEarnMonth" aria-label="month" hidden><option value="">Whole year</option></select>
+      <span class="exports"><a href="api/export?what=earnings" download id="cmEarnCsv" title="every sale, all time, as a spreadsheet (CSV): when, kind, where, ship, what, base, bonus, total">⬇ CSV</a></span></span>
+    <button type="button" class="mini" id="cmRefresh" title="read the journals again now">Refresh</button>
+    <span id="cmdrStatus" class="unk"></span>
+  </div>
+  <div class="pane" id="cmdrPane"><div id="cmdrBody"></div></div>
 </section>
 <section id="firstsView" hidden>
   <div class="srow"><span id="fStatus"></span>
@@ -277,7 +293,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
 </section>
 <section id="bmView" hidden>
 <div id="bmTools" hidden class="srow"><span class="swbar"><button type="button" class="mini swbtn" hidden></button><button type="button" class="mini swclear" hidden title="untick every system ticked for a sweep">✕ untick all</button><span class="swmsg" role="status"></span></span><span class="grow"></span><span class="exports">Export: <a href="api/export?what=bookmarks&format=csv" download>CSV</a> · <a href="api/export?what=bookmarks&format=json" download>JSON</a></span>
-  <button type="button" class="mini" id="bmImport" title="add the bookmarks in a file (Outrider's CSV or JSON export) to yours; a system already bookmarked here keeps its own note">Import…</button><input type="file" id="bmFile" accept=".csv,.json,text/csv,application/json" hidden><span id="bmImportMsg" role="status"></span></div>
+  <button type="button" class="mini" id="bmImport" data-picker title="add the bookmarks in a file (Outrider's CSV or JSON export) to yours; a system already bookmarked here keeps its own note">Import…</button><input type="file" id="bmFile" accept=".csv,.json,text/csv,application/json" hidden><span class="nopicker" hidden>Import from a browser on the PC</span><span id="bmImportMsg" role="status"></span></div>
 <div class="pane" id="bmPane">
 <table id="bmTable" hidden>
   <thead><tr>
@@ -346,12 +362,12 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <form id="hwyForm" autocomplete="off">
         <div class="srow">
           <span class="seg" role="radiogroup" aria-label="plotter"><label title="every jump with its fuel, from your ship's own figures (Spansh's galaxy plotter)"><input type="radio" name="hwyPlotter" value="exact" checked>Exact</label><label title="neutron stars as boosts, waypoints only (Spansh's neutron plotter): any ship, from its range"><input type="radio" name="hwyPlotter" value="neutron">Neutron</label><label title="a chain of systems whose planets are worth scanning (and mapping), from where you are (Spansh's Road to Riches): stop, scan, move on"><input type="radio" name="hwyPlotter" value="riches">Road to Riches</label><label title="a chain of systems with valuable life already reported on their bodies (Spansh's Expressway to Exomastery): land, sample, move on. Known life: first footfall is unlikely"><input type="radio" name="hwyPlotter" value="exo">Exomastery</label><label title="a chain of systems with Earth-like worlds nobody has mapped yet, from where you are (Spansh's Road to Riches, Earth-like worlds only): scan and map each one"><input type="radio" name="hwyPlotter" value="elw">Earth-like</label><label title="a chain of systems with ammonia worlds nobody has mapped yet, from where you are (Spansh's Road to Riches, ammonia worlds only): scan and map each one"><input type="radio" name="hwyPlotter" value="aw">Ammonia</label><label title="station to station: what to buy at each and where to sell it (Spansh's trade planner), from the station you start at"><input type="radio" name="hwyPlotter" value="trade">Trade</label><label title="a chain of systems nobody has reported a body of, picked by how likely their kind is to hold life (the mass code in their name, counted from your own scans), each hop as close to your jump range as there is one"><input type="radio" name="hwyPlotter" value="unscanned">Unscanned (bio)</label></span>
-          <label>From <input type="text" id="hwyFrom" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="where you are" list="hwyFromNames"></label>
-          <label class="hwyto">To <input type="text" id="hwyTo" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="destination system" list="hwyNames"><button type="button" id="hwyNearest" class="mini nearbtn" title="the nearest station or fleet carrier you can dock at and use: pick one to plot there">📍 Nearest…</button></label>
+          <label>From <input type="text" id="hwyFrom" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="where you are" list="hwyFromNames"><button type="button" class="mini pastebtn" title="paste the system name on the game PC's clipboard" aria-label="paste">📋</button></label>
+          <label class="hwyto">To <input type="text" id="hwyTo" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="destination system" list="hwyNames"><button type="button" class="mini pastebtn" title="paste the system name on the game PC's clipboard" aria-label="paste">📋</button><button type="button" id="hwyNearest" class="mini nearbtn" title="the nearest station or fleet carrier you can dock at and use: pick one to plot there">📍 Nearest…</button></label>
           <datalist id="hwyNames"></datalist><datalist id="hwyFromNames"></datalist>
         </div>
         <div class="srow trade-opt" hidden>
-          <label title="the station to start from, in the From system (filled in while you are docked)">Station <input type="text" id="tradeStation" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100"></label>
+          <label title="the station to start from, in the From system (filled in while you are docked)">Station <input type="text" id="tradeStation" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100"><button type="button" class="mini pastebtn" title="paste the station name on the game PC's clipboard" aria-label="paste">📋</button></label>
           <label title="the credits you can spend on the first load (your balance, from the journal)">Capital <input type="number" id="tradeCapital" min="0" step="1" inputmode="numeric"> cr</label>
           <label title="the tons you can carry (your ship's hold, from its Loadout)">Hold <input type="number" id="tradeCargo" min="1" max="10000" step="1" inputmode="numeric"> t</label>
         </div>
@@ -421,7 +437,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <label title="after an FSD supercharge on the route, press keys in the galaxy map to make the next route system the target (Linux, Windows experimental; the same keyboard as auto honk)"><input type="checkbox" id="hwyAutoOn"> Auto-target after a supercharge</label>
         <label title="seconds after the supercharge before the keys are pressed">after <input type="number" id="hwyAutoDelay" min="0" max="60" step="any" inputmode="decimal"> s</label>
         <button type="button" class="try" id="hwyAutoTest" title="one run against the nearest known system a plain jump away (no route needed): Outrider brings the game to the front where it can, else 5 seconds from now: click into the game meanwhile">▶ test now</button>
-        <button type="button" class="try" id="hwyAutoNext" data-aim="next" title="target the next route system now (off the route: the closest one): Outrider brings the game to the front where it can, else 5 seconds from now: click into the game meanwhile. Works with auto-target off">🎯 target next</button>
+        <button type="button" class="try" id="hwyAutoNext" data-aim="next" title="target the next route system now (off the route: the closest one): Outrider brings the game to the front where it can, else 5 seconds from now: click into the game meanwhile. Works with auto-target off"><span class="mk mk-destination mkg" aria-hidden="true"></span>target next</button>
         <span id="hwyAutoTestMsg" role="status"></span>
       </div>
       <div id="hwyAutoFront" class="unk"></div>
@@ -447,7 +463,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
   <div class="pane" id="searchPane">
   <form id="findForm" class="srow">
     <label>Find a system by name <input type="search" id="findName" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="e.g. Synuefe XR-H d11-102"
-      autocomplete="off"></label>
+      autocomplete="off"><button type="button" class="mini pastebtn" title="paste the system name on the game PC's clipboard" aria-label="paste">📋</button></label>
     <button type="submit">Find</button>
     <span class="hint" id="findStatus">opens it in Here: whether you have been there, its bodies and your firsts; ☆ there bookmarks it or makes it the next stop. Unknown here? EDSM is asked, then Spansh.</span>
   </form>
@@ -455,7 +471,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <div class="srow">
       <label>Within <input type="number" id="sRadius" value="100" min="1" max="5000" step="any"> ly of</label>
       <select id="sAround" aria-label="Search around" title="the system the search looks around: the distances are from there (a result's hover says how far it is from you)"></select>
-      <input type="text" id="sAroundName" placeholder="system name" size="18" aria-label="The system to search around" hidden>
+      <input type="text" id="sAroundName" placeholder="system name" size="18" aria-label="The system to search around" hidden><button type="button" class="mini pastebtn" title="paste the system name on the game PC's clipboard" aria-label="paste">📋</button>
       <span class="seg" role="radiogroup" aria-label="Search source">
         <label><input type="radio" name="sSource" value="local" checked> Local database</label>
         <label><input type="radio" name="sSource" value="spansh"> Spansh (online)</label>
@@ -538,7 +554,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <button type="button" class="tb-page" data-view="log">Log</button>
     <button type="button" class="tb-page" data-view="mat">Materials</button>
     <button type="button" class="tb-page" data-view="ship">Ship</button>
-    <button type="button" class="tb-page" data-view="cmdr">Commander</button>
+    <button type="button" class="tb-page" data-view="cmdr">CMDR</button>
     <button type="button" class="tb-page" data-view="firsts">My firsts</button>
     <button type="button" class="tb-page" data-view="galnet">GalNet</button>
   </div>
@@ -588,6 +604,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <label class="tb-row" id="tabRailRow"><input type="checkbox" id="tabRailOn"> Show the game controls <span class="tb-note">the ship, SRV and on-foot buttons on the right; off gives the pages the whole width (a second tablet, say)</span></label>
     <label class="tb-row"><input type="checkbox" id="tabAudio"> Play alerts here <span class="tb-note">the voice and the alert sounds, on this tablet, even when a PC browser plays them too</span></label>
     <div class="tb-acts" id="tabAlertsRow" hidden><button type="button" id="tabAlertsBtn" class="tb-btn">Choose alerts…</button></div>
+    <div class="tb-acts"><button type="button" id="tabCmdsBtn" class="tb-btn" title="what you can ask by voice, and the phrases that ask it">Voice commands…</button></div>
     <dl class="tb-facts"><dt>Screen</dt><dd id="tabViewport"></dd><dt>App</dt><dd id="tabAppVer"></dd><dt>Sign-in</dt><dd id="tabSignState"></dd>
       <dt>Project</dt><dd><a href="https://github.com/weslocke/ED-Outrider" target="_blank" rel="noopener">ED Outrider on GitHub ↗</a> <span id="tabOutVer" class="unk"></span><br>
         <a href="https://github.com/weslocke/ED-Outrider-Android" target="_blank" rel="noopener">The Android app on GitHub ↗</a></dd></dl>
@@ -609,9 +626,16 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <div id="tabAlertList" class="tb-alertlist"></div>
   </form>
 </dialog>
+<dialog id="tabCmds" class="tb-sheet tb-alerts tb-cmds" aria-labelledby="tabCmdsTitle">
+  <form method="dialog">
+    <div class="tb-sheethead"><h2 id="tabCmdsTitle">Voice commands</h2><button type="button" data-close class="tb-btn" aria-label="close">✕</button></div>
+    <div id="tabCmdList" class="tb-alertlist vclist"></div>
+  </form>
+</dialog>
 <div id="toast"></div>
 <div id="ovInstalling" role="status" aria-live="polite" hidden></div>
 <div id="pop"></div>
+<div id="shipCard" role="tooltip" hidden></div>
 <dialog id="alertDialog" class="settingsdlg" aria-labelledby="settingsTitle">
   <form method="dialog">
     <div class="sethead"><h3 id="settingsTitle">Settings</h3>
@@ -649,6 +673,10 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           <span class="hint">(off: each loads the first time it speaks, about a second)</span></label>
         <span id="vmMsg" class="hint" role="status"></span>
       </div>
+      <label data-find="speech.pad_delay" class="mod">Say your landing pad
+        <input type="number" id="padDelay" min="0" max="20" step="1" style="width:4em" aria-label="seconds after docking is granted"> s after docking is granted
+        <span class="hint">after the station's own voice (some talk longer); with a docking computer fitted, 12 s unless it takes over</span>
+        <span id="padDelayMsg" class="hint" role="status"></span></label>
       <div id="crewBox" class="crewbox" data-find-block="crew">
         <h4 class="crewhead">Crew</h4>
         <div class="mod inlineopts crewsw"><label><input type="checkbox" id="crewOn"> <b>Split the alerts among a crew</b></label>
@@ -683,6 +711,9 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <span class="hint">Outrider's own voice and alert sounds, on this device (or on the PC when it plays them); the game's sound is its own</span></label>
       <label data-find="defaults.speech_names" class="mod">Call me <input type="text" id="speechNames" style="width:18em" placeholder="Boss, Hefay, Sir">
         <span class="hint">comma separated; each line uses one at random, in place of your commander name (which a voice often cannot say); empty goes back to the default</span></label>
+      <details class="srvbk" id="voiceCmds" data-find-block="voice commands phrases questions"><summary>Voice commands <span class="sum-note">what you can ask by voice without the AI, and the phrases that ask it</span></summary>
+        <div id="voiceCmdList" class="vclist"></div>
+      </details>
       <div class="hint" id="speechHint"></div>
       <div class="hint" id="speechTried"></div>
     </details>
@@ -797,7 +828,8 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           has none). It installs PyQt6, which the window needs, in its own venv the first time.</li>
         <li><b>Play Elite borderless or windowed.</b> The window sits over the game and lets every click through.</li>
         <li><b>Arrange panels</b> right over the game: drag to move, drag the corner to resize, mouse wheel for the
-          background's transparency, Shift + wheel for the whole panel's. <b>Done</b> there or here ends it.</li>
+          background's transparency, Shift + wheel for the whole panel's, Ctrl + wheel for all panels' size. <b>Done</b>
+          there or here ends it.</li>
         <li><b>Alerts</b> shows each alert switched on in Settings → Alerts (notify, sound or speak ticked) for a few
           seconds, danger longer and in red. The alerts are worded by this page: with no Outrider page open anywhere
           (a browser or the tablet), the panel stays empty.</li>
@@ -810,6 +842,9 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           <option value="">as ▴/▾ sets them (shared)</option><option value="auto">one line on a small window</option>
           <option value="six">always the six tiles</option><option value="line">always one line</option></select>
         <span class="hint">"small" is under 800 px high or 1200 px wide; ▴/▾ beside the tiles still folds or unfolds them, and makes that this device's choice</span></label>
+      <div class="mod inlineopts" id="tilesShown">Header tiles shown on this device:&nbsp;
+        <label><input type="checkbox" data-tile="where" checked> Where I am</label><label><input type="checkbox" data-tile="cmdr" checked> Commander</label><label><input type="checkbox" data-tile="fuel" checked> Fuel</label><label><input type="checkbox" data-tile="carrier" checked> Carrier</label><label><input type="checkbox" data-tile="unsold" checked> Unsold</label><label><input type="checkbox" data-tile="data" checked> Data</label>
+        <span class="hint">an unticked tile is left out on this device, from the one line too; at least one stays. Where I am holds Nearby's radius</span></div>
       <label class="mod"><input type="checkbox" id="hereHideDone"> Here: leave out species you have finished
         <span class="hint">the bio column lists only what is still to do (a sample lost with the ship stays)</span></label>
       <label class="mod"><input type="checkbox" id="hereColours"> Here: species in their colour
@@ -819,9 +854,11 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     </details>
     <details class="setsec" data-sec-key="sharing" data-chip="Sharing"><summary>Sharing these settings <span class="sum-note">export, import, defaults for new browsers</span></summary>
       <div class="opts inline">
-        <button type="button" class="try" id="settingsExport" title="download this browser's settings as a file">Export settings</button>
-        <button type="button" class="try" id="settingsImport" title="load settings from an exported file (the page reloads)">Import settings…</button>
+        <button type="button" class="try" id="settingsExport" data-blobsave title="download this browser's settings as a file">Export settings</button>
+        <span class="nosave" hidden>Export settings from a browser on the PC</span>
+        <button type="button" class="try" id="settingsImport" data-picker title="load settings from an exported file (the page reloads)">Import settings…</button>
         <input type="file" id="settingsFile" accept=".json,application/json" hidden>
+        <span class="nopicker" hidden>Import settings from a browser on the PC</span>
         <button type="button" class="try" id="settingsServer" title="save these settings on the server: a browser uses them for anything it has not set itself">Use these for new browsers</button>
         <button type="button" class="try" id="settingsServerClear" hidden>stop</button>
       </div>
@@ -870,7 +907,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <div class="nearbar">
       <span class="grp"><span class="lbl">Show</span><label><input type="checkbox" data-nf="stations"> stations</label><label><input type="checkbox" data-nf="carriers"> fleet carriers</label></span>
       <span class="grp"><span class="lbl">Must have</span><span id="nearNeeds"></span></span>
-      <span class="grp"><span class="lbl">Around</span><select data-nf="around" aria-label="Around" title="the system to look around: the distances are from there (a row's hover says how far it is from you)"></select><input type="text" data-nf="aroundName" placeholder="system name" size="16" aria-label="The system to look around" hidden></span>
+      <span class="grp"><span class="lbl">Around</span><select data-nf="around" aria-label="Around" title="the system to look around: the distances are from there (a row's hover says how far it is from you)"></select><input type="text" data-nf="aroundName" placeholder="system name" size="16" aria-label="The system to look around" hidden><button type="button" class="mini pastebtn" title="paste the system name on the game PC's clipboard" aria-label="paste">📋</button></span>
       <span class="grp"><span class="lbl">Pad</span><span id="nearPad"></span></span>
       <span class="grp"><span class="lbl">Data under</span><input type="number" min="1" max="3650" step="1" data-nf="age"> days</span>
       <span class="grp"><label title="systems that need a permit (left out unless ticked)"><input type="checkbox" data-nf="permit"> permit systems</label></span>
@@ -914,7 +951,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
     <div id="labWords" class="labwords hint"></div>
     <h4>Your own words</h4>
     <textarea id="labText" rows="2" placeholder="Type anything, then ▶ Speak"></textarea>
-    <div class="mod inlineopts"><button type="button" id="labSpeak">▶ Speak</button> <button type="button" id="labSave">⬇ Save WAV</button></div>
+    <div class="mod inlineopts"><button type="button" id="labSpeak">▶ Speak</button> <button type="button" id="labSave" data-blobsave>⬇ Save WAV</button><span class="nosave" hidden>Save WAV from a browser on the PC</span></div>
     <details id="pronBox" class="pronbox"><summary>How is it said <span class="sum-note">a word the voice says wrong, said your way (Piper voices in English)</span></summary>
       <div class="mod inlineopts"><input id="pronWord" list="pronWords" placeholder="a word: Fonticulua" aria-label="word" autocomplete="off">
         <input id="pronSay" placeholder="fon-TIK-yoo-loo-uh" aria-label="how it is said" autocomplete="off">

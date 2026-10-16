@@ -111,6 +111,39 @@ class UInput:
         pass
 
 
+def get_clipboard():
+    """The Windows clipboard's text ("" when it holds none); OSError when Windows refused (another program holds it
+    open). For the page's 📋 paste buttons."""
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    u32 = ctypes.WinDLL("user32", use_last_error=True)
+    k32.GlobalLock.restype, k32.GlobalLock.argtypes = wintypes.LPVOID, (wintypes.HGLOBAL,)
+    k32.GlobalUnlock.argtypes = (wintypes.HGLOBAL,)
+    u32.OpenClipboard.argtypes = (wintypes.HWND,)
+    u32.IsClipboardFormatAvailable.argtypes = (wintypes.UINT,)
+    u32.GetClipboardData.restype, u32.GetClipboardData.argtypes = wintypes.HANDLE, (wintypes.UINT,)
+    for _ in range(10):   # another program may have it open for a moment
+        if u32.OpenClipboard(None):
+            break
+        import time
+        time.sleep(0.05)
+    else:
+        raise OSError(ctypes.get_last_error(), "the clipboard is in use by another program")
+    try:
+        if not u32.IsClipboardFormatAvailable(13):   # CF_UNICODETEXT
+            return ""
+        h = u32.GetClipboardData(13)
+        p = k32.GlobalLock(h) if h else None
+        if not p:
+            return ""
+        try:
+            return ctypes.wstring_at(p)
+        finally:
+            k32.GlobalUnlock(h)
+    finally:
+        u32.CloseClipboard()
+
+
 def set_clipboard(text):
     """Put text on the Windows clipboard (as Unicode text); OSError when Windows refused (another program holds it
     open, say). For the Highway's copy of the next system and auto-target's paste entry."""

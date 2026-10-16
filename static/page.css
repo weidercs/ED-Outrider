@@ -2,6 +2,8 @@
   --bg: #0d0f12; --panel: #161a20; --line: #262c35; --text: #d8dde4; --muted: #7d8794;
   --accent: #ff8c1a; --good: #5cc98a; --warn: #e3b341; --bad: #e05d5d; --info: #6aa8ff;
   --hot: #9df0b4; --biohot: #d9a8ff;
+  /* the CMDR tab's Earnings chart: cartography, exobiology, mining (a theme whose own colours are too alike sets its own) */
+  --earn-carto: var(--info); --earn-bio: var(--good); --earn-mine: var(--accent);
 }
 @media (prefers-color-scheme: light) { :root {
   --bg: #f5f6f8; --panel: #ffffff; --line: #dde1e6; --text: #1d2228; --muted: #69727d;
@@ -27,6 +29,9 @@ h1 span { color: var(--accent); }
 #pop .adv { margin-top: 8px; font-weight: 500; }
 #pop .adv.warn { color: var(--warn); } #pop .adv.urgent { color: var(--bad); } #pop .adv.ok { color: var(--good); }
 .sub { color: var(--muted); margin-top: 2px; font-size: 13px; }
+/* where a file picker would open, or a file be saved from the page (blob:), in the Android app (it can do neither): the
+   note in its place */
+.nopicker, .nosave { color: var(--muted); font-size: 12px; align-self: center; }
 .controls { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; align-items: center; font-size: 13px; }
 .controls button { background: var(--panel); color: var(--text); border: 1px solid var(--line);
   border-radius: 6px; padding: 3px 10px; cursor: pointer; font: inherit; }
@@ -76,7 +81,7 @@ tr.main td { font-weight: 500; }
 #histRows tr.sess { cursor: pointer; } #histRows tr.sess td:first-child::before { content: "▸ "; color: var(--muted); }
 #histRows tr.sess.open td:first-child::before { content: "▾ "; }
 #histRows td.systems { white-space: normal; font-size: 12px; color: var(--muted); }
-#histRows td.systems span { display: inline-block; margin: 1px 8px 1px 0; }
+#histRows td.systems span { display: inline-block; margin: 1px 8px 1px 0; } #histRows td.systems .mk { margin: 0; }
 #histRows td.systems .name { cursor: copy; color: var(--text); }
 #bmTools { margin-top: 8px; } #bmTools .exports a { color: var(--info); }
 #bmImportMsg { color: var(--muted); font-size: 0.9em; } #bmImportMsg.err { color: var(--bad); }
@@ -118,6 +123,15 @@ td.bodies { cursor: help; }
   border-radius: 8px; padding: 10px 12px; box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: 13px;
   pointer-events: none; display: none; }
 #pop.taps { pointer-events: auto; }   /* the Map's tapped card (S72): its buttons take the tap */
+/* a ship's picture (the CMDR tab's Inventory): a card beside the row after a hover (page.js shipCardShow) */
+#shipCard { position: fixed; z-index: 5; width: 316px; max-width: calc(100vw - 16px); box-sizing: border-box;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: 13px; pointer-events: none; animation: shipcardin .15s ease-out; }
+#shipCard[hidden] { display: none; }
+#shipCard img { display: block; width: 100%; height: auto; }
+#shipCard .shipcardname { margin-top: 4px; text-align: center; }
+@keyframes shipcardin { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #shipCard { animation: none; } }
 #pop .mapacts { display: flex; gap: 6px; flex-wrap: wrap; }
 #pop h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--accent); }
 #pop .sec { margin-top: 6px; }
@@ -159,7 +173,6 @@ td.bodies { cursor: help; }
 #overView.side #ovDivider:hover, #overView.side #ovDivider.drag { background: var(--accent); }
 #overView.side #ovHere { flex: 0 0 var(--ovw); min-width: 0; order: 2; max-height: 80vh; overflow: auto; }
 #overView.side.flip #ovHere { order: 0; } #overView.side.flip #ovNear { order: 2; }
-#overView.collapsed #ovHere, #overView.collapsed #ovDivider { display: none; }
 #overView #hereView { margin-top: 0; }
 #ovHere.compact #hereTable .hide-sm, #ovHere.compact #hereView .hint { display: none; }
 #ovHere.compact #hereTable th, #ovHere.compact #hereTable td { padding: 4px 4px; font-size: 12px; }
@@ -226,20 +239,7 @@ main > #hereView.detail > #bodyPanel { position: sticky; top: calc(var(--head-h,
 .shtable th { color: var(--muted); font-weight: 600; } .shtable .num { text-align: right; white-space: nowrap; } .shtable tr.shoff td { opacity: 0.6; }
 .shcls { display: inline-block; min-width: 2.2em; color: var(--info); font-variant-numeric: tabular-nums; }
 .shstats { display: flex; flex-wrap: wrap; gap: 2px 14px; } .shstat { white-space: nowrap; }
-/* this fork's Commander view (static/fork.js) and the route lists' discoverer names */
-#cmdrView { margin-top: 12px; } #cmdrTabs { align-items: center; gap: 10px; margin-bottom: 6px; }
-.cmtabs { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.cmtab { background: none; border: 0; border-right: 1px solid var(--line); color: var(--muted); padding: 4px 12px; cursor: pointer; font: inherit; }
-.cmtab:last-child { border-right: 0; } .cmtab.on { color: var(--text); background: var(--panel2, rgba(128, 128, 128, .18)); font-weight: 600; }
-.cmtable { width: 100%; border-collapse: collapse; margin-top: 4px; } .cmtable td, .cmtable th { padding: 4px 10px 4px 0; text-align: left; vertical-align: top; }
-.cmtable th { color: var(--muted); font-weight: 600; } .cmtable .num { text-align: right; white-space: nowrap; } .cmtable td { border-top: 1px solid var(--line); }
-.cmcount { color: var(--muted); font-weight: 400; } .cmcls { color: var(--muted); font-variant-numeric: tabular-nums; }
-.cmfigs { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 8px 0; } .cmfig { display: flex; flex-direction: column; } .cmfig > .unk { font-size: 12px; }
-.cmstats { display: flex; flex-wrap: wrap; gap: 2px 14px; }
-.cmlocker { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 28px; margin-top: 6px; }
-.cmitem { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 2px 0; }
-.cmfilter { align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0; }
-.cmmod { border-top: 1px solid var(--line); padding: 5px 0; } .cmmod > summary { cursor: pointer; }
+/* this fork: Commander → Engineering's additions (static/fork.js) and the route lists' discoverer names */
 .cmengs { padding: 5px 0 8px; } .cmengs > summary { cursor: pointer; } .cmengtable { border-collapse: collapse; margin-top: 4px; }
 .cmengtable td, .cmengtable th { padding: 3px 14px 3px 0; text-align: left; border-top: 1px solid var(--line); } .cmengtable th { color: var(--muted); font-weight: 600; border-top: 0; }
 .cmengtable .num { text-align: right; white-space: nowrap; } .cmfor { font-size: 12px; margin-top: 1px; }
@@ -253,10 +253,6 @@ tr.cmgradeon td { background: rgba(120, 170, 120, .12); }
 .cmship { margin: 2px 0 8px; } .cmshipmod { white-space: nowrap; }
 .cmsupports { color: var(--good, #4a7); font-size: 12px; font-weight: 400; }
 .cmpart.on { background: var(--accent, #4a7); color: var(--bg); border-color: var(--accent, #4a7); }
-.cmbp { margin: 10px 0 0; font-size: 13px; } .cmmat { white-space: nowrap; }
-.cmbar { display: inline-block; width: 120px; height: 8px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; vertical-align: middle; }
-.cmbar > span { display: block; height: 100%; background: var(--info, var(--muted)); } .cmbarcell { white-space: nowrap; } .cmrep { margin-top: 8px; }
-.cmranks { width: auto; } .cmranks td { padding-right: 18px; }
 .hwydisc { color: var(--muted); font-size: 12px; font-weight: 400; display: inline-block; max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 /* the game's own route in Plot Route (this fork): its switch sits above the panes (outside their grid), its list in
    the place of the Highway's own */
@@ -311,9 +307,20 @@ body.viewwin .views { display: none; }
 .viewback { margin-left: auto; }
 #nearOpts { display: inline-flex; gap: 16px; }
 /* boxel exploration (2026-10-11): the switch, and the boxel pane in Nearby's place */
+/* the Standard / Boxel switch and Around, on Nearby's top bar (or the Overview's) */
+.nearhead { display: inline-flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .nearmode { display: inline-flex; gap: 2px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 4px; }
 .nearmode label { display: inline-flex; align-items: center; gap: 3px; padding: 1px 4px; }
-#nearWrap.boxel .stdonly { display: none; }
+#nearWrap.boxel .stdonly, #overView.boxel .stdonly { display: none; }
+/* Nearby's Around and filters (2026-10-14, Rainmangames' PR #8's ideas): From you only while the list is around another
+   system; the strip above the list names that centre (and Spansh's cut sphere) */
+#nearTable:not(.around) .fromcol { display: none; }
+.nearAround { display: inline-flex; align-items: center; gap: 6px; }
+.nearAround .lbl { color: var(--muted); }
+#nearStrip { margin-top: 6px; font-size: 13px; }
+#nearStrip .nsline { padding: 3px 8px; border-left: 3px solid var(--accent); margin-top: 2px; }
+#nearStrip .nsline.warn { border-left-color: var(--warn); color: var(--warn); }
+#nearStrip .nscentre { font-weight: 600; cursor: pointer; }
 .bxhead { margin: 6px 0; } .bxhead .bxname { font-weight: 600; } .bxhead .bxkind { color: var(--muted); }
 /* a green gas giant (sure) or the ladder model's guess (?) */
 .ggg { display: inline-flex; align-items: center; gap: 1px; color: #3FBF6A; font-weight: 700; font-size: .95em; white-space: nowrap; cursor: help; }
@@ -395,7 +402,7 @@ dialog button { background: var(--panel); color: var(--text); border: 1px solid 
 dialog button.primary { border-color: var(--accent); color: var(--accent); }
 dialog button.danger { color: var(--bad); }
 dialog .hint { color: var(--muted); font-size: 11px; margin-top: 4px; }
-dialog label.mod { display: block; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13px; }
+dialog label.mod, dialog #tilesShown { display: block; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13px; }
 dialog input[type=number] { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font: inherit; }
 #here .copy { cursor: copy; border-bottom: 1px dotted var(--muted); }
 #here .sol { color: var(--muted); font-size: 14px; font-weight: 400; }
@@ -403,6 +410,22 @@ dialog input[type=number] { background: var(--bg); color: var(--text); border: 1
 #pop .flags { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; }
 #pop .unk { font-style: italic; }
 @media (max-width: 640px) { .hide-sm { display: none; } th, td { padding: 6px 4px; } }
+
+/* ---- the game's galaxy-map markers as icons (NEXT-VERSION #13; static/icons/elite/, its CREDITS.txt): page.js mk(),
+   an empty span painted in the text's own colour through the marker as a mask, so each theme colours it as the words
+   beside it (contrast as theirs) and it grows with the font. A file per marker (url() from this sheet's folder), not in
+   PAGE_FILES: pictures, not page code. forced-color-adjust keeps it drawn in a forced-colours (high contrast) mode ---- */
+.mk { display: inline-block; flex: 0 0 auto; width: 1.15em; height: 1.15em; vertical-align: -0.22em; background: currentColor;
+      -webkit-mask-position: center; mask-position: center; -webkit-mask-size: contain; mask-size: contain;
+      -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; forced-color-adjust: none; }
+.mk.mkg { margin-right: .3em; }
+.mk-destination { -webkit-mask-image: url(icons/elite/destination.svg); mask-image: url(icons/elite/destination.svg); }
+.mk-fleet-carrier { -webkit-mask-image: url(icons/elite/fleet-carrier.svg); mask-image: url(icons/elite/fleet-carrier.svg); }
+.mk-squadron-carrier { -webkit-mask-image: url(icons/elite/squadron-carrier.svg); mask-image: url(icons/elite/squadron-carrier.svg); }
+.mk-titan { -webkit-mask-image: url(icons/elite/titan.svg); mask-image: url(icons/elite/titan.svg); }
+.mk-waypoint { -webkit-mask-image: url(icons/elite/waypoint.svg); mask-image: url(icons/elite/waypoint.svg); }
+.mk-engineer { -webkit-mask-image: url(icons/elite/engineer.svg); mask-image: url(icons/elite/engineer.svg); }
+.mk-mission { -webkit-mask-image: url(icons/elite/mission.svg); mask-image: url(icons/elite/mission.svg); }
 
 /* ---- header: title + tabs, then tiles ---- */
 .topbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
@@ -450,9 +473,9 @@ button.icon.hushbtn.on { border-color: var(--warn); }
 .hushmenu .unk { font-size: 11px; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin-top: 10px; }
 /* wide screens: Where gets half as much again (its lines are the longest), Commander less (short lines, ranks stacked) */
-@media (min-width: 1200px) { .tiles { grid-template-columns: 1.5fr 0.75fr repeat(4, 1fr); }
-  .tiles.nocarrier { grid-template-columns: 1.5fr 0.75fr repeat(3, 1fr); } }
-.tile[hidden] { display: none; }
+/* --tile-cols: one column per tile shown (tileCols: the tiles this device shows, the Carrier tile with a carrier) */
+@media (min-width: 1200px) { .tiles { grid-template-columns: var(--tile-cols, 1.5fr 0.75fr repeat(4, 1fr)); } }
+.tile[hidden], .tile[data-off] { display: none; }
 @media (min-width: 640px) and (max-width: 1199px) { #tWhere { grid-column: span 2; } }
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 7px; min-width: 0; }
 .tile .lbl { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
@@ -519,6 +542,47 @@ th[data-bsort], th[data-lsort] { cursor: pointer; } th[data-bsort].on, th[data-l
 #bioRows .name, #codexRows .name { cursor: copy; }
 .goto { cursor: pointer; color: var(--info); margin-left: 4px; }
 h3.subhead { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 20px 0 0; }
+/* the Commander view */
+#cmdrView { margin-top: 12px; } #cmdrTabs { margin-bottom: 6px; }
+/* green: enough, ready, yours; red: short, expired (the Materials tab's colours) */
+#cmdrView .ok { color: var(--good); } #cmdrView .short { color: var(--bad); }
+#cmdrView .cmhot { color: var(--bad); font-weight: 700; cursor: help; }   /* hot (wanted): a red ⚖, every theme's own red */
+#cmdrView .cmlinks { font-size: 0.85em; white-space: nowrap; margin-left: 0.3em; }   /* a ship's EDSY ↗ / Coriolis ↗ */
+#cmdrView .cmlinks.unk { cursor: help; }
+.cmtable { width: 100%; border-collapse: collapse; margin-top: 4px; } .cmtable td, .cmtable th { padding: 4px 10px 4px 0; text-align: left; vertical-align: top; }
+.cmtable th { color: var(--muted); font-weight: 600; } .cmtable .num { text-align: right; white-space: nowrap; } .cmtable td { border-top: 1px solid var(--line); }
+.cmcount { color: var(--muted); font-weight: 400; } .cmcls { color: var(--muted); font-variant-numeric: tabular-nums; }
+.cmfigs { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 8px 0; } .cmfig { display: flex; flex-direction: column; } .cmfig > .unk { font-size: 12px; }
+.cmstats { display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.cmlocker { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 28px; margin-top: 6px; }
+.cmitem { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 2px 0; }
+.cmfilter:not([hidden]) { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; } #cmFilter { width: 19em; } .cmnote { margin: 6px 0; }
+.cmmod { border-top: 1px solid var(--line); padding: 5px 0; } .cmmod > summary { cursor: pointer; }
+.cmbp { margin: 10px 0 0; font-size: 13px; } .cmmat { white-space: nowrap; }
+/* the links out of the tab: a short material (to the Materials tab, ⇄ to a trader), the career (to History) */
+.cmlink { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; } .cmshort { white-space: nowrap; }
+.cmshort .trbtn { margin-left: 4px; } h3.subhead > button.mini { margin-left: 8px; text-transform: none; letter-spacing: 0; }
+.cmbar { display: inline-block; width: 120px; height: 8px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; vertical-align: middle; }
+.cmbar > span { display: block; height: 100%; background: var(--info, var(--muted)); } .cmbarcell { white-space: nowrap; } .cmrep { margin-top: 8px; }
+.cmranks { width: auto; } .cmranks td { padding-right: 18px; }
+/* the Earnings tab: a figure's parts under it, the chart (its colours --earn-*: each theme's own, told apart), the three
+   most-common lists side by side; the sub-tabs wrap rather than run off a narrow window */
+#cmdrTabs .seg { flex-wrap: wrap; max-width: 100%; }
+#cmdrView .exports a { color: var(--info); }
+.cmfig .emsub { display: block; font-weight: 400; font-size: 12px; }
+.emlegend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+.emsw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.emsw.carto { background: var(--earn-carto); } .emsw.bio { background: var(--earn-bio); } .emsw.mining { background: var(--earn-mine); }
+.emchart { display: flex; align-items: flex-start; max-width: 100%; padding-right: 14px; }
+.emchart svg { overflow: visible; } .emyax { flex: 0 0 auto; } .emplot { flex: 1 1 0; min-width: 0; }
+.emchart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.emgrid { stroke: var(--line); stroke-width: 1; } .embase { stroke: var(--muted); stroke-width: 1; }
+.emseg { stroke: var(--bg); stroke-width: 1px; }   /* a hair of the background between the stacked parts */
+.emseg.carto { fill: var(--earn-carto); } .emseg.bio { fill: var(--earn-bio); } .emseg.mining { fill: var(--earn-mine); }
+.emhit { fill: transparent; } .embar { cursor: pointer; } .embar:hover .emhit { fill: var(--line); fill-opacity: .45; }
+.embar.dim { opacity: .35; } .emband { fill: var(--line); fill-opacity: .45; }
+.emtrio { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 0 24px; }
+.emnotes { margin: 16px 0 0; padding-left: 18px; font-size: 13px; } .emnotes li { margin: 2px 0; }
 
 /* ---- Commander tile, all-time row ---- */
 #whereLn { font-variant-numeric: tabular-nums; }
@@ -694,11 +758,13 @@ body.app #hereMain.halves > #hereSchematic { border-top: 2px solid var(--line); 
 }
 
 /* Compact tables (fitTable in page.js): a table wider than its box shows its short forms (.compact), then tighter ones
-   with low-value columns dropped or merged (.compact2). .lf full form, .sf short form, .sf1/.sf2 one level only,
-   .c1hide/.c2hide hidden from that level on. A table that fits shows none of this: it looks as it always did. */
+   with low-value columns dropped or merged (.compact2), and a last step (.compact3) for a table that merges columns only
+   once dropping some was not enough (Nearby). .lf full form, .sf short form, .sf1/.sf2 one level only (.sf3: compact3),
+   .c1hide/.c2hide/.c3hide hidden from that level on. A table that fits shows none of this: it looks as it always did. */
 table:not(.compact) .sf, table:not(.compact) .sf1, table:not(.compact) .sf2,
 table.compact .lf, table.compact .c1hide, table.compact:not(.compact2) .sf2,
-table.compact2 .sf1, table.compact2 .c2hide { display: none; }
+table.compact2 .sf1, table.compact2 .c2hide,
+table:not(.compact3) .sf3, table.compact3 .c3hide { display: none; }
 table.compact th, table.compact td { padding-left: 5px; padding-right: 5px; }
 table.compact th { letter-spacing: 0; }
 table.compact .badge { padding: 1px 5px; }
@@ -750,6 +816,11 @@ ul.checklist li.todo b { color: var(--text); }
 #tripRows .lost, #topRows .lost { color: var(--bad); } #topRows .sold { color: var(--good); } #topRows .unsold { color: var(--warn); }
 #tripRows td { white-space: nowrap; }
 button.mini { background: var(--panel); color: var(--info); border: 1px solid var(--line); border-radius: 4px; font: inherit; font-size: 11px; padding: 0 5px; cursor: pointer; }
+/* #5: 📋 beside a system or station name field, only where this device can read the game PC's clipboard (body.canpaste:
+   GET api/clipboard), and only while its field shows (an Around's name box is hidden until "a system…" is picked) */
+.pastebtn { display: none; margin-left: 3px; }
+body.canpaste .pastebtn { display: inline-block; }
+body.canpaste input[hidden] + .pastebtn { display: none; }
 
 #leftRows td.left-what { white-space: normal; font-size: 13px; }
 #lbRadius { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; font: inherit; font-size: 12px; }
@@ -763,7 +834,10 @@ tr.nextstop td.name::after { content: " ⚑ next stop"; color: var(--info); font
 
 #routeStrip { margin-top: 4px; font-size: 13px; } #routeStrip:empty { display: none; }
 #routeStrip .hops { display: inline-flex; flex-wrap: wrap; gap: 2px; vertical-align: middle; margin-left: 6px; }
-#routeStrip .hop { font-family: ui-monospace, monospace; font-size: 11px; padding: 0 4px; border-radius: 3px; border: 1px solid var(--line); cursor: help; }
+#routeStrip .hop { font-family: ui-monospace, monospace; font-size: 11px; padding: 0 4px; border-radius: 3px; border: 1px solid var(--line); cursor: copy; }
+/* how far the fuel in the tank goes without scooping: a bar after the last hop it makes; ⛽✓ when it makes them all */
+#routeStrip .freach { font-size: 11px; padding-left: 3px; border-left: 2px solid var(--warn); cursor: help; }
+#routeStrip .freach.whole, #routeStrip .freach.past { border-left: 0; padding-left: 0; }
 #routeStrip .hop.sc { color: var(--good); border-color: color-mix(in srgb, var(--good) 50%, transparent); }
 #routeStrip .hop.dry { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, transparent); }
 #routeStrip .hop.vis { opacity: .5; }
@@ -775,8 +849,10 @@ tr.nextstop td.name::after { content: " ⚑ next stop"; color: var(--info); font
 #hwyLine { margin-top: 4px; font-size: 13px; cursor: pointer; } #hwyLine:empty { display: none; }
 #hwyLine:hover { color: var(--text); } #hwyLine .copy { cursor: copy; }
 #hwyLine .hwyaim, #hwyRows .hwyretry, #hwyDone .hwyretry { margin-left: 6px; padding: 0 6px; font-size: 12px; }
-/* 🎯 beside each route system in the lists: small, brighter on the row you point at */
+/* the target button (the game's destination marker) beside each route system in the lists: small, brighter on the row
+   you point at */
 .hwyaim.icon { margin-left: 6px; padding: 0 4px; font-size: 11px; opacity: .55; }
+.hwyaim.icon .mk { width: 1.4em; height: 1.4em; vertical-align: -0.3em; }
 tr:hover .hwyaim.icon, .hwyaim.icon:focus-visible, .hwyaim.icon:disabled { opacity: 1; }
 /* Nearby's 🎯 before the name: a fixed-width slot, empty on your own system's row, so the names stay in line */
 td.name .nearaim { display: inline-block; width: 2.1em; } td.name .nearaim .hwyaim.icon { margin-left: 0; }
@@ -867,6 +943,22 @@ body.nowmode header, body.nowmode main { display: none; }
 #nowView .now-card { font-size: clamp(22px, 3.8vw, 44px); padding: 1.2vh 1.6vw; border-radius: 10px; margin: 1.4vh 0; border: 2px solid var(--line); }
 #nowView .now-card.yes { border-color: var(--good); color: var(--good); } #nowView .now-card.no { color: var(--muted); }
 #nowView .now-card.alert { border-color: var(--warn); color: var(--warn); }
+/* #3: the pad the station gave you, in large letters, the station under it */
+#nowView .now-pad { font-size: clamp(40px, 7vw, 96px); font-weight: 800; color: var(--good); line-height: 1; margin: 1vh 0 2vh; }
+#nowView .now-pad span { display: block; font-size: clamp(16px, 2.4vw, 28px); font-weight: 400; color: var(--muted); margin-top: .6vh; }
+#nowView .now-pad .mk { display: inline-block; margin-top: 0; }   /* a carrier's marker before its name, not a line */
+#nowView .now-pad .now-where { color: var(--text); font-size: clamp(18px, 3vw, 34px); }
+/* #12: the pad diagram under it (padMapSvg) */
+/* sized by its height (Kurbo26, 2026-10-15: a carrier, drawn tall, overflowed a 1920x1200 tablet's Now when sized by
+   width): a starport square, a carrier narrower, both the same height */
+#nowView .now-padmap { display: block; height: min(32vh, 300px); width: auto; max-width: 70vw; margin-top: 1.4vh; }
+.now-padmap polygon, .now-padmap line, .now-padmap rect, .now-padmap circle { fill: none; stroke-width: 1.2; }
+.now-padmap .pm-out { stroke: var(--muted); } .now-padmap .pm-wall, .now-padmap .pm-box { stroke: var(--line); }
+.now-padmap .pm-pad { stroke: var(--muted); }
+.now-padmap .pm-me { fill: var(--good); stroke: var(--good); }
+.now-padmap .pm-red { stroke: #e0453a; stroke-width: 4; } .now-padmap .pm-green { stroke: #3ad16b; stroke-width: 4; }
+.now-padmap text { font: 600 11px system-ui, sans-serif; text-anchor: middle; }
+.now-padmap .pm-num { fill: var(--bg); } .now-padmap .pm-lbl { fill: var(--muted); font-weight: 400; }
 @media (prefers-color-scheme: light) { #nowView .now-sys { color: #9a4a00; } }
 
 .synth .boostline { font-size: 12px; margin-top: 1px; }
@@ -876,12 +968,14 @@ body.nowmode header, body.nowmode main { display: none; }
 /* Settings: a lot in it, so wider, and on a big screen wider still, in columns of folding sections */
 #alertDialog { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding-top: 0; }
 @media (min-width: 1280px) and (min-height: 700px) {
-  #alertDialog { width: min(1560px, calc(100vw - 64px)); max-height: calc(100vh - 48px); }
+  /* the author, 2026-10-15: 80 % of the screen's width on a big screen, for room for the options */
+  #alertDialog { width: max(80vw, min(1560px, calc(100vw - 64px))); max-height: calc(100vh - 48px); }
   #alertDialog .setbody { columns: 2 560px; column-gap: 28px; }
   #alertDialog .setsec { break-inside: avoid; }
   #alertDialog #serverSettings, #alertDialog #speechLogBox { column-span: all; }
 }
-@media (min-width: 1900px) { #alertDialog .setbody { columns: 3 520px; } }
+/* three columns only on a 4K screen (the author, 2026-10-15: two on a 2560 px one) */
+@media (min-width: 3200px) { #alertDialog .setbody { columns: 3 520px; } }
 /* Materials: where to find FSD-injection materials, and beside it the mining sites (one above the other when narrow) */
 #matTables { display: flex; flex-wrap: wrap; gap: 0 28px; align-items: flex-start; }
 /* Cargo (the Materials tab): the ship's and carrier's holds, the Sell / Buy answers beside them */
@@ -912,7 +1006,7 @@ body.nowmode header, body.nowmode main { display: none; }
 .nearbtn { margin-left: 4px; }
 #nearDlg { width: min(1400px, calc(100vw - 32px)); max-width: none; } #nearDlg h3 span { color: var(--muted); font-weight: 400; font-size: 13px; }
 .nearbar { display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center; margin: 6px 0 8px; font-size: 13px; }
-.nearbar .grp { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .nearbar label { display: inline; color: var(--text); font-size: 13px; margin: 0; }
+.nearbar .grp, #nearNeeds { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .nearbar label { display: inline; color: var(--text); font-size: 13px; margin: 0; }
 .nearbar .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 .nearbar input[type=number] { width: 4.5em; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; text-align: right; }
 .nearscroll { max-height: min(62vh, 640px); overflow: auto; }
@@ -1042,6 +1136,15 @@ details.speechlog { margin-top: 12px; } details.speechlog summary { cursor: poin
 #askLog .alog { padding: 3px 0; border-bottom: 1px solid var(--line, rgba(128,128,128,.2)); overflow-wrap: anywhere; }
 #askLog .alog .match { color: var(--muted); } #askLog .alog.fixed .match b, #askLog .alog.ai .match b { color: var(--good); }
 #askLog .alog.none .match b { color: var(--warn); } #askLog .alog.error .match b { color: var(--bad); }
+/* the voice commands (Settings > Voice's fold, the tablet's Voice commands… sheet): a group heading, then each command's
+   name and what it does, its phrases, and the words that narrow it */
+.vclist { font-size: 13px; color: var(--text); }
+.vclist .vcnote { color: var(--muted); margin: 4px 0 6px; }
+.vclist .vcgroup { margin: 10px 0 2px; color: var(--accent); font-size: 1em; }
+.vclist .vcrow { padding: 5px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.vclist .vcdesc { color: var(--muted); }
+.vclist .vcphr { margin-top: 2px; }
+.vclist .vcnarrow { margin: 2px 0 0; padding-left: 1.4em; color: var(--muted); }
 .spacing.elsewhere { color: var(--warn); }
 #refLn .regionnew { color: var(--good); font-weight: 600; }
 #tripRows tr.hasnote td { border-bottom: none; padding-bottom: 1px; }
@@ -1138,6 +1241,7 @@ body.app .pane thead th { position: sticky; top: 0; z-index: 1; background: var(
 body.app #bodyPanel thead th, body.app #sBodyPanel thead th { position: static; box-shadow: none; }
 body.app .pane .hint { margin-top: 8px; }
 body.app .tablebar { padding-top: 0; }
+body.app #nearWrap > .tablebar, body.app #nearStrip { flex: 0 0 auto; }
 /* Overview: Nearby and This system side by side (or stacked), each the full height; Nearby's list scrolls under its
    options, the system's body table scrolls under its heading and to-do line, and the lower half (surface map or body
    panel) stays put */
@@ -1379,6 +1483,11 @@ table.ovlay tr.ovoff td { opacity: .55; }   /* a panel switched off: its row dim
 /* the overlay's placement table: compact, and scrolled sideways inside its section on a narrow window rather than
    spilling out of it */
 .ovwrap { overflow-x: auto; max-width: 100%; }
+/* All Panels: Theme, Text Size and Scale on one row, the test and Arrange buttons on the line under it, at its left */
+.ovctl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.ovctl .ovbtns { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; }   /* a line of their own, at the left */
+.ovctl input[type=number] { width: 5em; }   /* "100" and "250" clear of the spinner */
+table.ovlay .ovpx { font-size: 11px; white-space: nowrap; }   /* under Size %: "≈ 11 px text", or held at the floor */
 table.ovlay { border-collapse: collapse; margin: 6px 0; font-size: 13px; } table.ovlay th, table.ovlay td { padding: 2px 3px; text-align: left; }
 table.ovlay td.ovana, table.ovlay th.ovgrp { text-align: center; }   /* the Hide when mode boxes (combat, docked) under their headings */
 table.ovlay input[type=number] { width: 2.6em; padding: 3px; text-align: right; appearance: textfield; -moz-appearance: textfield; }   /* no spin arrows: room for "100" (typing and the arrow keys still work) */

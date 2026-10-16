@@ -47,9 +47,25 @@ before.
 - **The surface radar**, on a body (landed, in the SRV, on foot) or low over it: heading up, you in the middle, N on
   the rim; the sample points of your run with their colony rings, red while you are inside one and green once you are
   clear; tagged plants, the ship and your rigs. Underneath: how far the next sample must be, or "Clear: sample here".
+  **Docking** takes the radar's place (its corner, size and switch: the radar has nothing to show in space; at a
+  planetary port the pad comes first until you touch down): from the moment a station gives you a pad until you touch
+  down it shows
+  **PAD 34** in large letters under the station's name (any station, carrier, outpost, port or settlement); a refusal
+  that isn't obvious shows "Docking denied" and why for a minute. At a starport (Coriolis, Orbis, Ocellus, asteroid
+  base, Dodec) or a carrier it also says where the pad is ("at the back · up on your right"; a carrier "port side,
+  toward the bow") and draws it: the starport as you see it coming through the slot (outer ring near the slot, inner
+  ring the back, the slot's lights across the middle, green on the right), the carrier from above with the bow up.
+  **Show the pad diagram while docking** (Settings → In-game overlay, `pad_diagram`) turns the drawing off; the words
+  stay. Pad positions come from bgol's LandingPad plugin.
+
+  <p align="center">
+    <img src="../images/overlay-pad.png" alt="Two docking panels over a starfield: PAD 34 at Jameson Memorial, at the back, up on your right, with the starport seen from the slot; PAD 7 at a fleet carrier, port side, toward the bow, with the deck seen from above" width="900">
+  </p>
 
 - **The system strip** (optional, off until you tick it), made for the top of the screen: two short lines, centred.
-  The first says where you are: the system, its region and the star (⛽ scoopable, ⚡ a neutron star or white dwarf).
+  The first says where you are: the system, its region and the star (⛽ scoopable, ⚡ a neutron star or white dwarf),
+  and in a populated system, on its right, the security level and your reputation with the controlling faction
+  (Hostile in red; Unfriendly up to -35, Neutral to +4, Cordial to +35, Friendly to +90, then Allied).
   The second, condensed: the distance from Sol, what its data pays now and at most, 🏁 when you discovered it, how many
   bodies and how many found of them, 🏁 how many you discovered, 🗺 the planets you mapped of all of them, and whether
   Spansh knows the system ("Spansh ✗ (new to it)" when it does not).
@@ -126,7 +142,7 @@ PC's draws it.
   centred along the top or bottom edge), so it stays there when the window or resolution changes;
 - **drag its corner** (the square handle) to make it bigger or smaller;
 - **mouse wheel** over it: its background, from solid to text only; **Shift and wheel**: the whole panel's
-  transparency;
+  transparency; **Ctrl and wheel**: the size of all the panels at once (**All Panels: Scale** in Settings);
 - **Done**, at the top of the game window (or the button in Settings), ends it. Arranging ends by itself after ten
   minutes, so the overlay never stays in the way of the mouse.
 
@@ -148,19 +164,38 @@ The arrangement is kept in Outrider's database, not the config file: to take it 
 
 Each panel has its tick box at the start of its row in Settings → In-game overlay's table (hover its name for what
 it shows; a panel switched off has its row dimmed). The headings are short: hover one for its full meaning.
-Under **Hide when mode**, **Combat** keeps a panel off in your ship while the HUD is in combat mode: it shows only
+Under **Hide in mode**, **Combat** keeps a panel off in your ship while the HUD is in combat mode: it shows only
 in analysis mode, so the screen stays clear in a fight. In the SRV and on foot (no HUD modes there) and over the
 galaxy map it shows as the others. **Docked** hides a panel while you are docked (the ship at a station, a carrier or
 a port, or you on foot in a station, hangar or social space); ticked to start with for the system, Target, Now and
 Bio signals panels, not for the system strip and the alerts. The radar has no Docked box: it shows only on a body's
-surface. The Target panel still shows over the galaxy map while docked, so you see the system you pick. The system, Target and radar
+surface. The Target panel still shows over the galaxy map while docked, so you see the system you pick. **Foot** hides a
+panel on foot, anywhere (in a station or on a planet's surface); none is ticked to start with. The system, Target and radar
 panels start on; the system strip, Now, Bio signals,
 Alerts and Route start off. The **theme** colours and frames the panels as the page's themes do (Elite's orange with
-cut corners, LCARS's bars, ...); **text** is small, normal or large. In the config file (`[overlay]`):
+cut corners, LCARS's bars, ...). In the config file (`[overlay]`):
 `system_seconds` keeps the system panel only that long after arriving (0: while you are in supercruise there), and
 `radar_range` is the radar's edge in metres (it widens to fit a colony ring); `analysis_only` lists the panels
-ticked Combat (`["system", "bio"]`; the Target panel is `body`) and `hide_docked` the ones ticked Docked
-(`["system", "body", "now", "bio"]` when the key is missing).
+ticked Combat (`["system", "bio"]`; the Target panel is `body`), `hide_docked` the ones ticked Docked
+(`["system", "body", "now", "bio"]` when the key is missing) and `hide_on_foot` the ones ticked Foot.
+
+<a id="mouse-lock"></a>**The mouse on foot and in the DSS.** There Elite locks the mouse to its window, and a window
+lying over the game can break that lock on some systems: the cursor runs off the screen while you look around. On
+Linux each panel has a window of its own, only as big as the panel, and none shows while there is nothing to draw (the
+DSS), so the middle of the screen stays Elite's (a panel you drag to the middle would be in the way again). If the
+lock still breaks for you, tick **Hide the overlay on foot and in the DSS** (`hide_mouse_lock`): no overlay at all
+there. The game asks for the lock as you step out or open the DSS, so a change counts from the next time.
+
+<a id="sizes"></a>**Sizes and text.** The row at the top reads **All Panels: Theme · Text Size** (small, normal or large,
+for every panel: `text_size`) **· Scale** (a %, 100 to start: `panel_scale`), with Show test panels and Arrange panels
+on the line under it. Each panel's **Size %** (down to 20 %) is multiplied with the Scale (Scale 100 %: each panel at its own
+size; Scale 50 % and a panel at 50 %: 25 %), and its **Text** column gives it a text size of its own, or "as all
+panels". Panels follow the game window's height, so a panel takes the same share of the screen at 4K as at 1080p: on a
+big TV seen from the sofa, turn the **Scale** down (or Ctrl and wheel over a panel in
+Arrange mode). Text is never drawn smaller than **9 pixels**, whatever the sizes say: a small setting on a 1080p screen
+stays readable, while a 4K screen can go much smaller. While the overlay window draws, each Size % shows what its
+text comes to in the game window ("≈ 11 px text"), or "held at 9 px" when the sizes ask for smaller (the line under the
+table names those panels: your screen is too small to go lower). With the game not running there is no figure.
 
 <a id="keep-showing"></a>**Keep showing when Elite is not the active window** (`show_inactive`, off by default): the
 overlay normally hides as soon as another window is in front, Outrider's page included. With this on it stays over the
@@ -185,8 +220,8 @@ knowing, so it draws over that window too; an XWayland window (most games, Steam
 - **Proton's native Wayland mode** (`PROTON_ENABLE_WAYLAND=1`) makes Elite a native Wayland window, which the overlay
   cannot find or follow: leave it off. Fractional display scaling on Wayland (125%, 150%) may put the panels a little
   off or blur them: not tried yet.
-- **Windows**: the same window (finding Elite's with the Windows API, letting clicks through, always on top), not yet
-  tried against the game. Play borderless; tell us how it goes.
+- **Windows**: the same window (finding Elite's with the Windows API, letting clicks through, always on top), seen
+  working over the game by players on Windows (October 2026). Play borderless or windowed.
 - Exclusive fullscreen and gamescope (the Steam Deck's game mode) are not supported: nothing can draw over them. The
   overlay pill turns red when the game's DisplaySettings.xml says exclusive fullscreen.
 - The window's code for finding and following the game's window, and drawing over it, is adapted from

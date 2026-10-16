@@ -21,15 +21,18 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
 
 - **The strip on top** shows the system, fuel and unsold data, and the link to Outrider in words ("LINKED",
   "LINKED · NO GAME", "UNLINKED · RETRYING").
-- **The pages** are on the left in three groups of four: Explore (Now, Nearby, Here, Bio/Geo), Navigate (Bookmarks,
-  Search, Map, Plot Route) and Records (History, Log, Materials, My firsts). There is no Overview.
+- **The pages** are on the left in three groups: Explore (Now, Nearby, Here, Bio/Geo), Navigate (Bookmarks,
+  Search, Map, Plot Route) and Records (History, Log, Materials, CMDR, My firsts). There is no Overview.
 - **Tap a row** in a table for all of its facts, including the columns too narrow to show, with Show in Here,
-  Bookmark and, on a route's row, a bookmark or a Nearby row (game PC), 🎯 Target. On the galaxy map a tap on a system shows its card,
-  with 🎯 Target when auto-target works on the game PC, and Copy name.
+  Bookmark and, on a route's row, a bookmark or a Nearby row (game PC), **Target** (the galaxy map's destination marker). On the galaxy map a tap on a system shows its card,
+  with **Target** when auto-target works on the game PC, and Copy name.
 - **The maps by touch:** on the galaxy map one finger rotates, two fingers move it and a pinch zooms; on Plot Route's
   map two fingers move and pinch.
 - **On a planet** the tablet switches to Now when the surface map appears (the Now button says MAP) and back to your
-  page when it goes. Nothing else switches pages by itself.
+  page when it goes.
+- **Docking**: when a station or carrier gives you a pad, the tablet switches to Now (PAD 34, where it is, its
+  diagram) and back to your page once you have docked, unless you chose a page meanwhile. Nothing else switches pages
+  by itself.
 - **Alerts** are a banner across the top (red for danger), and the footer has Hush, Status report and the last line
   said.
 - **The voice stays on the PC,** unless you tick **Play alerts here** in the tablet's Settings. Then the tablet speaks
@@ -42,7 +45,9 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
   counts down 5 s when the game is not the active window (see [auto-target](plot-route.md)). Auto honk, auto-target's switch and test, backups and the voice
   settings stay on the PC.
 - **Settings** (bottom right): the theme, a dim switch, the theme's emblem, **Show the game controls** (off: no rail
-  on this tablet and the pages take its width, for a second tablet), Play alerts here and Choose alerts…, the screen size in CSS
+  on this tablet and the pages take its width, for a second tablet), Play alerts here and Choose alerts…, **Voice
+  commands…** (a big sheet listing what you can ask by voice without any AI: what each command does, the phrases that
+  ask it and the words that narrow it, such as "nearest Vista" or "hush until the next jump"), the screen size in CSS
   pixels, the app's version and, in the Android app, its own screens (Server…, Voice…, App menu…), and Sign out when
   Outrider asks for a password.
 - **A smaller tablet** (under 1200 × 700 CSS pixels) gets a compact layout: a narrower page
@@ -60,7 +65,12 @@ for this: see [Other devices on your network](install.md#-other-devices-on-your-
 **The Android app.** [ED Outrider for Android](https://github.com/weslocke/ED-Outrider-Android) shows the tablet layout
 full screen with the screen kept on, signs in once, listens for a wake word ("Hey Vespa", "OK Vespa"; the word and
 its sensitivity are in the app's Voice screen) or a tap on Ask, and can read answers aloud when nothing else speaks.
-Any browser at `/tablet` works too, without the wake word and Ask.
+The app opens no file picker, so the controls that would (Bookmarks → **Import…**, Settings → **Import settings…**)
+are not shown there; a note in their place says to import from a browser on the PC. Nor can it save a file the page
+makes itself, so Settings → **Export settings** and the voice lab's **⬇ Save WAV** are not shown there either (a note
+says to do it from a browser on the PC). Every other export (the CSV and JSON links on Bookmarks, History and the
+other pages) downloads in the app as anywhere.
+Any browser at `/tablet` works too, without the wake word and Ask, and with every control.
 
 The fonts are Antonio and Barlow Condensed, both under the SIL Open Font License and shipped with Outrider, as are the
 other themes' (Michroma, Saira, Orbitron, Exo 2, Russo One, Marcellus, Cinzel, Cormorant Garamond, Share Tech Mono, Rajdhani,

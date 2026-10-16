@@ -28,6 +28,7 @@ import sys
 import time
 
 from . import ROOT
+from . import pads as outrider_pads
 from .riches import left_words, survey_kind
 
 CANVAS_W, CANVAS_H = 1280, 960
@@ -48,11 +49,19 @@ ARRANGE_SECONDS = 600   # Arrange mode ends by itself after this, so the overlay
 # flying (System, Target, Now, Bio): the strip and the alerts still say where you are and what happened
 DOCKED_PANELS = tuple(p for p in PANELS if p != "radar")
 HIDE_DOCKED_DEFAULT = ("system", "body", "now", "bio")
+# [overlay] hide_on_foot (the author, 2026-10-15): the panels hidden on foot (anywhere: a station, a planet's surface), none
+# by default; hide_mouse_lock: the whole overlay off on foot and in the DSS, where Elite locks the mouse (#1: an overlay
+# window over the game broke that lock on the author's Linux PC; the windows only as big as their panels fixed it there)
 DEFAULTS = {"enabled": False, "theme": "default", "text_size": "normal", "system_panel": True, "body_panel": True,
             "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "alerts_panel": False, "route_panel": False, "system_seconds": 0,
-            "radar_range": 800, "analysis_only": [], "hide_docked": list(HIDE_DOCKED_DEFAULT), "show_inactive": False}
+            "radar_range": 800, "analysis_only": [], "hide_docked": list(HIDE_DOCKED_DEFAULT), "show_inactive": False,
+            "panel_scale": 100, "pad_diagram": True, "hide_on_foot": [], "hide_mouse_lock": False}
+# [overlay] panel_scale (a GitHub report, 2026-10-14: too large on a 4K TV): all panels' size in %, on top of each panel's
+# own; Settings -> In-game overlay's All panels, Ctrl + wheel in Arrange mode
+PANEL_SCALE_LIMITS = (20, 250)
 # where each panel starts: a corner of the game window, the offset from it as a share of the window's width (x) and
-# height (y), its size (1 = the canvas's own), its background's opacity (0: text only) and the whole panel's
+# height (y), its size (1 = the canvas's own), its background's opacity (0: text only) and the whole panel's; its own
+# text size ("text": small, normal or large; "" as all panels, [overlay] text_size), added below
 LAYOUT_DEFAULT = {"system": {"corner": "nw", "x": 0.02, "y": 0.16, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
                   "body": {"corner": "ne", "x": 0.02, "y": 0.16, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
                   "radar": {"corner": "se", "x": 0.02, "y": 0.10, "scale": 1.0, "bg": 0.5, "alpha": 1.0},
@@ -62,13 +71,61 @@ LAYOUT_DEFAULT = {"system": {"corner": "nw", "x": 0.02, "y": 0.16, "scale": 1.0,
                   # under the system strip, centred (S26)
                   "alerts": {"corner": "n", "x": 0.0, "y": 0.09, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
                   "route": {"corner": "ne", "x": 0.02, "y": 0.45, "scale": 1.0, "bg": 0.65, "alpha": 1.0}}
-LIMITS = {"x": (0.0, 0.95), "y": (0.0, 0.95), "scale": (0.5, 2.5), "bg": (0.0, 1.0), "alpha": (0.1, 1.0)}
+for _entry in LAYOUT_DEFAULT.values():
+    _entry["text"] = ""   # as all panels: a layout saved before the per-panel text size reads as it drew then
+del _entry
+# the size goes down to 20 % (it stopped at 50 % until the 4K TV report): what keeps a panel readable is MIN_TEXT_PX,
+# in the window's pixels, not a share (50 % of small text is about 7 px on a 1080p window but 13 px on a 4K one)
+LIMITS = {"x": (0.0, 0.95), "y": (0.0, 0.95), "scale": (0.2, 2.5), "bg": (0.0, 1.0), "alpha": (0.1, 1.0)}
 
 # text metrics on the canvas: line heights and an average character width per size (the window's font is close to
 # these; long texts are cut with … to the panel's width rather than run over its edge)
-LINE_H = {"small": 16, "normal": 20, "large": 26}
-CHAR_W = {"small": 6.6, "normal": 8.2, "large": 10.4}
+LINE_H = {"small": 16, "normal": 20, "large": 26, "huge": 56}
+CHAR_W = {"small": 6.6, "normal": 8.2, "large": 10.4, "huge": 26.0}
+# the window's font sizes in canvas units (scaled with the panel); "huge" only for the docking pad's number (#3), not a
+# text size a player picks (SIZES)
+FONT_PX = {"small": 12, "normal": 15, "large": 19, "huge": 48}
 PAD = 10
+MIN_TEXT_PX = 9   # the window never draws a panel's text smaller than this many pixels, whatever the sizes say
+
+
+def base_scale(win_h):
+    """Canvas units to window pixels: the 960-unit-high canvas fits the game window's height."""
+    return max(0.1, win_h / CANVAS_H)
+
+
+def effective_scale(win_h, panel_scale, size, smallest_font):
+    """Canvas units to window pixels for one panel: base_scale(win_h) times all panels' size (panel_scale, 1 = 100 %)
+    times the panel's own (size, its layout's scale), raised to the least that draws its smallest text (smallest_font,
+    canvas units: FONT_PX) at MIN_TEXT_PX, so a small setting stays readable on a small window while a 4K one can go
+    much smaller. smallest_font None (no text): no floor."""
+    s = base_scale(win_h) * panel_scale * size
+    return max(s, MIN_TEXT_PX / smallest_font) if smallest_font else s
+
+
+def smallest_font(panel):
+    """The smallest text a panel's items draw, in canvas units (FONT_PX of their sizes); None with no text."""
+    sizes = []
+    for it in panel.get("items") or []:
+        if it.get("t") == "text":
+            sizes.append(it.get("size"))
+        elif it.get("t") == "runs":
+            sizes += [r[2] for r in it.get("runs") or [] if len(r) > 2]
+    return min((FONT_PX.get(x, FONT_PX["normal"]) for x in sizes), default=None)
+
+
+def panel_font(pid, size):
+    """The smallest text panel `pid` draws at text size `size`, as smallest_font finds it in the panel (the radar's
+    labels are small whatever the size): for Settings' figure, before the panel is built."""
+    return FONT_PX["small"] if pid == "radar" else FONT_PX.get(size, FONT_PX["normal"])
+
+
+def text_px(win_h, panel_scale, size, font):
+    """Settings' figure for one panel: (the height of its smallest text in the game window's pixels, held: raised to
+    MIN_TEXT_PX because the sizes would draw it smaller)."""
+    want = base_scale(win_h) * panel_scale * size * font
+    got = effective_scale(win_h, panel_scale, size, font) * font
+    return round(got), got > want + 1e-9
 
 # the Default theme's colours: the page's dark ones (page.css :root), the title in its info blue
 DEFAULT_PALETTE = {"title": "#6AA8FF", "text": "#D8DDE4", "muted": "#7D8794", "good": "#5CC98A", "warn": "#E3B341",
@@ -151,7 +208,7 @@ def overlay_settings(cfg):
         _warn("must be a section (a table of settings); ignored")
     out = dict(DEFAULTS)
     for key in ("enabled", "system_panel", "body_panel", "radar", "strip_panel", "now_panel", "bio_panel", "alerts_panel", "route_panel",
-                "show_inactive"):
+                "show_inactive", "pad_diagram", "hide_mouse_lock"):
         v = o.get(key)
         if v is None:
             continue
@@ -167,7 +224,7 @@ def overlay_settings(cfg):
             out[key] = v.strip().lower()
         else:
             _warn(f"{key} = {v!r} must be one of {', '.join(allowed)}; using {DEFAULTS[key]!r}")
-    for key, lo, hi in (("system_seconds", 0, 3600), ("radar_range", 100, 20000)):
+    for key, lo, hi in (("system_seconds", 0, 3600), ("radar_range", 100, 20000), ("panel_scale", *PANEL_SCALE_LIMITS)):
         v = o.get(key)
         if v is None:
             continue
@@ -177,6 +234,7 @@ def overlay_settings(cfg):
             _warn(f"{key} = {v!r} must be a number; using {DEFAULTS[key]}")
     out["analysis_only"] = analysis_list(o.get("analysis_only"), _warn)
     out["hide_docked"] = docked_list(o.get("hide_docked"), _warn)
+    out["hide_on_foot"] = foot_list(o.get("hide_on_foot"), _warn)
     return {"overlay": out}
 
 
@@ -207,6 +265,11 @@ def docked_list(v, warn=None):
     is never one: it shows only on a body's surface); HIDE_DOCKED_DEFAULT when the key is missing, so a config written
     before it hides what Outrider hid then (Now and the Target panel) and the System and Bio panels too."""
     return panel_list("hide_docked", v, warn, HIDE_DOCKED_DEFAULT, DOCKED_PANELS)
+
+
+def foot_list(v, warn=None):
+    """[overlay] hide_on_foot (the author, 2026-10-15): the panels hidden on foot, any of PANELS; none when missing."""
+    return panel_list("hide_on_foot", v, warn)
 
 
 # ---- the page's overlay pill (S8): how the overlay is doing, in one word and a reason ----
@@ -307,6 +370,8 @@ def clean_layout(raw):
         got = raw.get(panel) if isinstance(raw.get(panel), dict) else {}
         if got.get("corner") in CORNERS:
             keys["corner"] = got["corner"]
+        if got.get("text") in SIZES:
+            keys["text"] = got["text"]
         for k, (lo, hi) in LIMITS.items():
             v = _num(got.get(k), lo, hi)
             if v is not None:
@@ -331,6 +396,10 @@ def layout_update(current, change):
                 if v not in CORNERS:
                     return None, f"{panel}.corner must be one of {', '.join(CORNERS)}"
                 new[panel]["corner"] = v
+            elif k == "text":   # the panel's own text size, "" (or null): as all panels
+                if v not in SIZES and v not in ("", None):
+                    return None, f"{panel}.text must be one of {', '.join(SIZES)} or \"\" (as all panels)"
+                new[panel]["text"] = v or ""
             elif k in LIMITS:
                 n = _num(v, *LIMITS[k])
                 if n is None:
@@ -365,7 +434,7 @@ def marker(x, y, kind, c, r=6, rot=0):
 
 def runs(x, y, parts, align="left"):
     """A line of (text, colour, size, bold) parts set one after another by the window, with the font's real widths;
-    align "center": x is the line's middle."""
+    align "center": x is the line's middle, "right" its right end."""
     out = {"t": "runs", "x": round(x, 1), "y": round(y, 1), "runs": [[str(s), c, size, bool(b)] for s, c, size, b in parts]}
     if align != "left":
         out["align"] = align
@@ -736,12 +805,26 @@ def star_words(code):
     return words + (" ⛽" if c[:1] in "KGBFOAM" and len(c.split("_")[0]) == 1 else "")
 
 
+# your reputation with a faction by the journal's MyReputation (-100..100), as the game's levels (Inara's thresholds)
+REP_LEVELS = ((-90, "Hostile"), (-35, "Unfriendly"), (4, "Neutral"), (35, "Cordial"), (90, "Friendly"))
+
+
+def rep_level(rep):
+    """The game's word for a MyReputation figure: Hostile, Unfriendly, Neutral, Cordial, Friendly or Allied; None
+    without one."""
+    if not isinstance(rep, (int, float)) or isinstance(rep, bool):
+        return None
+    return next((word for top, word in REP_LEVELS if rep <= top), "Allied")
+
+
 def strip_panel(info, pal, size="normal"):
     """The system strip: two short lines across the top, centred in their box. Line 1: the system, its region, the
     star. Line 2: the distance from Sol, now and max, your first discovery; then bodies, found of total, discovered by
-    you, mapped of planets, whether Spansh knows the system (the author, 2026-10-10). info: {name, region, star, sol_ly,
-    total, found, all_found, honked, value_now, value_max, first, firsts, mapped, planets, in_spansh}. Its width follows
-    its text."""
+    you, mapped of planets, whether Spansh knows the system (the author, 2026-10-10). In a populated system the top
+    row's right side has its security and your reputation with its controlling faction, in the region's font, Hostile
+    in red (the author, 2026-10-14). info: {name, region, star, sol_ly, total, found, all_found, honked, value_now,
+    value_max, first, firsts, mapped, planets, in_spansh, standing: {security, faction, rep}}. Its width follows its
+    text."""
     if not info or not info.get("name"):
         return None
     sep = ("  ·  ", pal["muted"], size, False)
@@ -769,10 +852,20 @@ def strip_panel(info, pal, size="normal"):
         rest.append(("Spansh ✓" if info["in_spansh"] else "Spansh ✗ (new to it)", "muted" if info["in_spansh"] else "warn"))
     two = line(None, rest)
     lines = [one] + ([two] if two else [])
-    width = round(min(CANVAS_W - 40, PAD * 2 + 10 + max(sum(text_width(t, s) for t, _, s, _ in ln) for ln in lines)))
+    st = info.get("standing") or {}
+    level = rep_level(st.get("rep"))
+    right = [(x, pal["bad"] if x == "Hostile" else pal["muted"], size, False)
+             for x in ([st["security"]] if st.get("security") else []) + ([level] if level else [])]
+    right = [p for i, part in enumerate(right) for p in ([sep, part] if i else [part])]
+    wide = lambda ln: sum(text_width(t, s) for t, _, s, _ in ln)
+    # the top row stays centred: room for the right side on both sides of it, so the two never meet
+    need = max([wide(ln) for ln in lines] + ([wide(one) + 2 * (wide(right) + 24)] if right else []))
+    width = round(min(CANVAS_W - 40, PAD * 2 + 10 + need))
     items, y = [], PAD - 2
     for i, ln in enumerate(lines):
         items.append(runs(width / 2, y, ln, align="center"))
+        if i == 0 and right:   # level with the region's line: the large name's row, its baseline lower
+            items.append(runs(width - PAD - 4, y + (LINE_H["large"] - LINE_H.get(size, 20)) / 2 + 1, right, align="right"))
         y += LINE_H["large"] if i == 0 else LINE_H.get(size, 20)
     return {"id": "strip", "w": round(width), "h": round(y + PAD - 4), "bg": pal["panel"], "frame": pal["frame"],
             "style": pal.get("style", "rounded"), "accent": pal["title"], "items": items}
@@ -853,6 +946,99 @@ def target_system_panel(t, pal, size="normal"):
     if row:
         rows += flow(row, room, size)
     return text_panel("body", "➜ " + t["name"], rows, pal, width=TARGET_W, size=size)
+
+
+PAD_W = 300
+SLOT_GREEN, SLOT_RED = "#3AD16B", "#E0453A"   # the slot's own lights: green and red whatever the theme
+
+
+def pad_map_items(m, pal, x0, y0, w):
+    """The pad diagram (#12) as draw items in a box `w` wide from (x0, y0), and its height: a starport seen from the slot
+    looking in (12 wall sectors, 3 depths, outside near the slot; the slot's lights across the far wall, green on the
+    right as the words assume) or a carrier from above, bow up (a squadron carrier's two decks side by side), your pad
+    filled in. m: outrider.pads.where's map ({kind, pad, pads, outline: a carrier deck's})."""
+    items, pad = [], m.get("pad")
+    if m.get("kind") == "starport":
+        import outrider.pads as P
+        R = min(w / 2 - 6, 110)
+        cx, cy = x0 + w / 2, y0 + R + 2
+        for k, sc in enumerate(P.SHELLS):
+            r = R * sc
+            pts = [(cx + math.cos(math.radians(15 + 30 * j)) * r, cy + math.sin(math.radians(15 + 30 * j)) * r) for j in range(13)]
+            items.append(line(pts, pal["frame"] if k else pal["muted"], 1))
+        for j in range(12):
+            a = math.radians(15 + 30 * j)
+            r0 = R * P.SHELLS[-1]
+            items.append(line([(cx + math.cos(a) * r0, cy + math.sin(a) * r0), (cx + math.cos(a) * R, cy + math.sin(a) * R)],
+                              pal["frame"], 1))
+        slot = R * P.SHELLS[-1] * 0.8
+        items.append(line([(cx - slot, cy), (cx - 2, cy)], SLOT_RED, 3))
+        items.append(line([(cx + 2, cy), (cx + slot, cy)], SLOT_GREEN, 3))
+        for n, (sec, d, k, of) in enumerate(m.get("pads") or [], 1):
+            dx, dy = P.SECTORS[sec]
+            r = R * (P.SHELLS[d] + P.SHELLS[d + 1]) / 2
+            a = math.atan2(dy, dx) + (k - (of + 1) / 2) * math.radians(9)
+            x, y = cx + math.cos(a) * r, cy + math.sin(a) * r
+            me = n == pad
+            items.append(circle(x, y, 9 if me else 3.2, pal["good"] if me else pal["muted"], pal["good"] if me else None, 2 if me else 1))
+            if me:
+                items.append(runs(x, y - 7, [(str(pad), pal["panel"], "small", True)], align="center"))
+        items.append(runs(cx, cy + R + 4, [("seen from the slot, looking in", pal["muted"], "small", False)], align="center"))
+        return items, 2 * R + 6 + LINE_H["small"]
+    boxes = m.get("pads") or []
+    if not boxes:
+        return items, 0
+    decks = (26, -26) if m.get("kind") == "squadron" else (0,)
+    span = 52 * len(decks) + 4
+    u = min(2.6, (w - 8) / span)
+    cx, top = x0 + w / 2, y0 + LINE_H["small"]
+    outline = m.get("outline") or [list(p) for p in outrider_pads.CARRIER_OUTLINE]
+    cy = top + 46 * u
+    items.append(runs(cx, y0, [("bow ▲", pal["muted"], "small", False)], align="center"))
+    for xo in decks:
+        hx = cx + xo * u
+        items.append(line([(hx + px * u, cy + py * u) for px, py in [*outline, outline[0]]], pal["muted"], 1))
+    for n, (x, y, bw, bh) in enumerate(boxes, 1):
+        me = n == pad
+        items.append(rect(cx + x * u, cy + y * u, bw * u, bh * u, pal["good"] if me else pal["frame"], pal["good"] if me else None,
+                          2 if me else 1))
+        if me or bw >= 7:   # the small pads are too small to number, but yours
+            items.append(runs(cx + (x + bw / 2) * u, cy + (y + bh / 2) * u - 8,
+                              [(str(n), pal["panel"] if me else pal["muted"], "small", me)], align="center"))
+    return items, LINE_H["small"] + 86 * u + 4
+
+
+def pad_panel(d, pal, size="normal", pid="radar"):
+    """The Surface radar's place while docking (#3, the author 2026-10-14: the pad number in large letters; at first the
+    Target panel's, moved the same day: the radar's place is free in space), panel id `pid`: the station's name,
+    then "PAD 34" (FONT_PX huge); #12: where it is ("at the back · up on your right") and, at a starport or carrier
+    with [overlay] pad_diagram on, the diagram (pad_map_items). A refusal: "Docking denied" and its words. d:
+    State.docking_shown's. None without either."""
+    if not d:
+        return None
+    station = d.get("station") or "Docking"
+    if d.get("pad") is not None:
+        p = text_panel(pid, "🛬 " + station, [], pal, width=PAD_W, size=size)
+        y = p["h"] - PAD + 2
+        p["items"].append(runs(PAD_W / 2, y, [(f"PAD {d['pad']}", pal["good"], "huge", True)], align="center"))
+        y += LINE_H["huge"]
+        if d.get("where"):
+            for row in flow([((" " if i else "") + x, "text") for i, x in enumerate(d["where"].split())], PAD_W - 2 * PAD, size):
+                p["items"].append(runs(PAD_W / 2, y, [(t, pal["text"], size, False) for t, _ in row], align="center"))
+                y += LINE_H[size]
+            y += 6
+        if d.get("map"):
+            items, h = pad_map_items(d["map"], pal, PAD, y, PAD_W - 2 * PAD)
+            p["items"] += items
+            y += h
+        p["h"] = round(y + PAD)
+        return p
+    if d.get("words"):
+        words = d["words"].split()   # word by word, so the reason wraps rather than being cut with …
+        rows = [[("Docking denied", "bad")]] + flow([((" " if i else "") + w, "warn") for i, w in enumerate(words)],
+                                                    PAD_W - 2 * PAD, size)
+        return text_panel(pid, "🛬 " + station, rows, pal, width=PAD_W, size=size)
+    return None
 
 
 # ---- the Now panel: the page's Now view, condensed (the author, 2026-10-10) ----
@@ -1560,23 +1746,27 @@ def route_panel(info, pal, size="normal", max_rows=6):
 
 
 def test_panels(pal, size="normal", radar_range=800):
-    """Every panel with made-up contents ("Show test panels" in Settings, and the window's Arrange mode)."""
+    """Every panel with made-up contents ("Show test panels" in Settings, and the window's Arrange mode). size: one text
+    size for all, or {panel id: size} (each panel's own, State.overlay_sizes)."""
+    sizes = size if isinstance(size, dict) else {}
+    one = size if isinstance(size, str) else "normal"
     system = text_panel("system", "Test Sector AB-C d1-2", [
         {"left": [("A 3 ", "title"), ("Water world, terraformable", "text")], "right": ("TO MAP 2.4M", "warn")},
         {"left": [("B 1 ", "title"), ("Bacterium · Stratum", "text")], "right": ("TO LAND 19.0M", "warn")},
         {"left": [("A 1 ", "title"), ("High metal content", "muted")], "right": ("MAPPED", "good")},
         "rule",
         [("Left here: ", "muted"), ("21.4M", "accent"), (" · 9 bodies not listed", "muted")],
-    ], pal, width=420, size=size, subtitle="test panel")
+    ], pal, width=420, size=sizes.get("system", one), subtitle="test panel")
     # the Target panel's system (a body you are at or have targeted shows as the body panel did)
     body = target_system_panel({"name": "Test Sector AB-C d1-3", "status": "partial", "known": 3, "count": 12,
                                 "edsm": {"known": 5, "count": 12}, "star_class": "N", "remaining": 4,
                                 "hop": {"ly": 38.2, "fuel": 2.9, "left": 3, "reach": True},
-                                "value": {"carto": 12_300_000, "bio": 40_000_000}, "notable": {"WW": 1, "T": 2}}, pal, size)
-    body["items"][0]["runs"].append(["  test panel", pal["muted"], size, False])
+                                "value": {"carto": 12_300_000, "bio": 40_000_000}, "notable": {"WW": 1, "T": 2}}, pal,
+                               sizes.get("body", one))
+    body["items"][0]["runs"].append(["  test panel", pal["muted"], sizes.get("body", one), False])
     strip = strip_panel({"name": "Test Sector AB-C d1-2", "region": "Inner Orion Spur", "sol_ly": 5411, "star": "K",
                          "found": 12, "total": 14, "honked": True, "value_now": 2_100_000, "value_max": 35_100_000,
-                         "first": True, "firsts": 12, "mapped": 3, "planets": 11, "in_spansh": False}, pal, size)
+                         "first": True, "firsts": 12, "mapped": 3, "planets": 11, "in_spansh": False}, pal, sizes.get("strip", one))
     now = now_panel({"name": "Test Sector AB-C d1-2", "now": 0, "detail_ready": True, "value_now": 2_100_000,
                      "target": {"name": "Test Sector AB-C d1-3", "status": "unreported", "star_class": "K"},
                      "fuel": {"live": True, "pct": 64, "jumps_max": 9, "since_scoop": 3},
@@ -1586,8 +1776,8 @@ def test_panels(pal, size="normal", radar_range=800):
                          {"body": "B 1", "genera": ["Stratum"], "partial": {}, "potential": 19_000_000, "factor": 1, "dist_ls": 50,
                           "gravity": 0.42, "atmosphere": "Neon", "codex_galaxy": True},
                          {"body": "B 2", "genera": ["Bacterium"], "partial": {}, "potential": 12_000_000, "factor": 1, "dist_ls": 70}]},
-                     "this_session": {"start": None, "jumps": 28, "ly": 1540, "firsts": 12, "samples": 6}}, pal, size)
-    now["items"][0]["runs"].append(["  test panel", pal["muted"], size, False])
+                     "this_session": {"start": None, "jumps": 28, "ly": 1540, "firsts": 12, "samples": 6}}, pal, sizes.get("now", one))
+    now["items"][0]["runs"].append(["  test panel", pal["muted"], sizes.get("now", one), False])
     bio = bio_panel({"bodies": [
         {"name": "B 1", "type": "Planet", "bio": 2, "gravity": 0.42, "dist_ls": 50, "genera": ["Stratum", "Bacterium"],
          "value_parts": {"bio_left": 20_000_000, "bio_factor": 1},
@@ -1600,8 +1790,8 @@ def test_panels(pal, size="normal", radar_range=800):
         {"name": "A 1", "type": "Planet", "bio": 1, "gravity": 0.39, "dist_ls": 335, "genera": ["Bacterium"],
          "value_parts": {"bio_left": 0, "bio_factor": 5},
          "organics": [{"genus": "Bacterium", "species": "Bacterium Acies", "variant": "Bacterium Acies - Cyan", "samples": 3,
-                       "done": True, "value": 1_000_000}]}]}, pal, size)
-    bio["items"][0]["runs"].append(["  test panel", pal["muted"], size, False])
+                       "done": True, "value": 1_000_000}]}]}, pal, sizes.get("bio", one))
+    bio["items"][0]["runs"].append(["  test panel", pal["muted"], sizes.get("bio", one), False])
     route = route_panel({"to": "Test Sector AB-C d1-9", "route": {"ly": 412.6, "next_scoop": 2, "longest_dry": 2, "hops": [
         {"name": "Test Sector AB-C d1-3", "star_class": "N", "scoopable": False, "ly": 58.2, "visited": False, "known": False},
         {"name": "Test Sector AB-C d1-4", "star_class": "K", "scoopable": True, "ly": 61.0, "visited": False, "known": True},
@@ -1611,12 +1801,12 @@ def test_panels(pal, size="normal", radar_range=800):
         {"name": "Test Sector AB-C d1-8", "star_class": "G", "scoopable": True, "ly": 58.8, "visited": False, "known": True},
         {"name": "Test Sector AB-C d1-9", "star_class": "K", "scoopable": True, "ly": 57.0, "visited": False, "known": True}]},
         "highway": {"destination": "Test End", "next": {"name": "Test Stop 38", "neutron": True, "distance": 4.2},
-                    "jumps_left": 361, "ly_left": 21500, "refuel_in": 3, "off_route": False, "complete": False}}, pal, size)
-    route["items"][0]["runs"].append(["  test panel", pal["muted"], size, False])
+                    "jumps_left": 361, "ly_left": 21500, "refuel_in": 3, "off_route": False, "complete": False}}, pal, sizes.get("route", one))
+    route["items"][0]["runs"].append(["  test panel", pal["muted"], sizes.get("route", one), False])
     alerts = alerts_panel([{"kind": "find", "title": "B 1: Earth-like world (test panel)", "body": "2.4M cr scanned and mapped",
                             "danger": False, "t": 0},
-                           {"kind": "hull", "title": "Interdicted", "body": "you submitted", "danger": True, "t": 0}], pal, size, now=0)
-    return [system, body, radar_test(pal, size, radar_range), strip, now, bio, alerts, route]
+                           {"kind": "hull", "title": "Interdicted", "body": "you submitted", "danger": True, "t": 0}], pal, sizes.get("alerts", one), now=0)
+    return [system, body, radar_test(pal, sizes.get("radar", one), radar_range), strip, now, bio, alerts, route]
 
 
 def radar_test(pal, size="normal", radar_range=800):

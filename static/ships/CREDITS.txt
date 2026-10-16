@@ -1,0 +1,46 @@
+Ship pictures shown in the CMDR tab's Inventory on a hover (a tap on the tablet): <symbol>.webp, one per hull, named
+by the journal's ship symbol (krait_light.webp, explorer_nx.webp...).
+Unofficial, non-commercial fan use: the ships' designs belong to Frontier Developments plc, and ED Outrider is not
+affiliated with Frontier. These files are not under the project's GPL: they keep the terms given here.
+
+Source
+  Rendered from Elite Dangerous Almanac's ship illustrations (assets/ships/<Symbol>/illustration.svg), drawn by that
+  project from each ship's 3D model: https://github.com/Elite-Dangerous-Almanac/Almanac-Core at commit
+  5da3bfca20aba4bb39332628e220ea2acb5dbcd9 (2026-09-26). Each SVG was drawn at 600 x 400 on a transparent background
+  and saved as WebP by scripts/build_ship_images.py; nothing else of Almanac's is used (none of its data files).
+
+Frontier's media usage rules
+  Almanac's ATTRIBUTIONS.md says the ship illustrations are the property of Frontier Developments plc, used under
+  Frontier's media usage rules (https://forums.frontier.co.uk/threads/elite-dangerous-media-usage-rules.510879/,
+  https://customersupport.frontier.co.uk/hc/en-us/articles/4404292442642-How-can-I-use-Elite-Dangerous-media), and
+  asks those who pass them on to carry the same notice:
+
+    ED Outrider was created using assets and imagery from Elite Dangerous, with the permission of Frontier
+    Developments plc, for non-commercial purposes. It is not endorsed by nor reflects the views or opinions of
+    Frontier Developments and no employee of Frontier Developments was involved in the making of it.
+
+Elite Dangerous Almanac's licence
+  Almanac's own work is MIT-licensed (its LICENSE; that licence does not cover Frontier's game data or imagery). Its
+  notice, as its terms require:
+
+    MIT License
+
+    Copyright (c) 2026 Elite Dangerous Community
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.

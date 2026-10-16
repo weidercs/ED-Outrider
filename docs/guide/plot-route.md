@@ -22,6 +22,13 @@ route (any of the others), each until you plot another of its kind or **Clear ro
   scoopable star on the way; left empty, it refuels only where the tank needs it.
 - **Ship.** Any ship you have flown, as of its latest Loadout. The neutron plotter's **Range** starts at that
   ship's laden range; type another to override it.
+- **📋 paste** beside From, To and a trade route's Station fills the field with the name on the **game PC's**
+  clipboard (copied from EDSM, Spansh or anywhere), for a window that never takes focus (a touchscreen beside the game)
+  or the Android app, where typing is awkward. It only fills: nothing is plotted until you press Plot. Shown in the game
+  PC's own browser and the Android app only (not in other browsers on your network), and only for one short line of
+  text (a paragraph or a link is refused). Linux needs `wl-paste` (Wayland) or `xclip` (X11), the same packages that
+  copy the next system; Search's Find a system by name and the Nearby Focus/Lock, Search and Nearest "a system…"
+  boxes have one too.
 - **Conservative range** (off by default): jumps a margin (5 ly) shorter than the ship's range, leaving room for a
   fuller tank.
 - **A system Spansh doesn't know yet.** Spansh can only plot between systems it has heard of, and a system you
@@ -113,20 +120,22 @@ route's heading name it. A sweep takes up to 100 systems and replaces the survey
 **Trade.** The last plotter: Spansh's trade planner, station-to-station hops from where you are docked, in the
 same place as the survey routes (one of them at a time). See [Trading](cargo-and-trading.md#-trading).
 
-**The route line and 🎯.** The line under the tiles shows the next stop of whichever route the tab shows (🛣 the
-Highway, 💰 Road to Riches, 🧬 Exomastery, 🌍 Earth-like worlds, 🧪 ammonia worlds, 🧹 a sweep, 💱 a trade route). The
+**The route line and 🎯.** The line under the tiles (on every tab) shows the next stop of whichever route the tab shows (🛣 the
+Highway, 💰 Road to Riches, 🧬 Exomastery, 🌍 Earth-like worlds, 🧪 ammonia worlds, 🧹 a sweep, 💱 a trade route), its
+"Next:" after the galaxy map's **waypoint** marker. The page draws the target button (🎯 in these notes and in
+notifications) as the galaxy map's own **destination** marker, in the text's colour. The
 **In-Game Route:** line above it is the game's own
 route, the one plotted in the galaxy map: it can differ from Outrider's until 🎯 targets the next stop, which has the
 game plot its route there. A 🎯 beside that next system, and beside every system in the tab's lists,
 targets it in the galaxy map for you (Outrider brings the game to the front itself where it can, else
-after a 5 s countdown to click back into the game; on the tablet, the row's sheet has 🎯 Target). The same 🎯 sits beside your carrier's system on the Carrier tile while it is elsewhere,
+after a 5 s countdown to click back into the game; on the tablet, the row's sheet has **Target**). The same 🎯 sits beside your carrier's system on the Carrier tile while it is elsewhere,
 and beside a boxel's Next and its rows (see [Boxel exploration](views.md#-boxel-exploration), whose opt-in **auto-target
 the next on arrival** uses the same run).
 
 **Where a 🎯 shows.** Every 🎯, wherever it is, follows one rule: it shows only on the game PC and only when
 auto-target can work there (the virtual keyboard open and every key it needs bound; whether **Auto-target after a
 supercharge** is ticked does not matter). Anywhere else there is no 🎯 at all, rather than a button that cannot work:
-on a server, without the keyboard, or while the box below lists a missing binding (then **🎯 target next** in the box
+on a server, without the keyboard, or while the box below lists a missing binding (then **target next** in the box
 is greyed out too, and a failed row gets no ⟳ Retry).
 
 **🎯 and Plot route anywhere.** A 🎯 also sits beside each bookmark, the header's next stop, the Nearest finder's rows
@@ -175,7 +184,7 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
     **the keys go to whichever window has focus**: stay in the game until it is done.
 - The log gets one line per run ("highway auto-target: targeted Hwy Stop 38"); every step is printed only when it
   fails.
-- **🎯 Target next** (in the box, and beside "Next:" in the route line on Overview, Nearby, Here and Now) does the same
+- **🎯 Target next** (in the box, and beside "Next:" in the route line under the tiles, on every tab, and on Now) does the same
   on demand, whether or not auto-target is on: the next route system, or off the route the closest one, at once when
   it brings the game to the front, else after a 5-second countdown to click back into the game. A failed run puts
   **⟳ Retry** on its route row.

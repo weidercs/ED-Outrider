@@ -1,5 +1,8 @@
 # ED Outrider: Python 3.11 or newer.
 aiohttp>=3.9
+# Mozilla's root certificates, added to this PC's own for every HTTPS request (outrider/tls.py): Windows only fetches a
+# new root when something asks it to, so without these a site on a newer root fails with "certificate has expired"
+certifi>=2024.7.4
 
 # Spoken alerts with a natural voice (optional: without it the page uses the browser's own speech).
 # Pulls in onnxruntime, about 100 MB. See outrider/tts.py.

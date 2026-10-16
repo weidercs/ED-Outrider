@@ -118,6 +118,7 @@ even for systems Spansh has never heard of. Your own data wins where both exist.
 Each row shows how much is known about the system:
 
   unreported    only seen in your own NavRoute.json, nobody has reported any bodies
+  not looked up only seen in your own NavRoute.json, and Spansh's answer did not cover it (unreachable, a busy region)
   no scan data  the system is known (route plot or a jump) but nothing scanned
   NN% scanned   some bodies known, fewer than the system's FSS body count
   fully scanned every body known
@@ -203,13 +204,15 @@ import outrider.config_edit  # the Settings dialog's Server settings: every conf
 import outrider.mcp        # the MCP bridge's [mcp] settings (the bridge itself runs as python3 -m outrider.mcp)
 import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live gate, the outbox
 import outrider.galnet     # the fork's GalNet News: Frontier's feed as articles, and the systems they mention
-import outrider.commander  # the fork's Commander view: inventory, engineering, missions, combat and mining sessions
+import outrider.engineers  # the fork's engineers beside the CMDR tab: systems, distances, Load my ship, the trip
 import outrider.navroute   # the fork's Game Route list: the game's own route, jump by jump (pure)
 import outrider.shipinfo   # the fork's Ship view: the Loadout as figures and modules with their engineering
 import outrider.biohunt    # the fork's Unscanned (bio) plotter: mass codes, the odds, the pick of each hop (pure)
 import outrider.eddn       # EDDN's messages from journal events, and what its answers mean
 import outrider.edsm       # EDSM's journal upload: the events with where you were, and what its answers mean
 import outrider.inara      # Inara's commander profile: travel, ranks, ships, inventory..., and what its answers mean
+import outrider.commander  # the Commander view: the commander, inventory, engineering, missions, sessions (folds of the journal)
+import outrider.earnings   # the Commander view's Earnings: what exploration, exobiology and mining paid (pure, + its SQL)
 import outrider.readclient  # EDSM's and Inara's account reads (G3): the key checks, EDSM's flight log
 import outrider.backfill   # filling a gap in EDSM's flight log (S47): the events rebuilt from the journals (pure)
 import outrider.edsmlog    # your EDSM flight log from before your journals (S67): kept entries, which count as visits
@@ -220,11 +223,13 @@ import outrider.overlay_runner  # Outrider runs that window itself on the game P
 import outrider.ggg        # potential green gas giants: the community's seven-layer ladder model (pure)
 import outrider.serverlog  # Outrider's own log: the terminal's lines kept for Show log and in <db dir>/outrider.log
 import outrider.notices    # the notices banner: start-up problems shown on every page until fixed or dismissed
+import outrider.pads       # where your landing pad is: starport and carrier layouts, the words, the diagrams (#12; pure)
 import outrider.boxel      # boxel exploration: the cube a procedural name places a system in, its systems, its id64s (pure)
 import outrider.codex_bodies  # star and planet types as codex entries: what a body would log (pure)
 import outrider.codex_geo  # geology as codex entries: what a body's volcanism could log (pure)
 import outrider.service    # Install as a service (S70): a systemd user unit on Linux, a Startup .cmd on Windows
 import outrider.health     # what kind of failure a call to an outside service met (dns, offline, timeout, http5xx...)
+import outrider.tls        # the one TLS context of every outgoing HTTPS connection: the system store plus certifi's
 from outrider.core import iso_ts, ts_seconds   # journal timestamps
 from outrider.fsd import (   # the frame shift drive's maths: range, fuel per jump, the fuel model, fleet figures
     FSD_RANGE_MODS, GUARDIAN_BOOST, conservative_optimal_mass, conservative_range, fleet_figures, fleet_range, fsd_range,
@@ -390,8 +395,21 @@ UNSOLD_LOG = 3             # recent unsold estimates kept to stamp a sale with t
 NO_DUMP_RETRY = 3600       # s: a dump 404 for a system whose search lists bodies is asked again after this
 DUMP_MAX_TRIES = 5         # body-detail fetches for one system before we stop asking (this stay)
 RETRY_SAY_S = 1.0          # s: a Nearby retry says "asking Spansh again" only once its search has been out this long
+# Nearby's Around (2026-10-14, the ideas of Rainmangames' PR #8): where its sphere is. "here" follows you; "destination",
+# "carrier" and "next_stop" follow what they name (a new sphere when that changes); "lock" pins where you were when you
+# chose it, "system" a system by name (both kept with their coordinates). Saved in meta near_around (live-only)
+NEAR_AROUND_KINDS = ("here", "destination", "carrier", "next_stop", "lock", "system")
+NEAR_MISS_RETRY_S = 10     # s: Nearby's Around that cannot be placed is worked out again after this (the carrier's
+                           # or a target's place is often learnt a moment later, under the same id64)
+NEAR_REFRESH_GAP_S = 120   # s: Nearby's ↻ refresh asks Spansh again no sooner than this after its last ask (a free service)
 REPORTED_MAX_AGE = 86400   # s: the species reported on your system's bodies (S23) are asked for again after a day
 REPORTED_RETRY_S = 600     # s: ...and after a failed ask, not before this
+ROUTE_LOOKUP_MAX = 24      # hops of the game's route asked of Spansh at once (the In-Game Route strip shows 24 chips)
+ROUTE_LOOKUP_KEEP_S = 86400   # s: Spansh's answer for a route hop (has it or not) is trusted this long
+ROUTE_LOOKUP_RETRY_S = 300    # s: after a failed hop lookup, not asked again before this
+# the populated regions, where Spansh knows every system and its records are heavy (Sol and Colonia: ~190 KB for the
+# two): a route hop inside one is never looked up (the author, 2026-10-14). (x, y, z, radius ly)
+ROUTE_LOOKUP_SKIP = ((0.0, 0.0, 0.0, 1000.0), (-9530.5, -910.28125, 19808.125, 500.0))
 CHECKLIST_FIND_LY = 20000  # ly: S29's search for the nearest reported bodies of a species (sorted nearest first)
 CHECKLIST_FIND_ROWS = 25   # bodies asked for (one page)
 CHECKLIST_FIND_KEEP_S = 600   # s: the same species, colour and place answered from memory, not asked again
@@ -586,6 +604,7 @@ def simulate_keyboard_off(honker, why="--simulate"):
 
 
 NOT_GAME_PC = "needs Outrider on the PC the game runs on (this one is a server: [server] game_pc)"
+PASTE_DEVICES = "📋 reads the game PC's clipboard for that PC's own browser and the Android app only"
 
 
 def in_container(dockerenv="/.dockerenv", env=None):
@@ -1028,6 +1047,7 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         "voices_loaded": VOICES_LOADED if spk.get("voices_loaded") is None else
         num("speech", spk, "voices_loaded", _config_voices_loaded, outrider.tts.VOICES_LOADED_DEFAULT),
         "voices_preload": flag("speech", spk, "voices_preload", VOICES_PRELOAD),
+        "pad_delay": int(min(PAD_DELAY_MAX, max(0, num("speech", spk, "pad_delay", int, GRANT_SAY_DELAY_S)))),
         # your own alert sounds: <name>.wav files replacing sounds.json's (review S16); "" for none
         "sound_dir": os.path.join(SCRIPT_DIR, os.path.expanduser(str(spk["sound_dir"])))
                      if isinstance(spk.get("sound_dir"), str) and spk["sound_dir"].strip() else "",
@@ -1176,6 +1196,7 @@ watch_firsts = {"true" if st["watch_firsts"] else "false"}   # check your unsold
 server_player = {q(st["server_player"])}   # auto (the first of pw-play, paplay, aplay, ffplay found), one of those, or off (Linux)
 {"" if st["sound_dir"] else "# "}sound_dir = {p(_root_relative(st["sound_dir"]) if st["sound_dir"] else "my-sounds")}   # your own alert sounds: <name>.wav (fanfare, thud, chime, alert...), up to 3 s each
 {"# " if st["voices_loaded"] is None else ""}voices_loaded = {q(st["voices_loaded"]) if st["voices_loaded"] == "all" else st["voices_loaded"] or outrider.tts.VOICES_LOADED_DEFAULT}   # voices kept loaded beside the main one (each about 1.6 times its file's size in memory: ~100 MB for a medium voice): a number, or "all"; unset, the voices in use up to 4
+pad_delay = {st["pad_delay"]}   # s: your landing pad is said this long after docking is granted, after the station's own voice (0 to {PAD_DELAY_MAX}; with a docking computer fitted: {AUTO_DOCK_WAIT_S} s, unless it takes over)
 voices_preload = {"true" if st["voices_preload"] else "false"}   # load those voices when Outrider starts (one at a time, after the journals are read), so even the first line of each starts at once; off: each loads the first time it speaks (about a second)
 
 [autohonk]   # hold Primary Fire on arriving by hyperspace, so the Discovery Scanner fires (Linux; Windows experimental; see outrider/honk.py)
@@ -1228,7 +1249,8 @@ background_opacity = {n(st["highway"]["background_opacity"])}   # 0.05 to 1
 [overlay]   # the in-game overlay: panels drawn over Elite's window by a window Outrider runs on the game PC (not on a server)
 enabled = {"true" if st["overlay"]["enabled"] else "false"}   # build the panels (the window shows nothing while false; Settings -> In-game overlay switches it)
 theme = {q(st["overlay"]["theme"])}   # the panels' colours: default, lcars, elite, babylon5, narn, minbari, centauri, vorlon, shadow, sith, alliance or dark
-text_size = {q(st["overlay"]["text_size"])}   # small, normal or large
+text_size = {q(st["overlay"]["text_size"])}   # small, normal or large (a panel can have its own: Settings -> In-game overlay's Text column)
+panel_scale = {st["overlay"]["panel_scale"]}   # all panels' size in % (20 to 250), on top of each panel's own; text is never drawn under {outrider.overlay.MIN_TEXT_PX} px
 system_panel = {"true" if st["overlay"]["system_panel"] else "false"}   # the system panel: the bodies worth your time, in supercruise
 body_panel = {"true" if st["overlay"]["body_panel"] else "false"}   # the Target panel: the body you are near or have targeted, else the system targeted (also over the galaxy map)
 radar = {"true" if st["overlay"]["radar"] else "false"}   # the surface radar: samples, colony rings, the ship, on a body's surface
@@ -1242,6 +1264,9 @@ radar_range = {st["overlay"]["radar_range"]}   # metres from the radar's centre 
 analysis_only = [{", ".join(q(x) for x in st["overlay"]["analysis_only"])}]   # panels shown in your ship only while the HUD is in analysis mode: any of system, body, radar, strip, now, bio, alerts (not in the SRV, on foot or over the galaxy map)
 hide_docked = [{", ".join(q(x) for x in st["overlay"]["hide_docked"])}]   # panels hidden while docked (the ship, or on foot in a station, hangar or social space): any of system, body, strip, now, bio, alerts (the Target panel still shows over the galaxy map)
 show_inactive = {"true" if st["overlay"]["show_inactive"] else "false"}   # keep showing when Elite is not the active window (still hidden while other windows cover the game, minimised or on another desktop)
+hide_on_foot = [{", ".join(q(x) for x in st["overlay"]["hide_on_foot"])}]   # panels hidden on foot (in a station or on a planet's surface): any of system, body, radar, strip, now, bio, alerts
+hide_mouse_lock = {"true" if st["overlay"]["hide_mouse_lock"] else "false"}   # no overlay at all on foot and in the DSS, where Elite locks the mouse (an overlay can break that lock on some systems)
+pad_diagram = {"true" if st["overlay"]["pad_diagram"] else "false"}   # while docking at a starport or carrier, a diagram of where your pad is under PAD 34, in the overlay's Surface radar place and on Now (false: the number and its words only)
 
 [assistant]
 enabled = {"true" if st["assistant"]["enabled"] else "false"}   # the voice's AI layer for questions the fixed phrases do not match (resources/ask.json); nothing is sent anywhere while false
@@ -1303,8 +1328,9 @@ def core_label(slot, item):
 DATA_EVENTS = ("MultiSellExplorationData", "SellExplorationData", "SellOrganicData", "Died", "Resurrect")
 # Who is playing and what they had at login: name, credits.
 CMDR_EVENTS = ("LoadGame", "Commander", "Rank", "Progress", "Promotion", "Statistics")
-# written while the game loads (at the main menu, before LoadGame): not play, so not where a session ended
-LOGIN_EVENTS = frozenset(CMDR_EVENTS) | {"Fileheader", "Materials"}
+# written while the game loads (at the main menu, before LoadGame, and the snapshots just after it: missions,
+# reputation, engineers, Powerplay, squadron, ship locker): not play, so not where a session ended
+LOGIN_EVENTS = frozenset(CMDR_EVENTS) | {"Fileheader", "Materials"} | frozenset(outrider.commander.LOGIN_SNAPSHOTS)
 RANK_KEYS = ("Combat", "Trade", "Explore", "Soldier", "Exobiologist", "Empire", "Federation", "CQC")
 RANK_NAMES = {   # the two ranks an explorer cares about
     "Explore": ["Aimless", "Mostly Aimless", "Scout", "Surveyor", "Trailblazer", "Pathfinder", "Ranger", "Pioneer",
@@ -1319,6 +1345,34 @@ BODY_EVENTS = ("ApproachBody", "LeaveBody", "Touchdown")
 # These are read for that alone; the body comes from SRV_TRACKED (see Journals.track_srv).
 # Liftoff: only for the surface map's ship marker (a Liftoff while aboard takes it away).
 SRV_EVENTS = ("LaunchSRV", "LaunchVessel", "DockSRV", "SRVDestroyed", "MiningRefined", "SupercruiseExit", "SupercruiseEntry", "Liftoff")
+# Docking (#3, Kurbo26 in GitHub discussion #3): the pad a station gave you and why one refused, live only (meta
+# `docking`); DOCKING_EVENTS are read for it alone, DOCKING_WATCH also end it (docked, left, a login, a death)
+DOCKING_EVENTS = ("DockingGranted", "DockingDenied", "DockingCancelled", "DockingTimeout",
+                  "SendText",   # #12: only the LandingPad plugin's test commands ("!sppad 34"); other chat is never read
+                  "Music")      # #12: only the docking computer's track
+DOCKING_WATCH = frozenset(DOCKING_EVENTS) | {"Docked", "SupercruiseEntry", "FSDJump", "LoadGame", "Shutdown", "Died",
+                                             "Music"}   # Music: only the docking computer's track (it took over)
+# the docking computer takes over 2-10 s after the grant (the author's journals: its Music line); with one fitted, the pad
+# is shown at once but said only if it has not taken over within this many seconds (the author: no audio on auto-dock)
+AUTO_DOCK_WAIT_S = 12
+# with no docking computer fitted the pad is said this long after the grant, so it does not talk over the station's
+# own voice reading the grant out (Kurbo26, GitHub discussion #3; the author, 2026-10-15); [speech] pad_delay sets it
+# (Settings -> Voice: some stations' controllers talk longer; Kurbo26 needed up to 13 s in EDCopilot), up to PAD_DELAY_MAX
+GRANT_SAY_DELAY_S = 5
+PAD_DELAY_MAX = 20
+# the In-Game Route's ⛽: a hop counts as made only while it leaves this share of the tank aboard (the author,
+# 2026-10-15: his Caspian "made" a 27-jump route with 0.1 t left)
+FUEL_REACH_RESERVE = 0.05
+# a refusal's Reason in words, said only when it is not obvious (the author, 2026-10-14): Distance (you can see you are
+# too far, and the game says so) and any other reason are left out. From the author's journals: NoSpace 50, Distance
+# 16, RestrictedAccess 4, TooLarge 2, Hostile 1
+DENIED_WORDS = {"NoSpace": "no pad free for your ship: try again shortly",
+                "TooLarge": "your ship is too big for this station's pads",
+                "RestrictedAccess": "access restricted: the carrier's docking setting, or a permit",
+                "Hostile": "the station is hostile to you", "Offences": "refused for your offences here",
+                "ActiveFighter": "dock your fighter first"}
+DOCK_GRANT_KEEP_S = 900    # s: a grant shown this long at most (the game ends it sooner: DockingTimeout, a dock)
+DOCK_DENIED_KEEP_S = 60    # s: a refusal's reason shown this long
 SRV_TRACKED = frozenset(SRV_EVENTS) | {"ApproachBody", "LeaveBody", "Touchdown", "Location", "LoadGame",
                                        "FSDJump", "CarrierJump", "Died"}
 MATERIAL_EVENTS = ("Materials", "MaterialCollected", "MaterialDiscarded", "Synthesis", "EngineerCraft",
@@ -1337,9 +1391,22 @@ CARGO_EVENTS = frozenset(CARGO_ONLY) | {"Cargo", "Docked", "Undocked", "CarrierS
 # you deposit for the jumps it measured (outrider.cargo.carrier_burns, S13 B)
 CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "MarketBuy", "MarketSell",
                         "CarrierCrewServices", "CarrierDepositFuel") + CARRIER_MOVE_EVENTS
-WANTED = tuple(f'"event":"{e}"'.encode()
-               for e in POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS
-               + CMDR_EVENTS + MATERIAL_EVENTS + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + ("Loadout", "Shutdown", "Fileheader"))
+# Earnings (the CMDR tab's, NEXT-VERSION #7), all of them read for other things too: where you are docked, followed line
+# by line for each sale's station (Journals.note_sale_dock, meta sale_dock), and the tons you mined still aboard
+# (Journals.note_mined, meta mined_stock): MiningRefined adds 1 t (the ship's refinery or the SRV's), a jettison takes
+# off, a death empties it, a transfer to your carrier moves it to the carrier's own mined stock (meta mined_carrier) and
+# one back to the ship moves it back, and a MarketSell counts as mining up to what it holds (mining_sales; the rest of
+# the sale is trade)
+SALE_DOCK_EVENTS = ("Docked", "Undocked", "Location")
+MINED_EVENTS = ("MiningRefined", "CargoTransfer", "EjectCargo", "Died", "MarketSell", "CarrierBuy")
+_OTHER_EVENTS = (POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS + CMDR_EVENTS + MATERIAL_EVENTS
+                 + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + DOCKING_EVENTS + ("Loadout", "Shutdown", "Fileheader"))
+# The Commander view (outrider/commander.py): Journals.handle_commander folds these into the meta keys of
+# outrider.commander.COMMANDER_META and the play_activity table, and each one bumps Journals.commander_version (the page's
+# cue to ask for the open tab again); COMMANDER_ONLY are read for it alone
+COMMANDER_EVENTS = frozenset(outrider.commander.EVENTS)
+COMMANDER_ONLY = COMMANDER_EVENTS - frozenset(_OTHER_EVENTS) - SRV_TRACKED - CARGO_EVENTS
+WANTED = tuple(f'"event":"{e}"'.encode() for e in dict.fromkeys(_OTHER_EVENTS + outrider.commander.EVENTS))
 
 # Bump when the journal parser learns new events: forces a one-off re-read of every journal.
 # 27: sale pages keyed by journal position (same-second 'Sell all' pages were dropped before); logins.
@@ -1361,7 +1428,20 @@ WANTED = tuple(f'"event":"{e}"'.encode()
 #     were dropped; the SRV's refinery and scoop stay out of the ship's hold; an older Location's relog is judged
 #     against the arrival before it (a legacy folder read late counted every login as a visit).
 # 43: a system's population (system_population) and own_firsts.bio_x5: no x5 bio bonus in populated systems.
-PARSER_VERSION = 50
+PARSER_VERSION = 54
+# 54: ore you mined keeps counting as mined through your carrier (meta mined_carrier: moved there and back, then sold;
+#     the author, 2026-10-14: about half of his mining income went through it)
+# 53: a Vista Genomics sale keeps what each species paid and its name (bio_sales.bio_data: the Earnings' species, exact);
+#     still unreleased, so not bumped again for each mining sale's station type (mining_sales.station_type: a station
+#     where you only ever sold ore had none; NULL in a database read by 52 or 53 until its next re-read)
+# 52: the CMDR tab's Earnings (NEXT-VERSION #7): each sale keeps where you were docked and the ship you flew
+#     (sale_events' station, market_id, station_type, ship_id), each jump, first body scan and sample run its ship
+#     (jumps, own_bodies, own_organic ship_id), and mining income (mining_sales, from the mined stock: meta mined_stock)
+# 51: the Commander view reads the database (outrider/commander.py's folds: meta reputation, powerplay, squadron,
+#     stored_ships, stored_modules, ship_locker, suit_loadouts, engineers, missions; play_activity per login), the
+#     statistics keep the career's sections, and fleet_loadouts each ship's value; still unreleased, so not bumped again
+#     for the ships' hot flags (Loadout folded too), the modules stored, taken, sent for or sold between two lists, and
+#     fleet_loadouts' loadout (each ship's latest Loadout line whole: the CMDR tab's EDSY and Coriolis links)
 # 50: your carrier's movements and tritium deposits are kept (cargo_events: its measured jumps scale the tritium
 #     formula, S13 B); each Synthesis's recipe is kept (materials' recipes, S15); CarrierCrewServices, stored since the
 #     last version without a re-read, comes back from the older journals too
@@ -1374,6 +1454,13 @@ PARSER_VERSION = 50
 # Why each version reads the journals again, in the player's words: said at the start that re-reads (reread_message).
 # Every bump adds its line here too (a test checks PARSER_VERSION has one).
 PARSER_CHANGES = {
+    54: "ore you mined still counts as mined after a trip through your carrier (the Commander tab's Earnings)",
+    53: "each exobiology sale keeps what every species in it paid (the Commander tab's Earnings)",
+    52: "each sale keeps where it was made and with which ship, as do your jumps, scans and samples, and the ore you "
+        "mined is followed until you sell it (mining income)",
+    51: "the Commander tab's ships (each with its build, for its EDSY and Coriolis links), modules, locker, suit loadouts, "
+        "engineers, missions and combat and mining sessions are kept from your journals, all of them, instead of read from "
+        "the last weeks' files each time",
     50: "your carrier's jumps and tritium deposits are kept (its own jumps check the tritium formula), the recipes you "
         "have synthesised, and the carrier's services switched on, off or suspended",
     49: "named listening posts are kept, and two in one system count as two",
@@ -1389,6 +1476,7 @@ NSP_BURST_S = 5   # s: the FSS's lines for a system's phenomena that count as on
 NAV_BEACON_SCANS = ("NavBeaconDetail", "NavBeacon")
 
 SCOOPABLE = set("OBAFGKM")
+FLAG2_ON_FOOT = 1 << 0    # Status.json Flags2: on foot (anywhere: a station, a planet's surface)
 ON_FOOT_DOCKED = (1 << 3) | (1 << 13) | (1 << 14)   # Status.json Flags2: on foot in a station, hangar, social space
 HEAT_QUIET = 30            # s: at most one heat alert in this long
 FUEL_HISTORY = 20          # recent jumps used to estimate fuel per jump
@@ -1506,9 +1594,10 @@ CREATE TABLE IF NOT EXISTS visits (
 -- for a login/respawn somewhere new, which breaks the path). star_class comes from StartJump.
 -- verdict (the discovery streak): new / visited / known, fixed by the arrival star's scan (see note_verdict).
 -- ride is 1 for an Apex shuttle or multicrew jump: not your ship's tank (no scoop count, no scoopable share).
+-- ship_id: the ShipID of the ship flown (Journals.ship_at; NULL on a ride, before any Loadout or on an older row).
 CREATE TABLE IF NOT EXISTS jumps (
     ts TEXT, id64 INTEGER, name TEXT, x REAL, y REAL, z REAL, star_class TEXT, kind TEXT, verdict TEXT, ride INTEGER,
-    PRIMARY KEY (ts, id64));
+    ship_id INTEGER, PRIMARY KEY (ts, id64));
 -- What Spansh knew about a known system when you arrived (partial / complete): the streak strip's amber and
 -- blue. Live only, so it is kept through a journal re-read (not in RESET_JOURNAL_DATA): colours never change.
 CREATE TABLE IF NOT EXISTS arrival_verdicts (ts TEXT, id64 INTEGER, verdict TEXT, PRIMARY KEY (ts, id64));
@@ -1527,11 +1616,12 @@ CREATE TABLE IF NOT EXISTS spansh_systems (
 -- {body_id: [{genus, species, variant, value}]}. Live-only, like the Spansh cache (never in RESET_JOURNAL_DATA).
 CREATE TABLE IF NOT EXISTS spansh_reported (
     id64 INTEGER PRIMARY KEY, fetched_ts REAL, bodies TEXT);
--- Your own scans, straight from the journal.
+-- Your own scans, straight from the journal. own_bodies' ts is the latest scan's; ship_id the ship of the first scan
+-- (a rescan keeps it; NULL when that ship was not known).
 CREATE TABLE IF NOT EXISTS own_systems (
     id64 INTEGER PRIMARY KEY, name TEXT, body_count INTEGER, all_found INTEGER);
 CREATE TABLE IF NOT EXISTS own_bodies (
-    system INTEGER, body_id INTEGER, name TEXT, record TEXT, ts TEXT, raw TEXT,
+    system INTEGER, body_id INTEGER, name TEXT, record TEXT, ts TEXT, raw TEXT, ship_id INTEGER,
     PRIMARY KEY (system, body_id));
 -- Barycentres (the Null entries in a body's Parents): their orbit, from ScanBaryCentre.
 CREATE TABLE IF NOT EXISTS own_barycentres (
@@ -1558,8 +1648,9 @@ CREATE TABLE IF NOT EXISTS own_mined (
 CREATE TABLE IF NOT EXISTS own_mapped (system INTEGER, body_id INTEGER, ts TEXT, first_ts TEXT, PRIMARY KEY (system, body_id));
 CREATE TABLE IF NOT EXISTS own_footfall (system INTEGER, body_id INTEGER, ts TEXT, PRIMARY KEY (system, body_id));
 CREATE TABLE IF NOT EXISTS sales (name TEXT, ts TEXT, bodies INTEGER);
--- Vista Genomics sales: bio_data the species each BioData entry named with whether it paid the bonus, JSON
--- [[species, bonus], ...] (lower case codex keys), for organic_replay; NULL on a row stored before it was kept.
+-- Vista Genomics sales: bio_data the species each BioData entry named with whether it paid the bonus, what it paid
+-- and its name, JSON [[species, bonus paid, value, bonus, name], ...] (lower case codex keys; sale_species), for
+-- organic_replay and the CMDR tab's Earnings; NULL on a row stored before it was kept, [[species, bonus], ...] before 53.
 -- source: the journal line ("file:offset"), so two Vista Genomics sales in one second stay two (Codex C1)
 CREATE TABLE IF NOT EXISTS bio_sales (ts TEXT, species INTEGER, bio_data TEXT, source TEXT, PRIMARY KEY (ts, source));
 CREATE INDEX IF NOT EXISTS sales_name ON sales (name);
@@ -1567,13 +1658,14 @@ CREATE INDEX IF NOT EXISTS sales_name ON sales (name);
 CREATE TABLE IF NOT EXISTS logins (ts TEXT PRIMARY KEY);
 -- option is the Resurrect choice that followed: "rebuy" means the ship (and its data) was lost.
 CREATE TABLE IF NOT EXISTS deaths (ts TEXT PRIMARY KEY, option TEXT);
--- Exobiology: genera a DSS found on a body, and your sampling progress per species.
+-- Exobiology: genera a DSS found on a body, and your sampling progress per species (own_organic's ship_id: the ship
+-- flown at the run's latest sample, the one that completed it once done; on foot or in the SRV, the ship you came in).
 CREATE TABLE IF NOT EXISTS own_genera (
     system INTEGER, body_id INTEGER, genus TEXT, genus_name TEXT, ts TEXT,
     PRIMARY KEY (system, body_id, genus));
 CREATE TABLE IF NOT EXISTS own_organic (
     system INTEGER, body_id INTEGER, species TEXT, genus_name TEXT, species_name TEXT, variant_name TEXT,
-    samples INTEGER NOT NULL DEFAULT 0, done_ts TEXT, ts TEXT,
+    samples INTEGER NOT NULL DEFAULT 0, done_ts TEXT, ts TEXT, ship_id INTEGER,
     PRIMARY KEY (system, body_id, species));
 -- Codex entries: is_new = new to your codex for that region; voucher = codex credits paid (not a galactic first).
 CREATE TABLE IF NOT EXISTS codex (
@@ -1624,9 +1716,22 @@ CREATE TABLE IF NOT EXISTS mining_locations (
 -- MultiSellExplorationData per page, often in the same second, so source (journal file name:byte offset of
 -- the line) tells the pages apart while a line handled twice still hits the same key. x5_check (bio sales): JSON
 -- {sold, predicted, matched, paid, unknown, used}, the runs aboard predicted x5 against the entries paid the bonus (sale_check).
+-- station, market_id, station_type: where you were docked (Journals.sale_place), ship_id: the ship flown (ship_at);
+-- NULL when not known (a line read out of order, a row from before PARSER_VERSION 52). Journal-derived.
 CREATE TABLE IF NOT EXISTS sale_events (
     ts TEXT, kind TEXT, base INTEGER, bonus INTEGER, total INTEGER, systems INTEGER, species INTEGER, source TEXT,
-    x5_check TEXT, PRIMARY KEY (ts, kind, source));
+    x5_check TEXT, station TEXT, market_id INTEGER, station_type TEXT, ship_id INTEGER, PRIMARY KEY (ts, kind, source));
+-- Mining income (Journals.note_mined): each MarketSell that sold tons you mined, one row per journal line (source
+-- "file:offset"). commodity: the journal's lower-case name; tons, price (SellPrice) and total (TotalSale): the whole
+-- sale; mined_tons: the part that was mined (at most what the mined stock, meta mined_stock, held), mined_total its
+-- share of the total (total x mined_tons / tons, rounded); the rest of the sale was trade and is left out. station,
+-- station_type: where you were docked (Journals.sale_place, as sale_events'; the type added after 53 was written,
+-- not bumped: NULL until the next re-read). own_carrier 1: sold to your own carrier (your own money: left out of the
+-- earnings). Journal-derived: cleared by RESET_JOURNAL_DATA.
+CREATE TABLE IF NOT EXISTS mining_sales (
+    ts TEXT, source TEXT, commodity TEXT, tons INTEGER, mined_tons INTEGER, price INTEGER, total INTEGER,
+    mined_total INTEGER, station TEXT, market_id INTEGER, ship_id INTEGER, own_carrier INTEGER, station_type TEXT,
+    PRIMARY KEY (ts, source));
 -- Outrider's estimate just before a sale (recorded live, none for sales before the tool saw them). Live only,
 -- so a journal re-read keeps it (not in RESET_JOURNAL_DATA); the ledger joins it to sale_events by (ts, kind).
 CREATE TABLE IF NOT EXISTS sale_estimates (ts TEXT, kind TEXT, estimate INTEGER, PRIMARY KEY (ts, kind));
@@ -1656,9 +1761,16 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     id64 INTEGER PRIMARY KEY, name TEXT, x REAL, y REAL, z REAL, note TEXT, created_ts TEXT);
 -- Every ship you have flown, as its latest Loadout (one row per ShipID, an older Loadout read later never replaces a
 -- newer one): the Highway's ship list and the exact plotter's inputs. figures: JSON from fleet_figures (drive, masses,
--- tanks, booster, range). Journal-derived: RESET_JOURNAL_DATA clears it and the re-read rebuilds it.
+-- tanks, booster, range); value: HullValue + ModulesValue (the Commander view's fleet); loadout: the Loadout line
+-- itself, as JSON (the CMDR tab's EDSY and Coriolis links, outrider/shipyard_links.py). Journal-derived:
+-- RESET_JOURNAL_DATA clears it and the re-read rebuilds it.
 CREATE TABLE IF NOT EXISTS fleet_loadouts (
-    ship_id INTEGER PRIMARY KEY, name TEXT, ship_type TEXT, ident TEXT, ts TEXT, figures TEXT);
+    ship_id INTEGER PRIMARY KEY, name TEXT, ship_type TEXT, ident TEXT, ts TEXT, figures TEXT, value INTEGER, loadout TEXT);
+-- The Commander view's sessions (outrider/commander.py): one row per login (LoadGame, as the logins table), with the
+-- commander and ship it names, and JSON counts of the fighting and mining between it and the next login
+-- (commander.activity_apply; NULL until there was some). Journal-derived: cleared by RESET_JOURNAL_DATA.
+CREATE TABLE IF NOT EXISTS play_activity (
+    login_ts TEXT PRIMARY KEY, commander TEXT, ship TEXT, combat TEXT, mining TEXT);
 -- The Neutron Highway: the one active route Spansh plotted (idx 0 is where it starts), with its plot in meta
 -- 'highway' (plotter, ship, options, created_ts, and the progress: at, furthest, off_route, arrival_ts, done_ts).
 -- distance: the jump into this system; remaining: ly left to the destination from here; jumps: jumps from the row
@@ -1720,6 +1832,10 @@ DELETE FROM own_barycentres; DELETE FROM phenomena; DELETE FROM phenomena_sites;
 DELETE FROM own_mined; DELETE FROM meta WHERE key IN ('srv_state', 'vehicle', 'ship_marker', 'body_here');
 DELETE FROM fleet_loadouts; DELETE FROM cargo_events; DELETE FROM system_population;
 DELETE FROM meta WHERE key IN ('ship_cargo', 'cargo_dock');
+DELETE FROM mining_sales; DELETE FROM meta WHERE key IN ('mined_stock', 'mined_carrier', 'sale_dock');
+DELETE FROM play_activity;
+DELETE FROM meta WHERE key IN ('reputation', 'powerplay', 'squadron', 'stored_ships', 'stored_modules', 'ship_locker',
+                               'suit_loadouts', 'engineers', 'missions');
 DELETE FROM meta WHERE key IN ('ship', 'carrier', 'fuel_hist', 'last_scoop', 'commander', 'materials', 'last_session', 'cargo',
                                'game_load');
 DELETE FROM meta WHERE key LIKE 'legacy:%' OR key IN ('pos', 'prev', 'jump_range', 'state_ts');
@@ -1940,6 +2056,27 @@ def away_text(seconds):
         return f"{round(seconds / 3600)} hours"
     days = round(seconds / 86400)
     return f"{days} day{'' if days == 1 else 's'}"
+
+
+SECURITY_WORDS = {"$system_security_high;": "High Security", "$system_security_medium;": "Medium Security",
+                  "$system_security_low;": "Low Security", "$galaxy_map_info_state_anarchy;": "Anarchy",
+                  "$galaxy_map_info_state_lawless;": "Lawless"}
+
+
+def system_standing(ev):
+    """A populated system's security and your reputation with its controlling faction, from an FSDJump, Location or
+    CarrierJump: {security, faction, rep (the journal's MyReputation, -100..100, or None)}; None for an unpopulated
+    system (in the black every one is "Anarchy" with no faction: nothing worth showing). The overlay's system strip
+    shows it (the author, 2026-10-14)."""
+    sf = ev.get("SystemFaction")
+    faction = sf.get("Name") if isinstance(sf, dict) else sf if isinstance(sf, str) else None
+    if not faction and not ev.get("Population"):
+        return None
+    sec = ev.get("SystemSecurity_Localised") or SECURITY_WORDS.get(str(ev.get("SystemSecurity") or "").lower())
+    rep = next((f.get("MyReputation") for f in ev.get("Factions") or []
+                if isinstance(f, dict) and f.get("Name") == faction), None)
+    rep = rep if isinstance(rep, (int, float)) and not isinstance(rep, bool) else None
+    return {"security": sec, "faction": faction, "rep": rep} if sec or faction else None
 
 
 def live_event(ts, now=None):
@@ -2532,6 +2669,8 @@ class Journals:
         self.jumponium = None      # this system's best jumponium body so far {system, body, material, pct, said}
         # the FSS's notable stellar phenomena as they come (several lines in one moment): {system, t, counts, new, seq}
         self.nsp_burst = None
+        self.docking_hold = None   # #12: a grant's moment held while the docking computer may take over (State.docking_release)
+        self.pad_delay = GRANT_SAY_DELAY_S   # s: [speech] pad_delay, set by run() and Settings -> Voice
         # a live sale still coming in (a 'Sell all' writes a page every 10 s to a minute or so): State.maybe_sale_left
         # says what it left aboard once the pages stop. {carto, systems, bio, species, read_at (wall clock)}
         self.sale_run = None
@@ -2546,6 +2685,10 @@ class Journals:
         self.carrier_version = 0
         # bumped by every write leaving_summary reads (mark(), deaths and sales): its cache key (S17)
         self.data_seq = 0
+        # bumped by every line the Commander view reads (COMMANDER_EVENTS: handle_commander), a ShipLocker.json read and
+        # reload(): the payload's commander_version, on which the page asks for the view's tab again. Only ever goes
+        # up: a rolled-back tick that reads the lines again bumps it again, which only means one more read
+        self.commander_version = 0
         # the live tail's quick scan (S18): per journal its last size and how many stats in a row found it unchanged;
         # `settled` the files unchanged for JOURNAL_SETTLE_STATS stats, which a quick scan does not stat again until
         # the folder's full re-check (full_check_at, on `clock`) comes round
@@ -2663,16 +2806,21 @@ class Journals:
         meta_set(self.db, "modules", self.modules)
 
     def note_fleet(self, ev, ts):
-        """A Loadout: that ship's row in fleet_loadouts (the Highway's ship list), unless a newer Loadout is kept."""
+        """A Loadout: that ship's row in fleet_loadouts (the Highway's ship list, the CMDR tab's fleet and its EDSY and
+        Coriolis links: the line itself is kept whole), unless a newer Loadout is kept (the row's own ts guards it as
+        fresh() guards meta: a legacy folder read late never puts back an older build)."""
         sid = ev.get("ShipID")
         if sid is None or not ev.get("Ship") or not_a_ship(ev.get("Ship")):
             return
-        self.db.execute("""INSERT INTO fleet_loadouts (ship_id, name, ship_type, ident, ts, figures) VALUES (?, ?, ?, ?, ?, ?)
+        value = (ev.get("HullValue") or 0) + (ev.get("ModulesValue") or 0) or None
+        self.db.execute("""INSERT INTO fleet_loadouts (ship_id, name, ship_type, ident, ts, figures, value, loadout)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                            ON CONFLICT(ship_id) DO UPDATE SET name=excluded.name, ship_type=excluded.ship_type,
-                             ident=excluded.ident, ts=excluded.ts, figures=excluded.figures
+                             ident=excluded.ident, ts=excluded.ts, figures=excluded.figures, value=excluded.value,
+                             loadout=excluded.loadout
                            WHERE excluded.ts >= fleet_loadouts.ts""",
                         (sid, ev.get("ShipName") or None, ev.get("Ship"), ev.get("ShipIdent") or None, ts,
-                         json.dumps(fleet_figures(ev))))
+                         json.dumps(fleet_figures(ev)), value, json.dumps(ev, ensure_ascii=False)))
 
     def highway_route(self, hw):
         """The active route's rows (cached per plot: a new plot has a new id)."""
@@ -2999,11 +3147,11 @@ class Journals:
                 set(self.body_touched), set(self.approached), self.brief_key,
                 set(self.regions_said), self.region_entered, self.jumponium, dict(self.sale_run or {}) or None,
                 json.loads(json.dumps(self.burst)), self.uploads.snapshot() if self.uploads else None,
-                json.loads(json.dumps(self.nsp_burst)))
+                json.loads(json.dumps(self.nsp_burst)), json.loads(json.dumps(self.docking_hold)))
 
     def restore(self, cp):
         (self.moment_seq, moments, self.last_heat, touched, approached, self.brief_key,
-         regions, self.region_entered, self.jumponium, self.sale_run, self.burst, uploads, self.nsp_burst) = cp
+         regions, self.region_entered, self.jumponium, self.sale_run, self.burst, uploads, self.nsp_burst, self.docking_hold) = cp
         if self.uploads and uploads:
             self.uploads.restore(uploads)
         self.body_touched, self.approached, self.regions_said = set(touched), set(approached), set(regions)
@@ -3070,9 +3218,18 @@ class Journals:
         # cleared: a re-read only learns them again).
         self.ship_cargo = meta_get(db, "ship_cargo") or outrider.cargo.new_ship()
         self.cargo_dock = meta_get(db, "cargo_dock")
+        # Earnings: where you are docked for each sale's station ({station, market_id, type, ts}; station None once you
+        # leave), followed line by line like cargo_dock (see note_sale_dock), and the tons you mined still aboard
+        # ({commodity: t}, see note_mined)
+        self.sale_dock = meta_get(db, "sale_dock")
+        self.mined_stock = meta_get(db, "mined_stock") or {}
+        self.mined_carrier = meta_get(db, "mined_carrier") or {}   # the mined ore moved to your carrier (note_mined)
         self.commodity_names = meta_get(db, "commodity_names", {})
+        # the Commander view's folds (outrider/commander.py, handle_commander): meta key -> its state
+        self.cmdr_view = {k: meta_get(db, k) for k in outrider.commander.COMMANDER_META}
         self.cargo_version += 1
         self.carrier_version += 1
+        self.commander_version += 1
         self.data_seq += 1   # rolled-back rows: whatever was cached from them goes
         # a rolled-back tick's offsets went back: a file it read must be stat'd (and read) again, settled or not
         self.settled.clear()
@@ -3240,6 +3397,18 @@ class Journals:
             self.note_loading(name, ev, ts)
             if name == "Fileheader":
                 return
+        if name in SALE_DOCK_EVENTS:
+            self.note_sale_dock(name, ev, ts)
+        # before the Commander view's fold: its Sessions count a sale's mined part as this works it out (one rule)
+        mined = self.note_mined(name, ev, ts) if name in MINED_EVENTS else None
+        if name in DOCKING_WATCH:
+            self.handle_docking(name, ev, ts)
+            if name in DOCKING_EVENTS:
+                return
+        if name in COMMANDER_EVENTS:
+            self.handle_commander(name, ev, ts, mined)
+            if name in COMMANDER_ONLY:
+                return
         if name in ("FSSSignalDiscovered", "SupercruiseDestinationDrop"):
             self.handle_phenomenon(name, ev, ts)
             return
@@ -3388,10 +3557,9 @@ class Journals:
                 self.bio_sales_changed = True
                 paid = sum((b.get("Value") or 0) + (b.get("Bonus") or 0) for b in ev.get("BioData") or [])
                 self.add_earnings(ts, paid)
-                self.db.execute("INSERT OR IGNORE INTO sale_events VALUES (?, 'bio', ?, ?, ?, 0, ?, ?, ?)",
-                                (ts, sum(b.get("Value") or 0 for b in ev.get("BioData") or []),
-                                 sum(b.get("Bonus") or 0 for b in ev.get("BioData") or []), paid, len(ev.get("BioData") or []),
-                                 self.line_source, check and json.dumps(check)))
+                self.note_sale_event(ts, "bio", sum(b.get("Value") or 0 for b in ev.get("BioData") or []),
+                                     sum(b.get("Bonus") or 0 for b in ev.get("BioData") or []), paid, 0,
+                                     len(ev.get("BioData") or []), check and json.dumps(check), ev.get("MarketID"))
                 self.new_sales.append((ts, "bio"))
                 self.note_sale(ts, bio=paid, species=len(ev.get("BioData") or []))
                 self.note_live_sale(ts, "bio", bio=paid, species=len(ev.get("BioData") or []))
@@ -3415,9 +3583,8 @@ class Journals:
             elif name == "MultiSellExplorationData":
                 self.add_earnings(ts, ev.get("TotalEarnings") or 0)
                 # one row per page (source): 'Sell all' writes several pages in the same second
-                self.db.execute("INSERT OR IGNORE INTO sale_events VALUES (?, 'carto', ?, ?, ?, ?, 0, ?, NULL)",
-                                (ts, ev.get("BaseValue"), ev.get("Bonus"), ev.get("TotalEarnings"), len(ev.get("Discovered") or []),
-                                 self.line_source))
+                self.note_sale_event(ts, "carto", ev.get("BaseValue"), ev.get("Bonus"), ev.get("TotalEarnings"),
+                                     len(ev.get("Discovered") or []), 0)
                 self.new_sales.append((ts, "carto"))
                 self.note_sale(ts, carto=ev.get("TotalEarnings") or 0, systems=len(ev.get("Discovered") or []))
                 self.note_live_sale(ts, "carto", carto=ev.get("TotalEarnings") or 0, systems=len(ev.get("Discovered") or []))
@@ -3426,9 +3593,8 @@ class Journals:
                                     (d.get("SystemName"), ts, d.get("NumBodies")))
             else:  # the pre-3.3 sale event: just a list of system names
                 self.add_earnings(ts, ev.get("TotalEarnings") or 0)
-                self.db.execute("INSERT OR IGNORE INTO sale_events VALUES (?, 'carto', ?, ?, ?, ?, 0, ?, NULL)",
-                                (ts, ev.get("BaseValue"), ev.get("Bonus"), ev.get("TotalEarnings"), len(ev.get("Systems") or []),
-                                 self.line_source))
+                self.note_sale_event(ts, "carto", ev.get("BaseValue"), ev.get("Bonus"), ev.get("TotalEarnings"),
+                                     len(ev.get("Systems") or []), 0)
                 self.new_sales.append((ts, "carto"))
                 self.note_live_sale(ts, "carto", carto=ev.get("TotalEarnings") or 0, systems=len(ev.get("Systems") or []))
                 for sysname in ev.get("Systems") or []:
@@ -3495,9 +3661,10 @@ class Journals:
             if name in ("FSDJump", "CarrierJump") and self.db.execute(
                     "SELECT 1 FROM jumps WHERE id64=? AND ts < ? LIMIT 1", (id64, ts)).fetchone():
                 verdict = "visited"
-            self.db.execute("INSERT OR IGNORE INTO jumps (ts, id64, name, x, y, z, star_class, kind, verdict, ride) "
-                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            (ts, id64, ev.get("StarSystem"), x, y, z, star, ev.get("event"), verdict, 1 if ride else None))
+            self.db.execute("INSERT OR IGNORE INTO jumps (ts, id64, name, x, y, z, star_class, kind, verdict, ride, ship_id) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (ts, id64, ev.get("StarSystem"), x, y, z, star, ev.get("event"), verdict, 1 if ride else None,
+                             None if ride else self.ship_at(ts)))
         if self.target and self.target["id64"] == id64 and current:
             self.target = None
         ns = meta_get(self.db, "next_stop")
@@ -3522,6 +3689,9 @@ class Journals:
             # a relog keeps the arrival's ts: the briefing and the FSS warning are once per arrival, not per login
             self.pos = {"name": ev.get("StarSystem"), "id64": id64, "x": x, "y": y, "z": z,
                         "ts": self.pos["ts"] if relog else ts}
+            standing = system_standing(ev)
+            if standing:   # a populated system's security and your standing with its controlling faction (the strip)
+                self.pos["standing"] = standing
             meta_set(self.db, "pos", self.pos)
         if ev.get("event") == "FSDJump" and current and not ride:
             self.jump_arrival = {"id64": id64, "name": ev.get("StarSystem"), "ts": ts}
@@ -3583,6 +3753,73 @@ class Journals:
         j = self.jumponium
         if j and not j["said"] and (system is None or j["system"] == system):
             self.moment("jumponium", ts, system=j["system"], jumponium=self.take_jumponium(j["system"]))
+
+    def handle_docking(self, name, ev, ts):
+        """#3 (Kurbo26, GitHub discussion #3): the pad a station gave you, and why one refused. Live only (meta `docking`,
+        live-only; a re-read or a late folder says and keeps nothing): DockingGranted keeps {pad, station, type, market,
+        ts} and says the pad, every time (moment `docking`, what "granted"); DockingDenied keeps {denied, words, station,
+        ts} and says the words for a reason in DENIED_WORDS (others clear it, said by nobody); a dock, a cancel, a timeout,
+        leaving (supercruise, a jump), a login, a quit or a death clear it (moment what "clear": the page redraws)."""
+        if not live_event(ts):
+            return
+        cur = meta_get(self.db, "docking")
+        if cur and ts < (cur.get("ts") or ""):
+            return   # an older line than what is kept (two live folders)
+        station = ev.get("StationName") or ""
+        if name == "LoadGame":   # a new session: the green lights are said again at its first docking (#12)
+            meta_set(self.db, "docking_said", {"n": 0})
+        if name == "Music":
+            if ev.get("MusicTrack") == "DockingComputer":
+                self.docking_hold = None   # the docking computer took over: the pad is shown, not said (the author)
+            return
+        test = outrider.pads.test_command(ev.get("Message")) if name == "SendText" else None
+        if name == "SendText" and not test:
+            return   # any other chat: not read
+        if test:   # #12: the LandingPad plugin's commands, to try a pad's place without docking
+            kind, pad = test
+            name, ev = "DockingGranted", {"LandingPad": pad, "test": kind}
+            station = outrider.pads.TEST_NAMES[kind]
+        if name == "DockingGranted" and isinstance(ev.get("LandingPad"), int) and not isinstance(ev.get("LandingPad"), bool):
+            kind = ev.get("test") or outrider.pads.layout(ev.get("StationType"), station, ev.get("MarketID"))
+            place = outrider.pads.where(kind, ev["LandingPad"])
+            said = meta_get(self.db, "docking_said") or {"n": 0}
+            green = said["n"] % outrider.pads.GREEN_EVERY == 0   # the first of a session, then every 4th (the author)
+            meta_set(self.db, "docking_said", {"n": said["n"] + 1})
+            d = {"pad": ev["LandingPad"], "station": station, "type": ev.get("StationType"), "market": ev.get("MarketID"),
+                 "ts": ts, "layout": kind, "where": place and place["words"], "map": place and place["map"],
+                 "test": bool(test)}
+            meta_set(self.db, "docking", d)
+            said = {"what": "granted", "pad": d["pad"], "station": station, "station_type": d["type"],
+                    "where": place and place["words"], "say_where": outrider.pads.spoken(place, green)}
+            if test:   # the chat command: said at once
+                self.docking_hold = None
+                self.moment("docking", ts, **said)
+            else:
+                # held: said by State.docking_release after the station's own voice ([speech] pad_delay), or with a
+                # docking computer fitted after AUTO_DOCK_WAIT_S unless it takes over first (a Music line: never said)
+                wait = AUTO_DOCK_WAIT_S if self.docking_computer() else self.pad_delay
+                self.docking_hold = {"until": ts_seconds(ts) + wait, "moment": said}
+            return
+        if name == "DockingDenied" and DENIED_WORDS.get(ev.get("Reason")):
+            words = DENIED_WORDS[ev["Reason"]]
+            meta_set(self.db, "docking", {"denied": ev["Reason"], "words": words, "station": station, "ts": ts})
+            self.moment("docking", ts, what="denied", reason=ev["Reason"], words=words, station=station)
+            return
+        self.docking_hold = None
+        if cur:
+            meta_set(self.db, "docking", None)
+            self.moment("docking", ts, what="clear")
+
+    def docking_computer(self):
+        """Whether the ship flown now has a docking computer fitted (#12), from its latest Loadout kept whole in
+        fleet_loadouts; False when that is not known (no Loadout kept: the pad is said at once)."""
+        sid = (self.ship or {}).get("ship_id")
+        row = self.db.execute("SELECT loadout FROM fleet_loadouts WHERE ship_id=?", (sid,)).fetchone() if sid is not None else None
+        try:
+            mods = json.loads(row[0]).get("Modules") or [] if row and row[0] else []
+        except (TypeError, ValueError, AttributeError):
+            return False
+        return any(str(m.get("Item") or "").lower().startswith("int_dockingcomputer") for m in mods if isinstance(m, dict))
 
     def handle_body(self, name, ev, ts):
         """ApproachBody (orbital cruise begins: the approach briefing, once per body per session), LeaveBody
@@ -3992,6 +4229,64 @@ class Journals:
                 if mo.get("seq") == b["seq"]:
                     self.moments[i] = dict(mo, **fields)
 
+    def handle_commander(self, name, ev, ts, mined=None):
+        """The Commander view (outrider/commander.py): a fold's line into its meta key (fresh()-guarded per key: a line
+        older than the newest folded, from a legacy folder read late, is ignored), a login's play_activity row, a
+        fighting or mining line into its login's row (mined: a MarketSell's mining income, note_mined's answer). Every
+        line it is given moves commander_version."""
+        self.commander_version += 1
+        key = outrider.commander.FOLD_OF.get(name)
+        if key:
+            if not self.fresh("cmdr:" + key, ts):
+                return
+            # the place from journal-derived state replayed in order (pos, sale_dock), not self.docked: meta docked is
+            # kept through a re-read, so the re-read's older folds would be stamped with the live station
+            d = self.sale_dock or {}
+            here = {"system": d.get("system") or (self.pos or {}).get("name"), "station": d.get("station"), "market": d.get("market_id"),
+                    "login": (self.commander or {}).get("login_ts")}
+            self.cmdr_view[key] = outrider.commander.apply(key, self.cmdr_view.get(key), ev, here)
+            meta_set(self.db, key, self.cmdr_view[key])
+        elif name == "LoadGame":
+            ship = ev.get("ShipName") or ev.get("Ship_Localised") or ev.get("Ship")
+            self.db.execute("INSERT OR IGNORE INTO play_activity (login_ts, commander, ship) VALUES (?, ?, ?)",
+                            (ts, ev.get("Commander"), ship))
+        elif name in outrider.commander.ACTIVITY_EVENTS:
+            self.note_activity(ev, ts, mined)
+
+    def note_activity(self, ev, ts, mined=None):
+        """A fighting or mining line: into the counts of the login it follows (play_activity, its login the latest at
+        or before it, so a legacy folder read late counts in its own sessions). None before any login on record. The
+        SRV's refinery apart from the ship's: the vehicle you are in (track_srv keeps it). A MarketSell counts as sold
+        only its mining income (`mined`, from note_mined: the same rule as mining_sales)."""
+        row = self.db.execute("SELECT * FROM play_activity WHERE login_ts <= ? ORDER BY login_ts DESC LIMIT 1", (ts,)).fetchone()
+        if not row:
+            return
+        acts = {k: json.loads(row[k]) if row[k] else None for k in ("combat", "mining")}
+        srv = bool(self.vehicle) and ts >= (self.vehicle.get("ts") or "")
+        if outrider.commander.activity_apply(acts, ev, srv, mined):
+            self.db.execute("UPDATE play_activity SET combat=?, mining=? WHERE login_ts=?",
+                            (acts["combat"] and json.dumps(acts["combat"]), acts["mining"] and json.dumps(acts["mining"]),
+                             row["login_ts"]))
+
+    def read_locker_file(self, d):
+        """ShipLocker.json: the ship locker whole, rewritten at every change (the journal's ShipLocker line has the
+        contents at login only). Kept when it is newer than what is folded. True if it changed the locker."""
+        try:
+            with open(os.path.join(d, "ShipLocker.json"), encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return False
+        if not isinstance(data, dict) or not isinstance(data.get("timestamp"), str):
+            return False
+        old = self.cmdr_view.get("ship_locker")
+        new = outrider.commander.locker_apply(old, data)
+        if new == old or not self.fresh("cmdr:ship_locker", data["timestamp"]):
+            return False
+        self.cmdr_view["ship_locker"] = new
+        meta_set(self.db, "ship_locker", new)
+        self.commander_version += 1
+        return True
+
     def handle_cmdr(self, name, ev, ts):
         c = self.commander or {}
         if name == "LoadGame":   # every login, old ones read out of order too (History's session windows)
@@ -4003,9 +4298,8 @@ class Journals:
             c[key] = dict(c.get(key) or {}, **{k: v for k, v in ev.items() if k in RANK_KEYS})
             if name == "Promotion":     # a new rank starts at 0%
                 c["progress"] = dict(c.get("progress") or {}, **{k: 0 for k in ev if k in RANK_KEYS})
-        elif name == "Statistics":
-            meta_set(self.db, "statistics", {"ts": ts, "Exploration": ev.get("Exploration") or {},
-                                             "Exobiology": ev.get("Exobiology") or {}})
+        elif name == "Statistics":   # the History's career line and the Commander view's (its sections)
+            meta_set(self.db, "statistics", dict({k: ev.get(k) or {} for k in outrider.commander.STAT_SECTIONS}, ts=ts))
             return
         elif name == "Commander":
             c.update(name=ev.get("Name") or c.get("name"), fid=ev.get("FID") or c.get("fid"))
@@ -4049,6 +4343,137 @@ class Journals:
         r = self.sale_run or {"carto": 0, "systems": 0, "bio": 0, "species": 0, "kinds": []}
         self.sale_run = dict(r, carto=r["carto"] + carto, systems=r["systems"] + systems, bio=r["bio"] + bio,
                              species=r["species"] + species, kinds=sorted(set(r["kinds"]) | {kind}), read_at=time.time())
+
+    def ship_at(self, ts):
+        """The ShipID of the ship you fly at a line at ts (on foot, in the SRV or the Nomad: the ship you came in): the
+        latest Loadout's, which a re-read replays in order (meta ship is journal-derived). None before any Loadout, and
+        for a line older than that Loadout (a legacy folder read late), whose ship is not known."""
+        s = self.ship or {}
+        return s.get("ship_id") if ts >= (s.get("ts") or "") else None
+
+    def note_sale_dock(self, name, ev, ts):
+        """Where you are docked, for the sales' station (sale_events, mining_sales) and the Commander folds' place: meta
+        sale_dock {station, market_id, type, system, ts}, its station None once you leave or log in in space. Not self.docked: meta docked is kept through a
+        re-read, so the re-read's older docks leave it at its newest; this one is journal-derived and replayed in order,
+        as cargo_dock is. A dock by Apex shuttle counts (you are there, and can sell your data there)."""
+        if not self.fresh("sale_dock", ts, (self.sale_dock or {}).get("ts")):
+            return   # an older dock or undock read late (a legacy folder) does not move it back
+        here = name == "Docked" or (name == "Location" and ev.get("Docked"))
+        self.sale_dock = {"station": ev.get("StationName") if here else None, "market_id": ev.get("MarketID") if here else None,
+                          "type": ev.get("StationType") if here else None, "system": ev.get("StarSystem") if here else None,
+                          "ts": ts}
+        meta_set(self.db, "sale_dock", self.sale_dock)
+
+    def sale_place(self, ts, market=None):
+        """(station, market_id, station_type) where you were docked at a line at ts: all None when not docked, or for a
+        line older than the dock state (read out of order). `market`: the line's own MarketID, when it has one: a dock
+        at another market is not this sale's place (its station and type are then unknown)."""
+        d = self.sale_dock or {}
+        if ts < (d.get("ts") or "") or d.get("station") is None:
+            return None, market, None
+        if market is not None and market != d.get("market_id"):
+            return None, market, None
+        return d.get("station"), d.get("market_id"), d.get("type")
+
+    def note_sale_event(self, ts, kind, base, bonus, total, systems, species, x5_check=None, market=None):
+        """A sale's sale_events row (one per journal line: source), with where you were docked and the ship flown."""
+        station, market_id, station_type = self.sale_place(ts, market)
+        self.db.execute("INSERT OR IGNORE INTO sale_events (ts, kind, base, bonus, total, systems, species, source, x5_check,"
+                        " station, market_id, station_type, ship_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (ts, kind, base, bonus, total, systems, species, self.line_source, x5_check, station, market_id,
+                         station_type, self.ship_at(ts)))
+
+    def note_mined(self, name, ev, ts):
+        """The tons you mined still aboard (meta mined_stock {commodity: t}, the journal's lower-case name: the ship's
+        hold and the SRV's together). MiningRefined adds 1 t, the ship's refinery's or the SRV's; an EjectCargo takes its
+        tons off (never below 0); a death empties it (the hold is lost). Your carrier keeps a mined stock of its own (meta
+        mined_carrier; the author, 2026-10-14: ore stored on the carrier and sold later is still what you mined): a
+        CargoTransfer to the carrier moves the mined part of its tons there, one back to the ship or SRV moves up to what
+        the carrier's mined stock holds back aboard, first capped at what the carrier held of it then (carrier_holding:
+        ore other players bought from it is not in the journal, but its Market.json reads show the hold going down), and
+        mined ore sold to your own carrier goes into its stock too; a new carrier (CarrierBuy) starts empty. A MarketSell
+        counts as mining up to what the stock holds of it, min(Count, stock): when that is over 0 it gets a mining_sales
+        row (own_carrier 1 at your own carrier's market) and comes off the stock; the rest of the sale was trade.
+        Returns, for a MarketSell, the credits that count as mining income (0 when none was mined, and at your own
+        carrier: your own money), which the Commander view's Sessions count as sold; None for the other lines and for a
+        line older than the stock (a legacy folder read late: what was aboard then is not known)."""
+        if not self.fresh("mined_stock", ts):
+            return None
+        stock, kept, cid, out = dict(self.mined_stock), dict(self.mined_carrier), outrider.cargo.cid, None
+        count = lambda x: x.get("Count") if isinstance(x.get("Count"), int) and x.get("Count") > 0 else 0
+        if name == "MiningRefined":
+            if cid(ev.get("Type")):
+                stock[cid(ev["Type"])] = stock.get(cid(ev["Type"]), 0) + 1
+        elif name == "Died":
+            stock = {}
+        elif name == "CarrierBuy":
+            kept = {}   # a new carrier: what the old one held is gone with it
+        elif name == "CargoTransfer":
+            for t in ev.get("Transfers") or []:
+                if not isinstance(t, dict) or not cid(t.get("Type")):
+                    continue
+                k, n = cid(t.get("Type")), count(t)
+                if t.get("Direction") == "tocarrier":
+                    moved = min(n, stock.get(k, 0))
+                    stock[k], kept[k] = stock.get(k, 0) - moved, kept.get(k, 0) + moved
+                elif t.get("Direction") in ("toship", "tosrv"):
+                    if kept.get(k):   # never more than the carrier holds of it (ore others bought is not journaled)
+                        held = self.carrier_holding(k, ts)
+                        if held is not None:
+                            kept[k] = min(kept[k], held)
+                    moved = min(n, kept.get(k, 0))
+                    kept[k], stock[k] = kept.get(k, 0) - moved, stock.get(k, 0) + moved
+        elif name == "EjectCargo":
+            k = cid(ev.get("Type"))
+            if k in stock:
+                stock[k] = max(0, stock[k] - count(ev))
+        else:   # MarketSell
+            k, tons, total = cid(ev.get("Type")), count(ev), ev.get("TotalSale")
+            mined = min(tons, stock.get(k, 0))
+            out = 0
+            if mined > 0:
+                total = total if isinstance(total, (int, float)) else 0
+                mined_total = round(total * mined / tons)
+                market = ev.get("MarketID")
+                own = int(market is not None and market == (self.carrier or {}).get("id"))
+                station, _, station_type = self.sale_place(ts, market)
+                self.db.execute("INSERT OR IGNORE INTO mining_sales (ts, source, commodity, tons, mined_tons, price, total,"
+                                " mined_total, station, market_id, ship_id, own_carrier, station_type)"
+                                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                (ts, self.line_source or f"MarketSell:{k}", k, tons, mined, ev.get("SellPrice"), total,
+                                 mined_total, station, market, self.ship_at(ts), own, station_type))
+                stock[k] -= mined
+                if own:   # your own carrier bought it: still your mined ore, now in its hold
+                    kept[k] = kept.get(k, 0) + mined
+                out = 0 if own else mined_total
+        stock = {k: n for k, n in stock.items() if n > 0}
+        kept = {k: n for k, n in kept.items() if n > 0}
+        if stock != self.mined_stock:
+            self.mined_stock = stock
+            meta_set(self.db, "mined_stock", stock)
+        if kept != self.mined_carrier:
+            self.mined_carrier = kept
+            meta_set(self.db, "mined_carrier", kept)
+        return out
+
+    def carrier_holding(self, commodity, ts):
+        """What your carrier held of a commodity just before `ts` (outrider.cargo.carrier_fold over its history up to
+        then: its events, your Market.json reads and Recounts), for the cap on its mined stock (the author, 2026-10-14:
+        about 4,000 t of platinum counted as mined on the carrier had gone to other players' purchases, which the journal
+        never shows). None when no carrier is known or the fold has no figure: no cap."""
+        cid = (self.carrier or {}).get("id")
+        if cid is None:
+            return None
+        events = [(r[0], json.loads(r[1])) for r in self.db.execute(
+            "SELECT ts, data FROM cargo_events WHERE market = ? AND ts < ? ORDER BY ts", (cid, ts))]
+        markets = [(r[0], json.loads(r[1])) for r in self.db.execute(
+            "SELECT ts, items FROM carrier_markets WHERE market_id = ? AND ts < ?", (cid, ts))]
+        counts = [(r[0], r[1], r[2], r[3]) for r in self.db.execute(
+            "SELECT ts, commodity, count, name FROM carrier_counts WHERE carrier = ? AND ts < ?", (cid, ts))]
+        if not events and not markets and not counts:
+            return None
+        line = outrider.cargo.carrier_fold(cid, events, markets, counts)["lines"].get(commodity)
+        return line["count"] if line else 0
 
     def add_earnings(self, ts, amount):
         c = self.commander
@@ -4356,10 +4781,13 @@ class Journals:
                 samples = min(3, samples + 1)
             else:                        # Analyse: the run is complete
                 samples, done = 3, ts
+            # ship_id: the ship flown at this sample (on foot or in the SRV, the one you came in): the run's last, the
+            # Analyse that completes it, is the run's ship
             self.db.execute(
-                """INSERT OR REPLACE INTO own_organic VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT OR REPLACE INTO own_organic (system, body_id, species, genus_name, species_name, variant_name,
+                                                     samples, done_ts, ts, ship_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (system, body, species, ev.get("Genus_Localised"), ev.get("Species_Localised"),
-                 ev.get("Variant_Localised"), samples, done, ts))
+                 ev.get("Variant_Localised"), samples, done, ts, self.ship_at(ts)))
             self.note_sample_point(system, body, species, ev.get("Genus"), kind, samples, ts)
             self.body_touched.add((system, body))
             if kind == "Analyse":   # "Stratum Tectonicas complete, 19.2 million; two left here" (priced by State)
@@ -4394,7 +4822,7 @@ class Journals:
             if record and ev.get("BodyID") is not None:
                 # A body is news once: the Detailed rescan the game writes after mapping it (SAAScanComplete)
                 # and AutoScans on a return visit replace the row but must not announce it again.
-                known = self.db.execute("SELECT record FROM own_bodies WHERE system=? AND body_id=?",
+                known = self.db.execute("SELECT record, ts, ship_id FROM own_bodies WHERE system=? AND body_id=?",
                                         (system, ev["BodyID"])).fetchone()
                 # an FSS (Detailed) of the body said its signals; a later AutoScan or nav-beacon read replacing the row
                 # must not make them "not counted" again (review: "bio possible" on a body already checked)
@@ -4405,9 +4833,12 @@ class Journals:
                         was = None
                     if was and was not in NO_SIGNAL_SCANS:
                         record["scan_type"] = was
-                self.db.execute("INSERT OR REPLACE INTO own_bodies (system, body_id, name, record, ts, raw) "
-                                "VALUES (?, ?, ?, ?, ?, ?)",
-                                (system, ev["BodyID"], ev["BodyName"], json.dumps(record), ts, json.dumps(ev)))
+                # the ship of the first scan: a rescan (the Detailed one after mapping, a return visit) keeps it; an older
+                # scan read late (a legacy folder) is the first, but with its ship unknown then (ship_at)
+                first_ship = known["ship_id"] if known and ts >= (known["ts"] or "") else self.ship_at(ts)
+                self.db.execute("INSERT OR REPLACE INTO own_bodies (system, body_id, name, record, ts, raw, ship_id) "
+                                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                (system, ev["BodyID"], ev["BodyName"], json.dumps(record), ts, json.dumps(ev), first_ship))
                 flag = lambda k: None if k not in ev else int(bool(ev[k]))
                 undisc = ts if ev.get("WasDiscovered") is False else None
                 if record["type"] == "Star" and not known and live_event(ts):
@@ -4719,8 +5150,11 @@ SALE_SESSION_S = 300   # s: Vista Genomics sales this close together are one vis
 
 
 def sale_species(bio_data):
-    """A SellOrganicData's BioData as bio_sales keeps it: [[species (lower case codex key), bonus paid], ...]."""
-    return [[(b.get("Species") or "").lower(), bool(b.get("Bonus"))] for b in bio_data]
+    """A SellOrganicData's BioData as bio_sales keeps it: [[species (lower case codex key), bonus paid, value, bonus,
+    name], ...]: what each entry paid (Value, Bonus: the CMDR tab's Earnings, exact) and the species' localised name
+    (PARSER_VERSION 53; a row from before has the first two only). Readers take the first two by position."""
+    return [[(b.get("Species") or "").lower(), bool(b.get("Bonus")), int(b.get("Value") or 0), int(b.get("Bonus") or 0),
+             b.get("Species_Localised") or None] for b in bio_data]
 
 
 def organic_replay(db, until=None):
@@ -4753,7 +5187,7 @@ def organic_replay(db, until=None):
                 fates[key(r)] = ("lost" if kind == 0 else "sold", ts)
             aboard = []
         else:
-            for sp, bonus in x:
+            for sp, bonus, *_paid in x:
                 order = (0, None, 1) if bonus else (1, None, 0)
                 runs = [r for r in aboard if (r["species"] or "").lower() == sp]
                 if runs:   # min keeps the earliest of equals; an entry with no run on record takes nothing
@@ -4816,7 +5250,7 @@ def sale_check(db, ts, bio_data, source=None):
     def tally(entries):
         """Per species: [sold, paid, predicted, matched, unknown] for these [species, bonus] entries."""
         sold, paid = collections.Counter(), collections.Counter()
-        for sp, bonus in entries:
+        for sp, bonus, *_paid in entries:
             sold[sp] += 1
             paid[sp] += bool(bonus)
         out = {}
@@ -4830,7 +5264,7 @@ def sale_check(db, ts, bio_data, source=None):
     add = {sp: [a - b for a, b in zip(v, before.get(sp, [0] * 5))] for sp, v in after.items()}
     total = lambda i: sum(v[i] for v in add.values())
     return {"sold": total(0), "predicted": total(2), "matched": total(3), "paid": total(1), "unknown": total(4),
-            "used": {sp: [add[sp][2], add[sp][4]] for sp, _b in mine}}
+            "used": {sp: [add[sp][2], add[sp][4]] for sp, *_rest in mine}}
 
 
 def organic_state(db, done_ts, run=None):
@@ -5145,6 +5579,18 @@ def parse_bookmarks(text):
 
 def dist(a, b):
     return math.sqrt((a["x"] - b["x"]) ** 2 + (a["y"] - b["y"]) ** 2 + (a["z"] - b["z"]) ** 2)
+
+
+def near_choice(c):
+    """Nearby's Around as saved in meta near_around, checked: {around} for a kind that moves, {around, id64, name, x, y,
+    z} for "lock" and "system"; anything else (none saved, an old or broken value) is {"around": "here"}."""
+    if isinstance(c, dict) and c.get("around") in NEAR_AROUND_KINDS:
+        if c["around"] not in ("lock", "system"):
+            return {"around": c["around"]}
+        if isinstance(c.get("id64"), int) and isinstance(c.get("name"), str) \
+                and all(isinstance(c.get(k), (int, float)) and not isinstance(c.get(k), bool) for k in "xyz"):
+            return {k: c[k] for k in ("around", "id64", "name", "x", "y", "z")}
+    return {"around": "here"}
 
 
 def with_id(d):
@@ -5807,8 +6253,10 @@ class Spansh:
         self.sem_plot = asyncio.Semaphore(1)   # the Highway's plots: one at a time
 
     async def start(self):
+        # every outgoing HTTPS connection verifies with outrider.tls's context: the system store plus certifi's (issue #9)
         self.session = ClientSession(timeout=ClientTimeout(total=60), headers={"User-Agent": USER_AGENT},
-                                     trace_configs=[self.health.trace_config(lookup_source)])
+                                     trace_configs=[self.health.trace_config(lookup_source)],
+                                     connector=outrider.tls.connector())
 
     async def close(self):
         await self.session.close()
@@ -5986,12 +6434,22 @@ class Spansh:
         ids = sorted({int(i) for i in ids if isinstance(i, int) or str(i).isdigit()})
         if not ids or self.session is None:
             return set()
-        body = {"filters": {"id64": {"value": ids}}, "size": len(ids), "page": 0}
+        return {x.get("id64") for x in await self.records_by_id(ids) if x.get("needs_permit")}
+
+    async def records_by_id(self, ids):
+        """Spansh's system records for these id64s, in one search (its id64 filter): a system it has no record of is
+        simply not in the answer (probed 2026-10-14: tests/fixtures/spansh_ids.json). Raises when Spansh cannot be
+        asked, so a failure is never read as "has none"."""
+        if self.session is None:
+            raise ClientError("no network session")
+        body = {"filters": {"id64": {"value": list(ids)}}, "size": len(ids), "page": 0}
         async with self.sem_fast:
             async with self.session.post(SPANSH_SEARCH, json=body) as r:
                 r.raise_for_status()
                 d = await r.json()
-        return {x.get("id64") for x in (d.get("results") or []) if isinstance(x, dict) and x.get("needs_permit")}
+        if not isinstance(d, dict) or not isinstance(d.get("results"), list):
+            raise ClientError("Spansh's search answer had no results list")
+        return [x for x in d["results"] if isinstance(x, dict)]
 
     async def get_if_changed(self, url, etag=None, modified=None):
         """A conditional GET: (304, None, etag, modified) when unchanged, else (200, json, its etag, its date)."""
@@ -6575,6 +7033,17 @@ def backup_due(last, every_days, now=None):
     return age >= every_days * 86400
 
 
+
+def route_hop_populated(h):
+    """Whether a route hop lies in a populated region (ROUTE_LOOKUP_SKIP: around Sol and Colonia), where Spansh knows
+    every system: it is not looked up there (its records are heavy, and the answer is known). A hop without a position
+    counts as not populated."""
+    try:
+        x, y, z = float(h["x"]), float(h["y"]), float(h["z"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return any((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2 <= r * r for cx, cy, cz, r in ROUTE_LOOKUP_SKIP)
+
 class State:
     def __init__(self, db, journals, spansh, radius):
         self.db, self.journals, self.spansh, self.radius = db, journals, spansh, radius
@@ -6584,7 +7053,12 @@ class State:
         self.systems = {}          # id64 -> row dict for the page
         self.visited = set()
         self.status = "starting"
-        self.center = None
+        self.center = None         # where the sphere is: your position, or Nearby's chosen centre (nearby_centre)
+        self.near_choice = near_choice(meta_get(db, "near_around"))   # Nearby's Around, saved (set_near_around)
+        self.near_why = None       # why the chosen centre cannot be used now (no target...): the sphere is around you
+        self._near_miss = None     # ((kind, id64), why, time.monotonic()): that failure, not worked out again every tick
+        self.near_asked = 0.0      # time.time() of the last Spansh sphere search started (↻ refresh's pace)
+        self.sphere_failed = True  # the last sphere search failed (or none answered yet): nothing claimed about Spansh
         self.refresh_task = None
         self.target = None         # classified FSD target for the page
         self.target_key = None
@@ -6593,6 +7067,10 @@ class State:
         self.reported_task = None  # S23: the ask for the species reported in your system (one at a time)
         self.reported_tried = {}   # id64 -> when last asked (or found fresh): not asked again before REPORTED_RETRY_S
         self.reported_seen = None  # the overlay_detail key of the last look that found no life
+        self.route_spansh = {}     # id64 -> (when, has a record): Spansh asked about the game's route hops (in memory only)
+        self.route_task = None     # that ask (one at a time)
+        self.route_retry_at = 0.0  # time.time() before which a failed ask is not repeated
+        self.route_seen = None     # (route ts, where you are, State.version) of the last look that found nothing to ask
         self.searcher = None       # set once the Searcher exists
         self.speaker = None        # outrider.tts.Speaker, set at start (None in tests)
         self.player = None         # outrider.tts.LinePlayer: the tick that plays speech and sounds here (None in tests)
@@ -6617,9 +7095,11 @@ class State:
         # status report, the last line again or a replay. Kept out of Journals.moments, whose checkpoint and
         # rollback during a journal re-read could replay or drop it
         self.copilot = {"seq": 0, "action": None, "words": None, "hush": None}
-        # the voice (POST /api/ask): its phrases, the AI layer's settings (set by run()), and when a window that speaks
-        # last asked for the payload (S24: whether an answer will be said on the PC)
-        self.ask_phrases = outrider.ask.load_phrases()
+        # the voice (POST /api/ask): its phrases (ask_file: resources/ask.json as read at start, the list of voice
+        # commands, GET /api/ask/commands, shows the same), the AI layer's settings (set by run()), and when a window
+        # that speaks last asked for the payload (S24: whether an answer will be said on the PC)
+        self.ask_file = outrider.ask.read_file()
+        self.ask_phrases = outrider.ask.phrases_of(self.ask_file[0])
         self.assistant = dict(outrider.ask.ASSISTANT)
         # S35: the last ASK_LOG_MAX questions (POST /api/ask, its refusals too) for Settings' "Questions asked": in
         # memory only, gone at a restart, never the AI's key; ask_seq in the payload tells an open page one came
@@ -6704,6 +7184,7 @@ class State:
         # full pass over your bodies, run on the event loop)
         self.history_version = 0
         self._history_jump = None
+        self._commander_seen = 0   # journals.commander_version at the last bump
         self.system_values = {}    # system name -> unsold cartographic value, from the last estimate
         t = journals.target        # whatever was targeted before we started: no sound for it
         self.startup_target_key = t and (t["id64"], t["ts"])
@@ -6766,6 +7247,7 @@ class State:
         # the overlay pill (S8): what the window last said it sees (its GET's &w=: outrider.overlay.TRACK_CODES), when
         # Outrider last started it (wall time), and Elite's display mode from DisplaySettings.xml (checked now and then)
         self.overlay_track = None
+        self.overlay_win_h = None   # the game window's height the overlay window last reported (&h=), for Settings' text figures
         self.overlay_started = 0.0
         self.overlay_display = (0.0, None)   # (when looked, "windowed" | "fullscreen" | "borderless" | None)
         self._hw_copied = (meta_get(db, "highway") or {}).get("arrival_ts")   # copied before a restart: not again
@@ -6903,9 +7385,11 @@ class State:
             "health": self.health.summary(),   # the lookups down (S42): the Data tile's "Spansh unavailable"
             "radius_choices": sorted({float(x) for x in RADIUS_CHOICES} | {self.radius}),
             "sphere_cut": self.sphere_cut,
+            "near_around": self.near_around_summary(),   # Nearby's Around: its centre when not you (the strip)
             "tts": self.speaker.info() if self.speaker else None,
             "style_picks": self.style_picks(),   # S40: each personality's voice and speaker picked in Settings
             "crew": self.crew_summary(),          # the crew: who speaks each alert row, and who cannot (the XO speaks for it)
+            "pad_delay": self.journals.pad_delay,   # [speech] pad_delay: Settings -> Voice
             "voice_memory": self.voice_memory(),  # the voices besides the main one in use, their memory and how many are kept
             "sound_files": self.sounds.info() if self.sounds and self.sounds.own_dir else None,   # your own sounds (S16)
             "player": self.player.info() if self.player else None,
@@ -6935,6 +7419,7 @@ class State:
             "route": self.route_summary(),
             "highway": self.highway_summary(),
             "dry_stretch": self.dry_stretch_summary(),   # S2: the last scoopable star before a stretch the fuel won't cover
+            "docking": self.docking_shown(),   # #3: the pad you were given (#12: where, its diagram), or why a station refused
             "survey": self.survey_summary(),   # Road to Riches / Exomastery: the line under the tiles, as the Highway's
             "backup": dict(meta_get(self.db, "last_backup") or {}, running=bool(self.backup_task and not self.backup_task.done()),
                            every_days=BACKUP_EVERY_DAYS, keep=BACKUP_KEEP, restore=self.restore_command(None)),
@@ -6951,6 +7436,7 @@ class State:
             "position": dict(pos, id=str(pos["id64"]), visits=self.visit_count(pos["id64"])) if pos else pos,
             "previous": with_id(self.journals.prev),
             "commander": self.commander_summary(),
+            "commander_version": self.journals.commander_version,   # the Commander view asks again when it moves
             "materials": self.materials_summary(), "jump_range": jr["ly"] if jr else None,
             # the range with the fuel and cargo aboard now (the fuel model), None without the Loadout's mass
             "jump_range_now": self.range_now(),
@@ -7101,14 +7587,16 @@ class State:
                 "restart": n > len(live), "live": live}, 200
 
     # config keys config_save also applies at once: Settings -> Voice's Keep loaded and Load them at start (crew batch 2)
-    LIVE_CONFIG = {("speech", "voices_loaded"), ("speech", "voices_preload")}
+    LIVE_CONFIG = {("speech", "voices_loaded"), ("speech", "voices_preload"), ("speech", "pad_delay")}
 
     def config_live(self, st, keys):
         """The LIVE_CONFIG keys among `keys` ((section, key) just written) set on the running Outrider from the saved
         settings `st`: the voices kept loaded beside the main one (the loaded ones over the new number set aside now) and
-        whether they load at start (used at the next start; the payload's voice_memory says it at once). The keys
-        applied, as "section.key"."""
+        whether they load at start (used at the next start; the payload's voice_memory says it at once), and how long
+        after a docking grant the pad is said (pad_delay: the next grant). The keys applied, as "section.key"."""
         done = sorted({f"{s}.{k}" for s, k in keys if (s, k) in self.LIVE_CONFIG})
+        if "speech.pad_delay" in done:
+            self.journals.pad_delay = st["pad_delay"]
         sp = self.speaker
         if done and sp is not None:
             if "speech.voices_loaded" in done:
@@ -7146,12 +7634,22 @@ class State:
                                  **fields))
         self.bump()
 
+    def ask_commands_info(self):
+        """GET /api/ask/commands: the fixed voice commands (outrider.ask.command_list, from the ask.json the voice
+        matches with) for Settings → Voice and the tablet's Voice commands…, and whether the AI layer takes the rest."""
+        return {"groups": outrider.ask.command_list(self.ask_file), "ai": self.ask_ai_state()}
+
+    def ask_ai_state(self):
+        """Whether the AI layer would take a question no phrase matched: "off", "on", or "unset" (switched on without
+        base_url and model)."""
+        a = self.assistant
+        return "off" if not a.get("enabled") else "on" if a.get("base_url") and a.get("model") else "unset"
+
     def ask_log_info(self):
         """GET /api/ask/log: the questions newest first, and whether the AI layer would take one no phrase matched
         ("off", "on", or "unset": switched on without base_url and model)."""
-        a = self.assistant
         return {"questions": list(reversed(self.ask_log)), "seq": self.ask_seq, "max": self.ASK_LOG_MAX,
-                "ai": "off" if not a.get("enabled") else "on" if a.get("base_url") and a.get("model") else "unset"}
+                "ai": self.ask_ai_state()}
 
     async def ask(self, text, get, source=None):
         """POST /api/ask: a question in words -> (answer, status). A fixed command first (resources/ask.json), then the
@@ -7189,7 +7687,7 @@ class State:
             matched, trace = "ai", {"rounds": 0, "tools": []}
             try:
                 async with ClientSession(timeout=ClientTimeout(total=self.assistant["timeout"] + 5),
-                                         headers={"User-Agent": USER_AGENT}) as session:
+                                         headers={"User-Agent": USER_AGENT}, connector=outrider.tls.connector()) as session:
                     words = await outrider.ask.ai_answer(text, self.assistant, get, session, trace=trace)
             except outrider.ask.AIError as e:
                 log("error", error=e.why, code=e.code, ai=trace)
@@ -7778,6 +8276,25 @@ class State:
         args = " ".join(shlex.quote(a) for a in [flag, *(self.service_args if action == "install" else [])])
         return f"cd {shlex.quote(outrider.ROOT)} && ./launch_outrider.sh {args}"
 
+    def paste_info(self, device):
+        """GET /api/clipboard (NEXT-VERSION #5): whether this device gets the 📋 paste buttons, {can, why}. `device`: the
+        request is this PC's own browser or the Android app (paste_device). Not on a server (no game PC's clipboard
+        there), nor under --simulate."""
+        why = NOT_GAME_PC if not self.game_pc else "not while simulating" if self.simulate \
+            else PASTE_DEVICES if not device else "the clipboard is not set up yet" if not self.clipboard \
+            else self.clipboard.paste_why()
+        return {"can": why is None, "why": why}
+
+    async def paste(self, device):
+        """POST /api/clipboard/paste: the game PC's clipboard as a name to paste (Clipboard.paste, on a worker): ({text},
+        200), else ({error, code}, 403 not_this_device | 409 not_game_pc, no_tool, empty, not_a_name, failed)."""
+        info = self.paste_info(device)
+        if not info["can"]:
+            code = "not_game_pc" if not self.game_pc or self.simulate else "not_this_device" if not device else "no_tool"
+            return {"error": info["why"], "code": code}, 403 if code == "not_this_device" else 409
+        out = await asyncio.to_thread(self.clipboard.paste)
+        return out, 200 if "text" in out else 409
+
     def service_info(self, this_pc):
         """GET /api/service: {kind, can, why, installed, path, running, this_pc, command, remove}. kind "systemd" |
         "startup" | None (can False: why, Docker and macOS among them)."""
@@ -7908,7 +8425,7 @@ class State:
         try:
             n = await asyncio.get_running_loop().run_in_executor(None, lambda: outrider.bio.update_colours(log=print))
         except Exception as e:  # noqa: BLE001 -- offline, GitHub down, upstream changed its form: said, Retry again
-            why = f"{type(e).__name__}: {e}" if not isinstance(e, ValueError) else str(e)
+            why = f"{type(e).__name__}: {e}" if not isinstance(e, ValueError | outrider.tls.CertificateFailed) else str(e)
             print(f"exobiology colour tables: download failed ({why})", file=sys.stderr)
             self.bio_colours_job = {"state": "failed", "why": why[:200]}
         else:
@@ -8112,6 +8629,11 @@ class State:
         """Where each overlay panel goes, how big, how opaque (meta overlay_layout: live-only, the player's own)."""
         return outrider.overlay.clean_layout(meta_get(self.db, "overlay_layout"))
 
+    def overlay_sizes(self):
+        """Each panel's text size: its own in the layout (Settings' Text column), else [overlay] text_size."""
+        lay, every = self.overlay_layout(), self.overlay_cfg.get("text_size") or "normal"
+        return {p: lay[p].get("text") or every for p in outrider.overlay.PANELS}
+
     def overlay_palette(self):
         return outrider.overlay.palette(self.overlay_cfg.get("theme", "default"))
 
@@ -8141,7 +8663,8 @@ class State:
                 "first": bool(firsts.get("system")), "firsts": firsts.get("bodies") or 0,
                 "mapped": sum(1 for b in bodies if b.get("mapped") or b.get("first_mapped")),
                 "planets": row.get("planets") or len(bodies) or None,
-                "in_spansh": row.get("in_spansh") if "in_spansh" in row else None}
+                "in_spansh": row.get("in_spansh") if "in_spansh" in row else self.spansh_knows(pos["id64"]),
+                "standing": pos.get("standing")}
 
     def overlay_route(self):
         """The route Now's panel gives the next stop of: the unfinished one plotted last (route_newest: the page
@@ -8208,21 +8731,55 @@ class State:
             return z["body"]
         return None
 
-    def overlay_target_panel(self, st, pos, now, pal, cfg, galaxy):
+    def docking_release(self, now=None):
+        """A follow-up (#12): a grant held is said once its wait is over: GRANT_SAY_DELAY_S (after the station's own
+        voice), or AUTO_DOCK_WAIT_S with a docking computer fitted unless it took over (its Music line drops the hold, as
+        a dock, a cancel or leaving do). True when said."""
+        h = self.journals.docking_hold
+        now = time.time() if now is None else now
+        if not h or now < h["until"]:
+            return False
+        self.journals.docking_hold = None
+        self.journals.moment("docking", iso_ts(now), **h["moment"])
+        return True
+
+    def docking_summary(self, now=None):
+        """#3: the pad you were given ({pad, station, type, ts}), or a refusal's words ({denied, words, station, ts}),
+        while it holds: a grant DOCK_GRANT_KEEP_S at most (a dock, a cancel, a timeout or leaving ends it sooner), a
+        refusal DOCK_DENIED_KEEP_S; None otherwise, and while docked."""
+        d = meta_get(self.db, "docking")
+        if not d or (self.journals.status_json or {}).get("flags", 0) & FLAG_DOCKED:
+            return None
+        try:
+            age = (time.time() if now is None else now) - ts_seconds(d["ts"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        return d if age <= (DOCK_DENIED_KEEP_S if d.get("denied") else DOCK_GRANT_KEEP_S) else None
+
+    def docking_shown(self, now=None):
+        """docking_summary as the page and the overlay show it: without the diagram's map while [overlay] pad_diagram is
+        off (#12: the number and its words only)."""
+        d = self.docking_summary(now)
+        if d and d.get("map") and not self.overlay_cfg.get("pad_diagram", True):
+            d = dict(d, map=None)
+        return d
+
+    def overlay_target_panel(self, st, pos, now, pal, size, galaxy):
         """The Target panel (D1, id "body"): inside a body's near-body zone (and TARGET_ZONE_LINGER_S after leaving it)
         that body, even over a target; outside it the body targeted in game in this system, else the system targeted.
-        Over the galaxy map always the system targeted. A body with nothing to say gives way to the system."""
+        Over the galaxy map always the system targeted. A body with nothing to say gives way to the system. (The pad
+        while docking is the Surface radar's place now: overlay_panels.)"""
         if not galaxy:
             bodies = (self.overlay_detail(pos["id64"]) or {}).get("bodies") or []
             zone, dest = self.overlay_zone_body(st, pos, now), self.destination()
             # the targeted body by its id (a station targeted is no body; a mining site's is its planet)
             for b in (next((x for x in bodies if zone and x.get("name") == zone), None),
                       next((x for x in bodies if dest and x.get("body_id") == dest["body_id"]), None)):
-                p = outrider.overlay.body_panel(b, pal, cfg["text_size"], HIGH_GRAVITY,
+                p = outrider.overlay.body_panel(b, pal, size, HIGH_GRAVITY,
                                                 outrider.bio.colony_table() if outrider.bio else None) if b else None
                 if p:
                     return p
-        return outrider.overlay.target_system_panel(self.overlay_target_info(pos), pal, cfg["text_size"])
+        return outrider.overlay.target_system_panel(self.overlay_target_info(pos), pal, size)
 
     def overlay_panels(self, now=None):
         """The panels to draw now: the test panels while they show, else the ones switched on that have something to
@@ -8230,22 +8787,25 @@ class State:
         SAA or the codex is open, or in the hyperspace tunnel; over the galaxy map only the Target panel, D1, and the
         alerts, S26). A panel in [overlay] analysis_only shows in your ship only while the HUD is in analysis mode (D2a);
         one in [overlay] hide_docked hides while docked (the ship docked, or on foot in a station, hangar or social space),
-        except the Target panel over the galaxy map."""
+        except the Target panel over the galaxy map; one in hide_on_foot hides on foot; with hide_mouse_lock none shows
+        on foot (nor in the DSS, as always), where Elite locks the mouse."""
         now = time.time() if now is None else now
-        cfg, pal = self.overlay_cfg, self.overlay_palette()
+        cfg, pal, size = self.overlay_cfg, self.overlay_palette(), self.overlay_sizes()   # size: each panel's text size
         if now < self.overlay_test_until or now < self.overlay_arrange_until:
-            return outrider.overlay.test_panels(pal, cfg["text_size"], cfg["radar_range"])
+            return outrider.overlay.test_panels(pal, size, cfg["radar_range"])
         st = self.journals.status_json or {}
         if not cfg.get("enabled") or not st.get("live") or self.journals.loading() \
                 or (st.get("gui_focus") or 0) in OVERLAY_HIDE_FOCUS \
                 or (st.get("flags") or 0) & FLAG_FSD_JUMP:   # nothing in the hyperspace tunnel: the system is changing
             return []
         flags, flags2, pos, out = st.get("flags") or 0, st.get("flags2") or 0, self.journals.pos, []
+        if cfg.get("hide_mouse_lock") and flags2 & FLAG2_ON_FOOT:
+            return []   # the window goes too (overlay_window.empty_hidden): nothing over the game while it locks the mouse
         if (st.get("gui_focus") or 0) == OVERLAY_GALAXY_MAP:
             # over the galaxy map (D1): the Target panel with the system you target there, docked or not, and the alerts
             # (S26); never analysis-only
-            p = self.overlay_target_panel(st, pos, now, pal, cfg, galaxy=True) if cfg.get("body_panel") and pos else None
-            a = outrider.overlay.alerts_panel(self.overlay_alerts, pal, cfg["text_size"], now) if cfg.get("alerts_panel") else None
+            p = self.overlay_target_panel(st, pos, now, pal, size["body"], galaxy=True) if cfg.get("body_panel") and pos else None
+            a = outrider.overlay.alerts_panel(self.overlay_alerts, pal, size["alerts"], now) if cfg.get("alerts_panel") else None
             return [x for x in (p, a) if x]
         # the system panel: in supercruise in the system you are in (for system_seconds after arriving, when set)
         if cfg.get("system_panel") and pos and flags & FLAG_SUPERCRUISE:
@@ -8254,7 +8814,7 @@ class State:
             except (KeyError, TypeError, ValueError):
                 fresh = True
             if fresh:
-                p = outrider.overlay.system_panel(self.overlay_detail(pos["id64"]), pal, cfg["text_size"], BODY_HIGHLIGHT, BIO_MIN,
+                p = outrider.overlay.system_panel(self.overlay_detail(pos["id64"]), pal, size["system"], BODY_HIGHLIGHT, BIO_MIN,
                                                   codex=CODEX_INTERESTING, first=self.plan_first_body())
                 if p:
                     out.append(p)
@@ -8262,23 +8822,23 @@ class State:
         # as [overlay] hide_docked says, below
         if cfg.get("body_panel") and pos and flags & FLAG_IN_MAIN_SHIP and not flags & (FLAG_LANDED | FLAG_IN_SRV) \
                 and not flags2 & 1:
-            p = self.overlay_target_panel(st, pos, now, pal, cfg, galaxy=False)
+            p = self.overlay_target_panel(st, pos, now, pal, size["body"], galaxy=False)
             if p:
                 out.append(p)
         # the system strip: where you are, wherever you are (ship, SRV, on foot)
         if cfg.get("strip_panel") and pos:
-            p = outrider.overlay.strip_panel(self.overlay_strip_info(pos), pal, cfg["text_size"])
+            p = outrider.overlay.strip_panel(self.overlay_strip_info(pos), pal, size["strip"])
             if p:
                 out.append(p)
         # Now, condensed: anywhere in the system (docked as hide_docked says); every bio signal in the system: anywhere,
         # as the strip
         if cfg.get("now_panel") and pos:
-            p = outrider.overlay.now_panel(self.overlay_now_info(pos, now), pal, cfg["text_size"], BODY_HIGHLIGHT, BIO_MIN,
+            p = outrider.overlay.now_panel(self.overlay_now_info(pos, now), pal, size["now"], BODY_HIGHLIGHT, BIO_MIN,
                                            HIGH_GRAVITY, CODEX_INTERESTING)
             if p:
                 out.append(p)
         if cfg.get("bio_panel") and pos:
-            p = outrider.overlay.bio_panel(self.overlay_detail(pos["id64"]), pal, cfg["text_size"], BIO_MIN, HIGH_GRAVITY,
+            p = outrider.overlay.bio_panel(self.overlay_detail(pos["id64"]), pal, size["bio"], BIO_MIN, HIGH_GRAVITY,
                                            CODEX_INTERESTING)
             if p:
                 out.append(p)
@@ -8290,16 +8850,20 @@ class State:
                                              pal, cfg["text_size"])
             if p:
                 out.append(p)
-        # the surface radar: on a body (landed, in the SRV, on foot) or low over it, as the surface map shows
+        # the Surface radar's place: while docking the pad (#3, #12: PAD 34, where it is, its diagram, or why a station
+        # refused; the author, 2026-10-14: the radar's place, free in space, rather than the Target panel's), even at a
+        # planetary port; else the radar on a body (landed, in the SRV, on foot) or low over it, as the surface map shows
         if cfg.get("radar"):
-            surf = self.surface_summary(now)
-            if surf and (surf.get("down") or surf.get("show")):
-                p = outrider.overlay.radar_panel(surf, pal, cfg["text_size"], cfg["radar_range"])
-                if p:
-                    out.append(p)
+            dock = self.docking_shown(now)
+            surf = None if dock else self.surface_summary(now)
+            p = outrider.overlay.pad_panel(dock, pal, size["radar"], pid="radar") if dock else \
+                outrider.overlay.radar_panel(surf, pal, size["radar"], cfg["radar_range"]) \
+                if surf and (surf.get("down") or surf.get("show")) else None
+            if p:
+                out.append(p)
         # the page's alerts (S26): anywhere, for ALERT_SECONDS each
         if cfg.get("alerts_panel"):
-            p = outrider.overlay.alerts_panel(self.overlay_alerts, pal, cfg["text_size"], now)
+            p = outrider.overlay.alerts_panel(self.overlay_alerts, pal, size["alerts"], now)
             if p:
                 out.append(p)
         # analysis only (D2a): in your ship with the HUD in combat mode those panels stay off; in the SRV and on foot
@@ -8312,23 +8876,36 @@ class State:
         hide = set(cfg.get("hide_docked") or ())
         if hide and (flags & FLAG_DOCKED or flags2 & ON_FOOT_DOCKED):
             out = [p for p in out if p["id"] not in hide]
+        foot = set(cfg.get("hide_on_foot") or ())   # hidden on foot (the author, 2026-10-15), anywhere
+        if foot and flags2 & FLAG2_ON_FOOT:
+            out = [p for p in out if p["id"] not in foot]
         return out
 
-    def overlay_view(self, since=None, now=None, window=True, track=None):
-        """GET /api/overlay: what the overlay window draws, {version, enabled, arrange, test, show_inactive, canvas,
-        layout, panels}; with since = that version and nothing changed, only {same, version} (the window asks about once
-        a second). window: the overlay window asked (its User-Agent), not another visitor: only it counts as a window
-        drawing, and only its `track` (&w=: what it sees, one of outrider.overlay.TRACK_CODES) is kept, for the page's
-        overlay pill (S8). This GET changes that state, as it sets overlay_seen: the page is woken only when the word
-        changes."""
+    def overlay_view(self, since=None, now=None, window=True, track=None, height=None):
+        """GET /api/overlay: what the overlay window draws, {version, enabled, arrange, test, show_inactive, panel_scale,
+        canvas, layout, panels}; with since = that version and nothing changed, only {same, version} (the window asks
+        about once a second). window: the overlay window asked (its User-Agent), not another visitor: only it counts as a
+        window drawing, and only its `track` (&w=: what it sees, one of outrider.overlay.TRACK_CODES) and `height` (&h=:
+        the game window's height in its pixels, none without a game window; Settings' text figures) are kept, `track` for
+        the page's overlay pill (S8). This GET changes that state, as it sets overlay_seen: the page is woken only when
+        the word or the height changes."""
         now = time.time() if now is None else now
         if window:
             self.overlay_seen = now
             if track in outrider.overlay.TRACK_CODES and track != self.overlay_track:
                 self.overlay_track = track
                 self.bump()   # the pill
+            try:
+                h = int(height) if height not in (None, "") else None
+            except (TypeError, ValueError):
+                h = self.overlay_win_h   # not a number: nothing learned
+            h = h if h is None or 100 <= h <= 20000 else self.overlay_win_h
+            if h != self.overlay_win_h:
+                self.overlay_win_h = h
+                self.bump()   # Settings' "≈ N px text"
         out = {"enabled": bool(self.overlay_cfg.get("enabled")), "arrange": now < self.overlay_arrange_until,
                "test": now < self.overlay_test_until, "show_inactive": bool(self.overlay_cfg.get("show_inactive")),
+               "panel_scale": self.overlay_cfg.get("panel_scale", 100),
                "canvas": [outrider.overlay.CANVAS_W, outrider.overlay.CANVAS_H],
                "layout": self.overlay_layout(), "panels": self.overlay_panels(now)}
         version = hashlib.sha1(json.dumps(out, sort_keys=True).encode()).hexdigest()[:16]
@@ -8405,20 +8982,36 @@ class State:
         """The page's Settings -> In-game overlay: the switches, whether a window is drawing (it asked within the last
         few seconds), the layout, and the test panels' and Arrange mode's time left."""
         now = time.time() if now is None else now
-        cfg = self.overlay_cfg
+        cfg, O = self.overlay_cfg, outrider.overlay
+        window = now - self.overlay_seen < OVERLAY_SEEN_S
+        # what each panel's text comes to in the game window (the 4K TV report, 2026-10-14): only from a window drawing
+        # now, which says the game window's height; {panel: {px, held}}, held: kept at MIN_TEXT_PX
+        win_h, text_px, layout = self.overlay_win_h if window else None, None, self.overlay_layout()
+        if win_h:
+            sizes, ps = self.overlay_sizes(), cfg.get("panel_scale", 100) / 100
+            text_px = {}
+            for p in O.PANELS:
+                px, held = O.text_px(win_h, ps, layout[p]["scale"], O.panel_font(p, sizes[p]))
+                text_px[p] = {"px": px, "held": held}
         return {"enabled": bool(cfg.get("enabled")), "theme": cfg.get("theme"), "text_size": cfg.get("text_size"),
+                "panel_scale": cfg.get("panel_scale", 100), "win_h": win_h, "text_px": text_px, "min_text_px": O.MIN_TEXT_PX,
                 "panels": {p: bool(cfg.get(f"{p}_panel" if p != "radar" else "radar")) for p in outrider.overlay.PANELS},
                 "analysis_only": list(cfg.get("analysis_only") or []), "hide_docked": list(cfg.get("hide_docked") or []),
-                "show_inactive": bool(cfg.get("show_inactive")),
-                "window": now - self.overlay_seen < OVERLAY_SEEN_S, "layout": self.overlay_layout(),
+                "hide_on_foot": list(cfg.get("hide_on_foot") or []), "hide_mouse_lock": bool(cfg.get("hide_mouse_lock")),
+                "show_inactive": bool(cfg.get("show_inactive")), "pad_diagram": bool(cfg.get("pad_diagram", True)),
+                "window": window, "layout": layout,
                 "test": max(0, round(self.overlay_test_until - now)), "arrange": max(0, round(self.overlay_arrange_until - now)),
                 # Outrider runs the window itself on the game PC: its state; None on a server (the window runs elsewhere)
                 "runner": self.overlay_runner.status() if self.overlay_runner else None,
                 "pill": self.overlay_pill(now)}   # the header's overlay pill (S8)
 
     def overlay_set(self, body, now=None):
-        """POST /api/overlay {enabled?, theme?, text_size?, panels?: {system|body|radar|strip|now|bio|alerts|route: bool}, analysis_only?:
-        [panel ids], hide_docked?: [panel ids but radar], show_inactive?: bool, test?: bool, arrange?: bool}: the switches, applied at once and written into [overlay] for the next start; test panels for
+        """POST /api/overlay {enabled?, theme?, text_size?, panel_scale?: %, panels?: {system|body|radar|strip|now|bio|alerts|route: bool},
+        analysis_only?: [panel ids], hide_docked?: [panel ids but radar], hide_on_foot?: [panel ids], show_inactive?: bool,
+        pad_diagram?: bool, hide_mouse_lock?: bool, test?: bool,
+        arrange?: bool}: the
+        switches, applied at once and written into [overlay] for the next start (panel_scale clamped to
+        outrider.overlay.PANEL_SCALE_LIMITS); test panels for
         TEST_SECONDS; Arrange mode (the window takes the mouse to move and size the panels) until it is switched off or
         ARRANGE_SECONDS pass. (answer, HTTP status)."""
         now = time.time() if now is None else now
@@ -8427,12 +9020,15 @@ class State:
             return {"error": "expected {enabled, theme, text_size, panels, test, arrange}"}, 400
         changes = {}
         for key, val in body.items():
-            if key in ("enabled", "show_inactive") and isinstance(val, bool):
+            if key in ("enabled", "show_inactive", "pad_diagram", "hide_mouse_lock") and isinstance(val, bool):
                 changes[key] = val
             elif key == "theme" and val in O.THEMES:
                 changes["theme"] = val
             elif key == "text_size" and val in O.SIZES:
                 changes["text_size"] = val
+            elif key == "panel_scale" and isinstance(val, (int, float)) and not isinstance(val, bool) and math.isfinite(val):
+                lo, hi = O.PANEL_SCALE_LIMITS
+                changes["panel_scale"] = int(round(min(hi, max(lo, val))))
             elif key == "panels" and isinstance(val, dict) and val and all(
                     p in O.PANELS and isinstance(v, bool) for p, v in val.items()):
                 changes.update({(f"{p}_panel" if p != "radar" else "radar"): v for p, v in val.items()})
@@ -8440,6 +9036,8 @@ class State:
                 changes["analysis_only"] = O.analysis_list(val)   # the whole list, in PANELS' order
             elif key == "hide_docked" and isinstance(val, list) and all(isinstance(p, str) and p in O.DOCKED_PANELS for p in val):
                 changes["hide_docked"] = O.docked_list(val)   # the whole list too
+            elif key == "hide_on_foot" and isinstance(val, list) and all(isinstance(p, str) and p in O.PANELS for p in val):
+                changes["hide_on_foot"] = O.foot_list(val)    # and this one
             elif key in ("test", "arrange") and isinstance(val, bool):
                 pass
             else:
@@ -8746,7 +9344,7 @@ class State:
         special = [w for w in worth if w["notable"] or w["terraformable"]]
         return {"undiscovered": (scan["was_discovered"] is False) if scan and scan["id64"] == id64 else None,
                 "visits": self.visit_count(id64), "status": row.get("status"),
-                "in_spansh": row["in_spansh"] if "in_spansh" in row else mr["base"],
+                "in_spansh": row["in_spansh"] if "in_spansh" in row else self.spansh_knows(id64),   # None: never asked
                 "body_count": (sysrow["body_count"] if sysrow else None) or mr["body_count"],
                 "honked": bool(sysrow), "all_found": bool(sysrow and sysrow["all_found"]), "star_class": mr["star"],
                 "base_known": mr["base_known"],
@@ -8776,6 +9374,112 @@ class State:
         return {"name": c.get("name"), "credits": cr + (c.get("earned") or 0) if cr is not None else None,
                 "credits_login": cr, "earned": c.get("earned") or 0, "login_ts": c.get("login_ts"),
                 "loan": c.get("loan"), "mode": c.get("mode"), "ranks": ranks}
+
+    # ---- the Commander view (outrider/commander.py): its tabs, from what Journals.handle_commander folded ----
+    # Each a quick read on the event loop: the folds are in memory (Journals.cmdr_view), the rest small tables
+
+    def commander_fleet(self):
+        """Your ships: the stored ones (the fold) and the one you fly, each worth its latest Loadout (fleet_loadouts),
+        with that Loadout's EDSY and Coriolis links."""
+        rows = [dict(r) for r in self.db.execute(
+            "SELECT ship_id, name, ship_type, ident, ts, value, loadout FROM fleet_loadouts ORDER BY ts DESC")]
+        return outrider.commander.ships(self.journals.cmdr_view.get("stored_ships"), rows)
+
+    def commander_profile(self):
+        """GET /api/commander/profile."""
+        v = self.journals.cmdr_view
+        return {"profile": outrider.commander.profile(self.journals.commander, meta_get(self.db, "statistics"), v.get("reputation"),
+                                                      v.get("powerplay"), v.get("squadron"), self.commander_fleet(),
+                                                      v.get("stored_modules"))}
+
+    def commander_inventory(self):
+        """GET /api/commander/inventory."""
+        v = self.journals.cmdr_view
+        return {"ships": self.commander_fleet(), "modules": outrider.commander.stored_modules(v.get("stored_modules")),
+                "locker": outrider.commander.locker(v.get("ship_locker")), "suits": outrider.commander.suits(v.get("suit_loadouts"))}
+
+    def commander_engineering(self):
+        """GET /api/commander/engineering: the blueprints against the materials held now."""
+        return outrider.commander.engineering(self.journals.materials, self.journals.cmdr_view.get("engineers"))
+
+    def commander_missions(self):
+        """GET /api/commander/missions."""
+        return {"missions": outrider.commander.missions(self.journals.cmdr_view.get("missions"))}
+
+    def commander_sessions(self, now=None):
+        """GET /api/commander/sessions: the logins of the last 30 days with fighting or mining (play_activity), the
+        newest first, 40 at most (outrider.commander.SESSIONS_DAYS, SESSIONS_MAX)."""
+        rows = ({"login_ts": r["login_ts"], "commander": r["commander"], "ship": r["ship"],
+                 "combat": json.loads(r["combat"]) if r["combat"] else None, "mining": json.loads(r["mining"]) if r["mining"] else None}
+                for r in self.db.execute("SELECT * FROM play_activity WHERE (combat IS NOT NULL OR mining IS NOT NULL) "
+                                         "AND login_ts >= ? ORDER BY login_ts DESC", (outrider.commander.sessions_since(now),)))
+        out = outrider.commander.sessions(rows)
+        return {"sessions": out, "totals": outrider.commander.totals(out), "max": outrider.commander.SESSIONS_MAX,
+                "days": outrider.commander.SESSIONS_DAYS}
+
+    def commander_earnings(self, year=None, month=None):
+        """GET /api/commander/earnings?year=&month=: what exploration, exobiology and mining paid in the period (all time,
+        a year or a month; outrider.earnings.period raises ValueError for a bad one), with the all-time monthly series.
+        Kept per period until the reader's data moves: data_seq (jumps, scans, samples, sales, deaths, reload()) and
+        commander_version (a MarketSell, a Loadout: every line the Commander view folds)."""
+        p = outrider.earnings.period(year, month)
+        key = (self.journals.data_seq, self.journals.commander_version)
+        if getattr(self, "_earnings", (None,))[0] != key:
+            self._earnings = (key, {})
+        kept = self._earnings[1]
+        if (p["year"], p["month"]) not in kept:
+            names = self.journals.commodity_names
+            kept[p["year"], p["month"]] = outrider.earnings.summary(
+                p, outrider.earnings.read(self.db, p), self.earnings_ships(), lambda i: outrider.cargo.display(i, names),
+                journal_star, self.sold_system_values(), self.ledger()["losses"])
+        return kept[p["year"], p["month"]]
+
+    def earnings_ships(self):
+        """{ShipID: {name, type, type_name}} for the Earnings: every ship you have flown (fleet_loadouts: its name and the
+        game's symbol for its type), the type's own name where the stored ships' list gave one, for that ship or another
+        of its type (the CSV's words; the page names types itself)."""
+        stored = {s.get("id"): s for s in ((self.journals.cmdr_view.get("stored_ships") or {}).get("ships") or {}).values()}
+        out = {sid: {"name": s.get("name"), "type": s.get("type"), "type_name": s.get("type_name")} for sid, s in stored.items()}
+        for r in self.db.execute("SELECT ship_id, name, ship_type FROM fleet_loadouts"):
+            s = stored.get(r["ship_id"]) or {}
+            out[r["ship_id"]] = {"name": r["name"] or s.get("name"), "type": r["ship_type"] or s.get("type"),
+                                 "type_name": s.get("type_name")}
+        # a ship sold before the stored ships' list named its type: the name another ship of that type has
+        named = {str(s["type"]).lower(): s["type_name"] for s in out.values() if s["type"] and s["type_name"]}
+        for s in out.values():
+            s["type_name"] = s["type_name"] or named.get(str(s["type"] or "").lower())
+        return out
+
+    def sold_system_values(self):
+        """Outrider's estimate of each system you sold data from (the sales table's names): your scans of its bodies
+        valued as top_finds values them (outrider.unsold.body_value with your first discovery and first mapping flags,
+        mapped or not), summed: {name: {id, value, bodies}}. An estimate: the game pays per page of systems. Kept until a
+        sale, a scan or a map is added (their counts)."""
+        if not outrider.unsold:
+            return {}
+        key = tuple(self.db.execute("SELECT (SELECT count(*) FROM sales), (SELECT count(*) FROM own_bodies), "
+                                    "(SELECT count(*) FROM own_mapped)").fetchone())
+        if getattr(self, "_sold_values", (None,))[0] == key:
+            return self._sold_values[1]
+        sold = "SELECT v.id64 FROM visits v WHERE v.name IN (SELECT name FROM sales)"
+        ids = {r[0]: r[1] for r in self.db.execute("SELECT name, id64 FROM visits WHERE name IN (SELECT name FROM sales)")}
+        mapped = {(r[0], r[1]) for r in self.db.execute(f"SELECT system, body_id FROM own_mapped WHERE system IN ({sold})")}
+        firsts = {(r[0], r[1]): r for r in self.db.execute(
+            f"SELECT system, body_id, was_discovered, was_mapped FROM own_firsts WHERE system IN ({sold})")}
+        per = {}
+        for r in self.db.execute(f"SELECT system, body_id, record FROM own_bodies WHERE system IN ({sold})"):
+            rec = json.loads(r["record"])
+            if not rec.get("ed"):
+                continue
+            f = firsts.get((r["system"], r["body_id"]))
+            body = dict(rec["ed"], first_discovered=bool(f and f["was_discovered"] == 0),
+                        first_mapped=bool(f and f["was_mapped"] == 0))
+            t = per.setdefault(r["system"], [0, 0])
+            t[0] += outrider.unsold.body_value(body, (r["system"], r["body_id"]) in mapped, False, True)
+            t[1] += 1
+        out = {name: {"id": str(i), "value": per[i][0], "bodies": per[i][1]} for name, i in ids.items() if i in per}
+        self._sold_values = (key, out)
+        return out
 
     def materials_summary(self):
         m = self.journals.materials
@@ -10993,6 +11697,11 @@ class State:
             return ["id64", "name", "x", "y", "z", "system_first_discovered", "system_state", "system_state_ts",
                     "bodies_first_discovered", "bodies_sold", "bodies_unsold", "bodies_lost", "first_mapped",
                     "first_footfalls"], rows
+        if what == "earnings":   # every sale the CMDR tab's Earnings counts, all time (outrider.earnings)
+            names = self.journals.commodity_names
+            sold = outrider.earnings.sales(outrider.earnings.read(self.db, outrider.earnings.period()), self.earnings_ships(),
+                                           lambda i: outrider.cargo.display(i, names))
+            return outrider.earnings.CSV_COLUMNS, outrider.earnings.csv_rows(sold)
         if what == "unsold" and outrider.unsold:
             rows = self._unsold_rows()
             return ["system", "body", "type", "first_discovered", "first_mapped", "mapped", "efficient", "value"], rows
@@ -11210,8 +11919,12 @@ class State:
                                   "ON b.system = g.system AND b.body_id = g.body_id WHERE g.system=?", (id64,)):
             own_genera.setdefault(short_name(base["name"], r_["name"]), []).append(r_["genus_name"])
         s = summarise(records, body_count, star, ctx, own_genera)
-        s.update(id64=id64, id=str(id64), name=base["name"], source=source, in_spansh=source == "spansh",
+        # in_spansh: True, False (the search answered without it), None (a stand-in Spansh's answer did not cover)
+        s.update(id64=id64, id=str(id64), name=base["name"], source=source,
+                 in_spansh=True if source == "spansh" else None if source == "edsm" or base.get("unasked") else False,
                  visited=id64 in self.visited, distance=round(dist(self.center or base, base), 2),   # (no sphere yet: 0)
+                 # where it is: the page's "From you" while Nearby is around another system (near_around)
+                 xyz=[round(base[k], 3) for k in "xyz"] if all(isinstance(base.get(k), (int, float)) for k in "xyz") else None,
                  own_scans=len(own), firsts=own_firsts(self.db, id64, base["name"]),
                  mapped=self.db.execute(
                      """SELECT count(*) FROM own_firsts f LEFT JOIN own_mapped m
@@ -11235,7 +11948,7 @@ class State:
         s["curiosity_list"] = [{"body": bn, "tag": t, "why": w} for bn, lst in cur.items() for t, w in lst]
         s["curiosities"] = len(s["curiosity_list"])
         if not s["bodies_known"]:
-            s["status"] = "unreported" if source == "route" else "no bodies"
+            s["status"] = ("unasked" if base.get("unasked") else "unreported") if source == "route" else "no bodies"
         elif s["body_count"] is None or s["bodies_known"] < s["body_count"]:
             s["status"] = "partial"
         else:
@@ -11359,19 +12072,23 @@ class State:
                 self.bump()
 
     def maybe_refresh(self):
-        pos = self.journals.pos
-        if not pos:
+        """Every tick: Spansh's sphere is asked when its centre changes (you moved, or Nearby's chosen centre did), or
+        again when a failed search's retry is due. Nothing else asks it: no timer (↻ refresh_nearby is the player's)."""
+        pos = self.nearby_centre()
+        if not pos or pos.get("x") is None:
             return
         retry = False
         if self.center and self.center["id64"] == pos["id64"]:
             if not (self.retry_at and time.time() >= self.retry_at
                     and (not self.refresh_task or self.refresh_task.done())):
+                self.near_add_here()
                 return
             retry = True
         self.center = pos
         self.retry_at = None
         if self.refresh_task and not self.refresh_task.done():
             self.refresh_task.cancel()
+        self.near_asked = time.time()
         self.refresh_task = asyncio.create_task(self.refresh(pos, retry))
 
     def set_radius(self, r):
@@ -11381,9 +12098,131 @@ class State:
         self.radius = r
         meta_set(self.db, "radius_choice", r)
         self.db.commit()
-        self.center = None          # forces a fresh Spansh sphere around where you are
+        self.center = None          # forces a fresh Spansh sphere around its centre
         self.maybe_refresh()
         self.bump()
+
+    # ---- Nearby's Around (2026-10-14: Rainmangames' PR #8, "Lock System" and filters, its ideas built on S49's Around) ----
+    def _around_id(self, kind):
+        """The id64 a moving Around names now (destination, carrier, next_stop), cheaply: None when it names nothing."""
+        if kind == "destination":
+            return (self.game_target() or {}).get("id64")
+        if kind == "carrier":
+            return (self.journals.carrier or {}).get("id64")
+        return (meta_get(self.db, "next_stop") or {}).get("id64")
+
+    def nearby_centre(self):
+        """Where Nearby's sphere is: your position, or the Around saved by POST /api/nearby/around ({id64, name, x, y,
+        z, around}). "lock" and "system" are fixed points; destination, carrier and next_stop are worked out through
+        search_origin (read only) when what they name changes. One that names nothing now (no target, no carrier, a
+        system Outrider cannot place) leaves the sphere around you, and near_why says why."""
+        pos, c = self.journals.pos, self.near_choice
+        kind = c["around"]
+        self.near_why = None
+        if kind == "here":
+            return pos
+        if kind in ("lock", "system"):
+            return {"id64": c["id64"], "name": c["name"], "x": c["x"], "y": c["y"], "z": c["z"], "around": kind}
+        id64, cur = self._around_id(kind), self.center
+        if id64 is not None and cur and cur.get("id64") == id64 and cur.get("around") == kind:
+            return cur
+        miss = self._near_miss
+        if miss and miss[0] == (kind, id64) and time.monotonic() - miss[2] < NEAR_MISS_RETRY_S:
+            self.near_why = miss[1]
+            return pos
+        o, why = self.search_origin(kind)
+        if o:
+            self._near_miss = None
+            return o
+        self._near_miss, self.near_why = ((kind, id64), why, time.monotonic()), why
+        return pos
+
+    def near_pinned(self):
+        """Nearby's sphere is around a chosen centre, not around you (its rows' distance is from there)."""
+        return self.near_choice["around"] != "here" and not self.near_why
+
+    def near_add_here(self):
+        """A sphere around a chosen centre is not asked again when you arrive in it (Spansh learns of your scans later,
+        through uploads): the system you are in, inside the sphere and not listed (Spansh had no record of it), joins
+        the list at once as your own; your scans then fill its row as anywhere (apply_own_changes)."""
+        here, c = self.journals.pos, self.center
+        if not here or not c or here.get("x") is None or here["id64"] == c["id64"] or here["id64"] in self.bases \
+                or not self.near_pinned() or (self.refresh_task and not self.refresh_task.done()):
+            return
+        d = dist(c, here)
+        if d > self.radius:
+            return
+        unasked = self.sphere_failed or (self.sphere_cut is not None and d > self.sphere_cut)
+        self.visited.add(here["id64"])
+        self.bases[here["id64"]] = ("own", {"name": here["name"], "x": here["x"], "y": here["y"], "z": here["z"],
+                                            "body_count": None, "records": [], "unasked": unasked})
+        if self.safe_row(here["id64"]):
+            self.bump()
+
+    def set_near_around(self, around):
+        """POST /api/nearby/around: "here" (you), "destination", "carrier", "next_stop", "lock" (the system you are in,
+        kept where it is) or a system's id64 as a string (a typed name found by GET /api/find first, as Search's
+        Around). Saved in meta near_around (live-only: a restart and a journal re-read keep it), so every window and
+        the tablet agree. A new centre asks Spansh at once (maybe_refresh). (summary, None) or (None, why)."""
+        if around == "lock":
+            pos = self.journals.pos
+            if not pos or pos.get("x") is None:
+                return None, "your position is not known yet"
+            c = {"around": "lock", "id64": pos["id64"], "name": pos["name"], "x": pos["x"], "y": pos["y"], "z": pos["z"]}
+        elif around in NEAR_AROUND_KINDS and around != "system":
+            c = {"around": around}
+        else:
+            o, why = self.search_origin(around)
+            if not o or o.get("around") != "system":
+                return None, why or AROUND_BAD
+            c = {"around": "system", "id64": o["id64"], "name": o["name"], "x": o["x"], "y": o["y"], "z": o["z"]}
+        c = near_choice(c)
+        self.near_choice, self._near_miss = c, None
+        meta_set(self.db, "near_around", c)
+        self.db.commit()
+        self.maybe_refresh()
+        self.bump()
+        return self.near_around_summary(), None
+
+    def refresh_nearby(self, now=None):
+        """↻ refresh (POST /api/nearby/refresh): Spansh's sphere around Nearby's chosen centre asked again. Only while
+        it is not around you (there each arrival asks), never while a search runs, and no sooner than
+        NEAR_REFRESH_GAP_S after the last ask. (True, None) or (False, why)."""
+        now = time.time() if now is None else now
+        if not self.near_pinned():
+            return False, "Nearby is around you: it asks Spansh again at each arrival"
+        if self.refresh_task and not self.refresh_task.done():
+            return False, "Spansh is being asked already"
+        wait = NEAR_REFRESH_GAP_S - (now - self.near_asked)
+        if wait > 0:
+            return False, f"Spansh was asked {int(now - self.near_asked)} s ago: again in {math.ceil(wait)} s"
+        self.center = None
+        self.maybe_refresh()
+        self.bump()
+        return True, None
+
+    def near_around_summary(self):
+        """The payload's near_around: {around} around you; else the centre ({around, name, id, x, y, z, from_you}), or
+        `why` it is around you meanwhile, and whether a search runs (↻)."""
+        kind = self.near_choice["around"]
+        if kind == "here":
+            return {"around": "here"}
+        out = {"around": kind, "why": self.near_why, "refresh_gap_s": NEAR_REFRESH_GAP_S,
+               "refreshing": bool(self.refresh_task and not self.refresh_task.done())}
+        c, pos = self.center, self.journals.pos
+        if c and not self.near_why:
+            out.update(name=c.get("name"), id=str(c["id64"]), x=c["x"], y=c["y"], z=c["z"],
+                       from_you=round(dist(c, pos), 1) if pos and pos.get("x") is not None else None)
+        return out
+
+    def near_from_you(self, row):
+        """A Nearby row's distance from you (ly): its own distance while the sphere is around you, else from its xyz."""
+        pos, xyz = self.journals.pos, row.get("xyz")
+        if not self.near_pinned():
+            return row.get("distance")
+        if not pos or pos.get("x") is None or not xyz:
+            return None
+        return round(math.dist(xyz, (pos["x"], pos["y"], pos["z"])), 2)
 
     def health_changed(self):
         """A lookup source went down or came back (outrider.health.Health's on_change): the banner, then the page."""
@@ -11398,9 +12237,11 @@ class State:
 
     def check_lookup_outages(self, now=None):
         """S42: a card on the banner for a lookup that stays down: no network at all (two sources failing by DNS or no
-        route) at once, a source whose address is not found at once, Spansh or EDSM down LOOKUP_DOWN_S. The card goes
-        when it answers again (or nothing has asked it for outrider.health.DOWN_FRESH_S). The Data tile says only
-        "Spansh unavailable" (the payload's health); the card's words stay the same for the whole outage."""
+        route) at once, a source whose address is not found at once, a certificate that cannot be verified at once
+        (issue #9: one card for every source failing so, with the first one's words), Spansh or EDSM down
+        LOOKUP_DOWN_S. The card goes when it answers again (or nothing has asked it for outrider.health.DOWN_FRESH_S).
+        The Data tile says only "Spansh unavailable" (the payload's health), a certificate failure its words; the card's
+        words stay the same for the whole outage."""
         now = time.time() if now is None else now
         if self.health.expire(now):
             return   # expire's on_change came back here already
@@ -11409,9 +12250,17 @@ class State:
             want["lookup_down:internet"] = (f"{outrider.health.OFFLINE}: Outrider's lookups (Spansh, EDSM, GitHub) "
                                             "are failing. Check this PC's network; what Outrider has kept still shows.")
         else:
+            certs = [d for d in self.health.down() if d["kind"] == "certificate"]
+            if certs:   # the clock or the certificate store: the same fix for every source, so one card
+                then = (f"Meanwhile {self.LOOKUP_DOWN_WORDS.get(certs[0]['source'], 'it asks again by itself')}"
+                        if len(certs) == 1 else "Meanwhile what Outrider has kept still shows")
+                want["lookup_down:certificate"] = (f"{' and '.join(d['name'] for d in certs)} unavailable: "
+                                                   f"{certs[0]['text'] or outrider.tls.cert_text(None)}. {then}.")
             for d in self.health.down():
                 src, name = d["source"], d["name"]
                 then = self.LOOKUP_DOWN_WORDS.get(src, "it asks again by itself")
+                if d["kind"] == "certificate":
+                    continue
                 if d["user_fix"]:
                     want[f"lookup_down:{src}"] = (f"{name} unavailable: its address is not found (this PC's network or "
                                                   f"DNS?). Meanwhile {then}.")
@@ -11529,10 +12378,12 @@ class State:
             # only complete out to the last system returned; say so rather than call it every system
             self.sphere_cut = round(results[-1]["distance"], 1) \
                 if len(results) >= SPANSH_PAGE * SPANSH_MAX_PAGES and results else None
+            self.sphere_failed = False
         except Exception as e:  # network trouble shouldn't kill the server
             spansh_failed = e
             results = []
             self.sphere_cut = None   # the last good search's limit was for another position or radius
+            self.sphere_failed = True
             try:  # second opinion: EDSM's list has no body data but says what exists
                 edsm = await self.spansh.edsm_sphere(pos, r)
             except Exception:
@@ -11588,17 +12439,20 @@ class State:
                 self.spansh.store(id64, s.get("updated_at"), base)
             self.bases[id64] = ("spansh", base)
 
-        # Systems you've been to that Spansh doesn't have (e.g. your own fresh discoveries).
+        # Systems you've been to that Spansh doesn't have (e.g. your own fresh discoveries), and systems from your own
+        # route plots that nobody has reported. "unasked": the search failed, or a dense region's answer stopped short
+        # of it (sphere_cut): Spansh's answer says nothing about it, and the page claims nothing (spansh_knows)
+        def unasked(p):
+            return bool(spansh_failed) or (self.sphere_cut is not None and dist(pos, p) > self.sphere_cut)
         for v in self.near("visits", pos, r):
             if v["id64"] not in self.bases and dist(pos, v) <= r:
                 self.bases[v["id64"]] = ("own", {"name": v["name"], "x": v["x"], "y": v["y"],
-                                                 "z": v["z"], "body_count": None, "records": []})
-        # Systems from your own route plots that nobody has reported.
+                                                 "z": v["z"], "body_count": None, "records": [], "unasked": unasked(v)})
         for rs in self.near("route_systems", pos, r):
             if rs["id64"] not in self.bases and dist(pos, rs) <= r:
                 self.bases[rs["id64"]] = ("route", {"name": rs["name"], "x": rs["x"], "y": rs["y"],
                                                     "z": rs["z"], "body_count": None, "records": [],
-                                                    "star_class": rs["star_class"]})
+                                                    "star_class": rs["star_class"], "unasked": unasked(rs)})
         for id64 in self.bases:
             self.safe_row(id64)
 
@@ -12110,6 +12964,7 @@ class State:
     # the outage card's verb per failure kind (outrider.health.classify)
     DOWN_WORDS = {"dns": "unreachable (its address not found)", "offline": "unreachable (no network)",
                   "refused": "unreachable", "timeout": "not answering", "tls": "unreachable (the secure connection failed)",
+                  "certificate": f"unreachable (its certificate could not be verified: {outrider.tls.ADVICE})",
                   "http5xx": "failing", "http4xx": "refusing", "bad_answer": "answering oddly", "other": "failing"}
 
     def check_upload_outages(self, now=None):
@@ -13367,6 +14222,9 @@ class State:
                 self.materials_version += 1
             self.journals.materials_changed = self.journals.cmdr_changed = False
             self.bump()
+        if self.journals.commander_version != self._commander_seen:   # a line the Commander view reads: the page asks again
+            self._commander_seen = self.journals.commander_version
+            self.bump()
 
     # ---- 3D map ----
 
@@ -13568,28 +14426,128 @@ class State:
             return None
         if not route:
             return self.route_minimal()
-        hops = route["hops"]
-        i = next((k for k, h in enumerate(hops) if h["id64"] == pos["id64"]), None)
-        left = hops[i + 1:] if i is not None else hops
+        if len(route.get("hops") or []) <= 2:
+            return None   # a route of one jump (the game writes one for any system targeted next door): the target's, no line (the author)
+        left = self.summary_hops()
         if not left:
             return None
         visited = {r[0] for r in self.db.execute(
             f"SELECT id64 FROM visits WHERE id64 IN ({','.join('?' * len(left))})", [h["id64"] for h in left])}
         visited |= {r["id64"] for r in outrider.edsmlog.rows(self.db, ids=[h["id64"] for h in left])}   # S67
-        out, prev, dry, longest, total = [], pos, 0, 0, 0.0
+        out, prev, dry, longest, total, lys = [], pos, 0, 0, 0.0, []
         for h in left:
             d = dist(prev, h)
             total += d
+            lys.append(d)
             scoop = class_scoopable(h["star_class"]) if h.get("star_class") else None
             dry = 0 if scoop else dry + 1
             longest = max(longest, dry)
-            known = h["id64"] in self.systems or bool(self.spansh.cached(h["id64"])[1]) if self.spansh else False
+            # True, False (Spansh asked: no record) or None (never asked: no claim, Kurbo26's Sol in discussion #3)
             out.append({"id": str(h["id64"]), "name": h["name"], "star_class": h.get("star_class"), "scoopable": scoop,
-                        "ly": round(d, 1), "visited": h["id64"] in visited, "known": known})
+                        "ly": round(d, 1), "visited": h["id64"] in visited, "known": self.spansh_knows(h["id64"])})
             prev = h
         next_scoop = next((k + 1 for k, h in enumerate(out) if h["scoopable"]), None)
         return {"hops": out, "ly": round(total, 1), "longest_dry": longest, "next_scoop": next_scoop, "ts": route.get("ts"),
-                "known_v": self.route_known_v}   # grows as the Game Route list's Known column comes in: it reloads
+                "known_v": self.route_known_v,   # grows as the Game Route list's Known column comes in: it reloads
+                "fuel_reach": self.route_fuel_reach(lys)}
+
+    def route_fuel_reach(self, lys):
+        """How many of the game's route hops (`lys`, their ly in order from where you are) the fuel in the main tank makes
+        without scooping (Kurbo26, GitHub discussion #3: a ship with no scoop sees where it must refuel): burned hop by
+        hop as the ship lightens (fsd.fuel_run), a charge you hold counted on the first hop only. Worked out with each
+        payload from the fuel aboard now, so a scoop on the way moves it. A hop counts only when it leaves
+        FUEL_REACH_RESERVE of the tank aboard (the author, 2026-10-15: a 27-jump route "made" with 0.1 t to spare is no
+        promise; the model is a fit, a little cargo or a longer hop undoes it). {hops, whole, spare (t left after the
+        last hop counted), reserve (t)}: whole when every hop goes with the reserve kept. {learning: jumps} while the fuel
+        model is not complete (the strip says so rather than nothing). None when nothing can be claimed: no fuel or cargo
+        reading, every one of more than FUEL_RUN_MAX_HOPS hops looked at going, or the first hop the fuel fails out of the
+        drive's reach at any fuel level (a range matter, not fuel)."""
+        now, tank = self.fuel_now(), (self.journals.ship or {}).get("fuel_main")
+        if not now or not lys:
+            return None
+        model, fuel, cargo = now
+        if not model.get("max_fuel") or not model.get("power"):
+            return {"learning": model.get("need") or 1}   # the fuel model is not complete yet: no figure, said so
+        other = cargo + (self.shown_status().get("fuel_reservoir") or 0)
+        boost = (self.journals.boost or {}).get("value") or 1
+        hops = [(d, boost if k == 0 else 1) for k, d in enumerate(lys[:FUEL_RUN_MAX_HOPS])]
+        ran = fuel_run(model, fuel, other, hops)
+        if ran is None:
+            return None
+        made, after = ran
+        if made < len(hops):
+            d, mult = hops[made]
+            mf = min(model["max_fuel"], tank or model["max_fuel"])
+            if d / mult > fsd_range(model, model["unladen"] + other + mf, mf) + 1e-6:
+                return None   # too long at any fuel level: not the tank's doing
+        reserve = FUEL_REACH_RESERVE * (tank or fuel)
+        k = sum(1 for a in after if a >= reserve - 1e-9)   # the fuel only falls: the hops that keep the reserve
+        if k == len(hops) and len(lys) > FUEL_RUN_MAX_HOPS:
+            return None   # every hop looked at goes: where it ends is not known
+        return {"hops": k, "whole": k == len(hops), "spare": round(after[k - 1] if k else fuel, 1),
+                "reserve": round(reserve, 1)}
+
+    def spansh_knows(self, id64):
+        """Whether Spansh has a record of this system: True; False when it was asked and has none (the Nearby search
+        around you, the route hop lookup, the target's lookup); None when it was never asked, or could not be reached.
+        Absent from the cache is not an answer: the cache holds only what Spansh had (Kurbo26, GitHub discussion #3:
+        Sol's route chip said "not reported to Spansh")."""
+        source, base = self.bases.get(id64) or (None, None)
+        if source == "spansh":
+            return True
+        cached = self.spansh.cached(id64)[1] if self.spansh else None
+        if cached and cached_source(cached) == "spansh":
+            return True
+        if source in ("own", "route") and not base.get("unasked"):
+            return False   # within the search Spansh answered, and not in its answer
+        hit = self.route_spansh.get(id64)
+        if hit and time.time() - hit[0] < ROUTE_LOOKUP_KEEP_S:
+            return hit[1]
+        verdict = self.target_verdicts.get(id64)
+        return False if verdict == "unreported" else True if verdict in ("explored", "partial") else None
+
+    def maybe_route_lookup(self, now=None):
+        """The game's route: ask Spansh about the hops ahead (the first ROUTE_LOOKUP_MAX) that nothing has answered
+        for yet, in one search, so the In-Game Route's chips can say which ones it has no record of. One ask at a
+        time; a failed one waits ROUTE_LOOKUP_RETRY_S. A hop asked once is not asked again for ROUTE_LOOKUP_KEEP_S."""
+        if not hasattr(self.spansh, "records_by_id") or getattr(self.spansh, "session", None) is None \
+                or (self.route_task and not self.route_task.done()):
+            return   # no network session (a test, or not started yet): nothing to ask with
+        now = time.time() if now is None else now
+        if now < self.route_retry_at:
+            return
+        key = ((self.journals.game_route() or {}).get("ts"), (self.journals.pos or {}).get("id64"), self.version)
+        if key == self.route_seen:
+            return   # nothing changed since the last look (it runs every tick)
+        ids = [h["id64"] for h in self.summary_hops()[:ROUTE_LOOKUP_MAX]
+               if self.spansh_knows(h["id64"]) is None and not route_hop_populated(h)]
+        if ids:
+            self.route_task = asyncio.create_task(self.fetch_route_ids(ids))
+        else:
+            self.route_seen = key
+
+    async def fetch_route_ids(self, ids):
+        try:
+            found = {x.get("id64") for x in await self.spansh.records_by_id(ids)}
+        except Exception as e:   # noqa: BLE001 -- Spansh down, slow or odd: no answer, asked again later
+            self.route_retry_at = time.time() + ROUTE_LOOKUP_RETRY_S
+            print(f"route hop lookup: {type(e).__name__}: {e}", file=sys.stderr)
+            return
+        now = time.time()
+        for i in ids:
+            self.route_spansh[i] = (now, i in found)
+        while len(self.route_spansh) > 2000:   # a long session's routes: the oldest asks go first
+            self.route_spansh.pop(next(iter(self.route_spansh)))
+        self.bump()
+
+    def summary_hops(self):
+        """The game's route hops after where you are (route_summary's), [] with none."""
+        route, pos = self.journals.game_route(), self.journals.pos
+        if not route or not pos:
+            return []
+        hops = route["hops"]
+        i = next((k for k, h in enumerate(hops) if h["id64"] == pos["id64"]), None)
+        return hops[i + 1:] if i is not None else hops
 
     def route_minimal(self):
         """The In-Game Route line while the game has not written NavRoute.json for the route it plotted (2026-10-14:
@@ -13597,12 +14555,15 @@ class State:
         after that line (RemainingJumpsInRoute, this jump included) and the route's end from Status.json's Destination
         when it is another system; {minimal: True, hops: [], jumps_left, destination, ts}. No stars, distances or fuel:
         the game gave none. None when nothing was plotted since the last NavRouteClear, no FSDTarget came after the
-        plot, or it was reached (the FSDTarget is dropped on arriving there)."""
+        plot, it was reached (the FSDTarget is dropped on arriving there), or it is a route of one jump (one left and no
+        jump since the plot; a longer route down to its last jump still shows)."""
         wait, t, pos = self.journals.navroute_waiting(), self.journals.target, self.journals.pos
         left = (t or {}).get("remaining")
         if not wait or not t or not pos or (t.get("ts") or "") < wait or not isinstance(left, int) or isinstance(left, bool) \
                 or left < 1:
             return None
+        if left == 1 and (pos.get("ts") or "") < wait:
+            return None   # one jump left with no jump since the plot: a route of one jump, no line (the author)
         dest = (self.journals.status_json or {}).get("destination")
         end = dest.get("Name") if isinstance(dest, dict) and dest.get("System") and dest["System"] != pos["id64"] \
             and isinstance(dest.get("Name"), str) and not dest["Name"].startswith("$") else None
@@ -13783,7 +14744,7 @@ class State:
                     crew[k] = body[k]
         elif "row" in body:
             row, role = body["row"], body.get("role")
-            if row not in outrider.speech.CREW_ROW_ROLE:
+            if not isinstance(row, str) or row not in outrider.speech.CREW_ROW_ROLE:
                 return bad(f"no alert row {row!r}")
             if role is not None and role not in ids:
                 return bad(f"no crew role {role!r}")
@@ -16014,7 +16975,7 @@ class State:
             return None, "your jump range is not known yet (no Loadout seen)"
         best = None
         for key, row in self.systems.items():
-            d, id64 = row.get("distance"), row.get("id64", key)
+            d, id64 = self.near_from_you(row), row.get("id64", key)   # from you, also while Nearby is around elsewhere
             try:
                 id64 = int(id64)
             except (TypeError, ValueError):
@@ -16243,7 +17204,8 @@ class State:
                             self.searcher.task, self.honk_test_task, self.honk_run_task, self.highway_task, self.riches_task,
                             self.route_known_task, self.route_discoverer_task,
                             self.autotarget_task, self.autotarget_test_task, self.lease_task, self.edsm_discard_task,
-                            self.edsm_bf_task, self.edsm_import_task, self.reported_task, *self.upload_tasks.values()) if t]
+                            self.edsm_bf_task, self.edsm_import_task, self.reported_task, self.route_task,
+                            *self.upload_tasks.values()) if t]
 
     def arrival_danger_until(self, now=None):
         """The game sets Status.json's in-danger flag on every use of the FSD, from the charge until some 16-26 s after
@@ -16694,7 +17656,8 @@ class State:
                     route_mtimes[nr] = m
                     if self.journals.read_navroute(d):
                         self.bump()
-                for fname, read in (("Cargo.json", self.journals.read_cargo_file), ("Market.json", self.journals.read_market)):
+                for fname, read in (("Cargo.json", self.journals.read_cargo_file), ("Market.json", self.journals.read_market),
+                                    ("ShipLocker.json", self.journals.read_locker_file)):
                     fp = os.path.join(d, fname)
                     try:
                         m = os.path.getmtime(fp)
@@ -16743,11 +17706,12 @@ class State:
                                ("apply_own_changes", self.apply_own_changes), ("maybe_classify_target", self.maybe_classify_target),
                                ("maybe_unsold", self.maybe_unsold), ("maybe_sale_left", self.maybe_sale_left),
                                ("maybe_curious", self.maybe_curious), ("maybe_reported", self.maybe_reported),
+                               ("maybe_route_lookup", self.maybe_route_lookup),
                                ("maybe_locate_carrier", self.maybe_locate_carrier), ("maybe_find_sellers", self.maybe_find_sellers),
                                ("maybe_backup_on_quit", self.maybe_backup_on_quit), ("highway_copy_next", self.highway_copy_next), ("riches_copy_next", self.riches_copy_next),
                                ("highway_heavy_check", self.highway_heavy_check), ("last_scoop_check", self.last_scoop_check),
                                ("wrong_target_watch", self.wrong_target_watch), ("maybe_autotarget", self.maybe_autotarget),
-                               ("maybe_boxel_autotarget", self.maybe_boxel_autotarget)):
+                               ("maybe_boxel_autotarget", self.maybe_boxel_autotarget), ("docking_release", self.docking_release)):
                 try:
                     step()
                 except sqlite3.Error:
@@ -18314,7 +19278,7 @@ def make_app(state, hosts=None):
         voice = str(voice) if voice else None
         role = role if role in outrider.speech.CREW_IDS and role != "xo" and voice else None
         if voice and voice not in sp.installed():   # its speaker is that voice's person: not the main voice's (S40)
-            if role:
+            if role and outrider.tts.VOICE_NAME.fullmatch(voice):   # a voice name, not any text a caller sends
                 state.crew_note(role, voice, f"voice {voice} not installed")
             voice = speaker = role = None
         own = state.voices_in_use() if voice else ()
@@ -18560,6 +19524,21 @@ def make_app(state, hosts=None):
         return web.json_response({"phase": "ready", "text": STARTING_WORDS["ready"], "pct": 100, "why": None,
                                   "since": None}, headers={"Cache-Control": "no-store"})
 
+    def paste_device(request):
+        """The 📋 buttons (NEXT-VERSION #5) are for this PC's own browser and the Android app (its WebView's User-Agent
+        says OutriderApp/), not any other browser on the network (the author, 2026-10-14): a filter, not a lock."""
+        return outrider.auth.from_this_pc(request.remote, request.headers) \
+            or "OutriderApp/" in (request.headers.get("User-Agent") or "")
+
+    async def clipboard_view(request):
+        """GET /api/clipboard: whether this device gets the 📋 paste buttons, {can, why}."""
+        return web.json_response(state.paste_info(paste_device(request)))
+
+    async def clipboard_paste_view(request):
+        """POST /api/clipboard/paste: the game PC's clipboard as a system or station name, {text}, else {error, code}."""
+        out, status = await state.paste(paste_device(request))
+        return web.json_response(out, status=status)
+
     async def service_view(request):
         """GET /api/service (S70): Settings -> Server's Start with this computer."""
         return web.json_response(state.service_info(outrider.auth.from_this_pc(request.remote, request.headers)))
@@ -18612,6 +19591,11 @@ def make_app(state, hosts=None):
         """GET /api/ask/log: Settings' "Questions asked" (S35), newest first; behind the sign-in like every route, and
         not one of the AI's tools (it holds what was said)."""
         return web.json_response(state.ask_log_info())
+
+    async def ask_commands_view(_):
+        """GET /api/ask/commands: the voice's fixed commands, what each does and the phrases that ask it (Settings →
+        Voice, the tablet's Voice commands…)."""
+        return web.json_response(state.ask_commands_info())
 
     async def copilot_view(request):
         """{action: "status" | "again" | "hush" | "replay", words?}: the speaking window does it (the button and a
@@ -18723,7 +19707,7 @@ def make_app(state, hosts=None):
         """GET /api/overlay[?since=version]: the overlay window's panels (State.overlay_view)."""
         return web.json_response(state.overlay_view(request.query.get("since"),
                                                      window=request.headers.get("User-Agent", "").startswith(OVERLAY_UA),
-                                                     track=request.query.get("w")))
+                                                     track=request.query.get("w"), height=request.query.get("h")))
 
     async def overlay_post(request):
         out, status = state.overlay_set(await json_object(request))
@@ -18961,6 +19945,38 @@ def make_app(state, hosts=None):
         state.set_radius(r)
         return web.json_response({"radius": state.radius})
 
+    async def near_around_view(request):
+        """Nearby's Around {around: here | destination | carrier | next_stop | lock | a system's id64 string}: saved on the
+        server for every window (State.set_near_around)."""
+        around = (await json_object(request) or {}).get("around")
+        if not isinstance(around, str) or not 0 < len(around) <= 24:
+            return web.json_response({"error": "expected {around: " + ", ".join(NEAR_AROUND_KINDS[:5]) + " or a system's id64}"},
+                                     status=400)
+        out, why = state.set_near_around(around)
+        if why:
+            return web.json_response({"error": why}, status=400 if why == AROUND_BAD else 409)
+        return web.json_response({"near_around": out})
+
+    async def near_refresh_view(_):
+        """↻ refresh: Spansh asked again for the sphere around Nearby's chosen centre, paced (State.refresh_nearby)."""
+        ok, why = state.refresh_nearby()
+        return web.json_response({"ok": True} if ok else {"error": why}, status=200 if ok else 409)
+
+    def commander_view(fn):
+        async def view(_):
+            return web.json_response(fn())
+        return view
+
+    async def commander_earnings_view(request):
+        """GET /api/commander/earnings?year=&month=: the Commander view's Earnings (State.commander_earnings); year four
+        digits, month 1 to 12 with a year, else 400 {error, code: bad_request}."""
+        year, month = request.query.get("year"), request.query.get("month")
+        try:
+            outrider.earnings.period(year, month)
+        except ValueError as e:
+            return web.json_response({"error": str(e), "code": "bad_request"}, status=400)
+        return web.json_response(state.commander_earnings(year, month))
+
     async def materials_view(_):
         inv = outrider.materials.inventory(state.journals.materials)
         inv["stale"] = bool((state.materials_summary() or {}).get("stale"))
@@ -19085,16 +20101,23 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/checklist/find", checklist_find_view)   # S29: asks Spansh, so not among the AI's READ_ROUTES
     app.router.add_get("/api/log", log_view)
     app.router.add_get("/api/materials", materials_view)
+    for part, fn in (("profile", state.commander_profile), ("inventory", state.commander_inventory),
+                     ("engineering", state.commander_engineering), ("missions", state.commander_missions),
+                     ("sessions", state.commander_sessions)):   # the Commander view's tabs, read from the database
+        app.router.add_get(f"/api/commander/{part}", commander_view(fn))
+    app.router.add_get("/api/commander/earnings", commander_earnings_view)   # its period in the query (not an AI tool yet)
     app.router.add_post("/api/cargo/recount", cargo_recount_view)
     app.router.add_get("/api/cargo/lookup", cargo_lookup_view)
     app.router.add_get("/api/nearest", nearest_view)
     app.router.add_get("/api/ship", ship_view)
-    outrider.commander.add_routes(app, state, lambda: LIVE_DIRS)   # this fork's Commander view: /api/commander/*
+    outrider.engineers.add_routes(app, state, lambda: LIVE_DIRS)   # this fork's engineers: /api/engineers*
     app.router.add_get("/api/navroute", navroute_view)
     app.router.add_get("/api/galnet", galnet_view)
     app.router.add_get("/api/galnet/systems", galnet_systems_view)
     app.router.add_get("/api/ggg", ggg_view)
     app.router.add_post("/api/radius", radius_view)
+    app.router.add_post("/api/nearby/around", near_around_view)
+    app.router.add_post("/api/nearby/refresh", near_refresh_view)
     app.router.add_get("/api/say", say_view)
     app.router.add_post("/api/say/play", pc_only(say_play_view))
     app.router.add_post("/api/say/prefetch", say_prefetch_view)
@@ -19118,12 +20141,15 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/rail", rail_view)
     app.router.add_post("/api/ask", ask_view)
     app.router.add_get("/api/ask/log", ask_log_view)   # S35: Settings' "Questions asked"
+    app.router.add_get("/api/ask/commands", ask_commands_view)   # the list of voice commands
     app.router.add_get("/api/config", config_get_view)
     app.router.add_get("/api/serverlog", serverlog_view)
     app.router.add_post("/api/notices/dismiss", notices_dismiss_view)
     app.router.add_post("/api/config", config_post_view)
     app.router.add_post("/api/restart", restart_view)   # not pc_only: a server restarts from the tablet (S10)
     app.router.add_get("/api/starting", starting_view)   # S9: the starting page reloads on this
+    app.router.add_get("/api/clipboard", clipboard_view)             # #5: the 📋 buttons (this PC's browser, the app)
+    app.router.add_post("/api/clipboard/paste", clipboard_paste_view)
     app.router.add_get("/api/service", service_view)       # S70: this PC only for the POST (not the game PC: a server too)
     app.router.add_post("/api/service", service_post_view)
     app.router.add_post("/api/rail/press", pc_only(rail_press_view))
@@ -19948,6 +20974,7 @@ async def run(args, st):
                                    on_speaker=lambda chosen: loop.call_soon_threadsafe(state.remember_speakers, chosen))
     # the voices kept loaded beside the main one, and whether they load now ([speech] voices_loaded / voices_preload)
     state.speaker.voices_loaded, state.speaker.voices_preload = st["voices_loaded"], st["voices_preload"]
+    state.journals.pad_delay = st["pad_delay"]   # [speech] pad_delay: the landing pad said after the station's voice
     print("spoken alerts: " + ("Piper found, preparing a voice" if state.speaker.available else
                                "Piper not installed, the page uses browser speech (see outrider/tts.py)"))
     state.speaker.start()
@@ -20053,7 +21080,7 @@ async def run(args, st):
         state.overlay_runner = outrider.overlay_runner.OverlayRunner(f"http://127.0.0.1:{args.port}")
         overlay_task = asyncio.create_task(state.watch_overlay_window())
     # uploads: their own session (never queued behind Spansh), named and versioned as EDDN asks of a sender
-    state.upload_session = ClientSession(timeout=ClientTimeout(total=20),
+    state.upload_session = ClientSession(timeout=ClientTimeout(total=20), connector=outrider.tls.connector(),
                                          headers={"User-Agent": f"ED-Outrider/{outrider.__version__}"})
     state.start_uploads()
     print("update check: " + ("on (GitHub's latest release, once a day)" if st["update_check"] else "off ([server] update_check)"))
@@ -20241,9 +21268,14 @@ def main(argv=None):
 
 def main_with(args, serving):
     # the log's first line says which Outrider this is (the author, 2026-10-10): before the config is read, so before any
-    # of its warnings; not for the commands that print something and exit
+    # of its warnings; not for the commands that print something and exit. Started by launch_outrider.sh, whose header
+    # has just said it on the terminal, it goes into the log only (the author, 2026-10-14: the same line twice)
     if serving:
-        print(f"ED Outrider {outrider.__version__}")
+        line = f"ED Outrider {outrider.__version__}"
+        if os.environ.get("OUTRIDER_LAUNCHER") and outrider.serverlog.ACTIVE:
+            outrider.serverlog.ACTIVE.feed("out", line + "\n")
+        else:
+            print(line)
     detected = (outrider.unsold.LIVE_DIRS, outrider.unsold.LEGACY_DIRS) if outrider.unsold else ([], [])
     st = settings_from(load_config(args.config), args, os.environ.get("ED_JOURNALS"), detected)
     if serving:   # the config's secrets never appear in the log, whatever prints them

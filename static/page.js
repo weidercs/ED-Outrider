@@ -37,10 +37,10 @@ const TABLET = typeof document !== "undefined" && !!document.body && document.bo
 // group: the nav group shown while you browse another one; beforeMap: the page to go back to when the surface map hides
 // (null: you were on Now already, or chose a page since); mapWas: whether the map showed at the last draw
 const TB = {group: null, beforeMap: null, mapWas: false, bannerTimer: null, bannerKey: null,
-            groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "firsts"]},
+            groups: {explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "cmdr", "firsts"]},
             themes: ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark"], railPending: {}, railEdit: null};
 // this fork's views, on their own line (upstream's above stays as it is): Ship before First logged, GalNet last
-TB.groups.records.splice(TB.groups.records.indexOf("firsts"), 0, "ship", "cmdr"); TB.groups.records.push("galnet");
+TB.groups.records.splice(TB.groups.records.indexOf("cmdr"), 0, "ship"); TB.groups.records.push("galnet");
 // Where you are, as the exact id64 string (position.id). The JSON number position.id64 loses the last digits above
 // 2^53, so string comparisons with the server's exact ids (arrival, Here, moments) must use this.
 const posId = () => data && data.position ? data.position.id ?? String(data.position.id64) : null;
@@ -73,6 +73,15 @@ const REQ_GEN = {};
 const newRequest = kind => (REQ_GEN[kind] = (REQ_GEN[kind] || 0) + 1);
 const isNewest = (kind, g) => REQ_GEN[kind] === g;
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// The game's galaxy-map markers as page icons (NEXT-VERSION #13, 2026-10-15): static/icons/elite/<symbol>.svg (Elite
+// Dangerous Almanac's redrawings of Frontier's markers: CREDITS.txt there), drawn by page.css's .mk as a mask filled with
+// the text's own colour, so every theme colours them as the words beside them and they grow with the font. On-page
+// only: speech, notifications, toasts, the Log, CSV and titles keep their emoji and words. Beside words the span is
+// aria-hidden (the words, or the button's aria-label, say what it is); with `label` it stands alone and says it (role
+// img). `gap`: a little room before the words that follow. MARKERS: the symbols shipped (test_tablet checks the files)
+const MARKERS = ["destination", "fleet-carrier", "squadron-carrier", "titan", "waypoint", "engineer", "mission"];
+const mk = (sym, {gap = true, label = null} = {}) => `<span class="mk mk-${sym}${gap ? " mkg" : ""}"` +
+  (label ? ` role="img" aria-label="${esc(label)}" title="${esc(label)}"` : ` aria-hidden="true"`) + `></span>`;
 // ---- Compact forms for the screen tables (never for speech or notifications) ----
 // A table that does not fit its box gets the class compact (and, if that is not enough, compact2 too: see fitTable).
 // Its cells hold both forms, so switching costs no redraw: .lf the full form (shown while the table fits), .sf the
@@ -90,12 +99,15 @@ const SHORT_FORMS = {
     "Herbig Ae/Be Star": "Ae/Be", "Wolf-Rayet Star": "WR", "Wolf-Rayet N Star": "WN", "Wolf-Rayet NC Star": "WNC",
     "Wolf-Rayet C Star": "WC", "Wolf-Rayet O Star": "WO", "MS-type Star": "MS star", "S-type Star": "S star"},
   // Nearby's status badges: the words become marks, the meaning stays in the title
-  status: {"no scan data": "—", "fully scanned": "✓", "unreported": "?", "partly scanned": "part", "yours only": "own"},
+  status: {"no scan data": "—", "fully scanned": "✓", "unreported": "?", "not looked up": "…", "partly scanned": "part", "yours only": "own"},
   // headings
-  head: {"Main star": "Star", "Value now / max": "Value", "Dist ls": "ls", "Atmosphere": "Atm", "Bio / Geo": "Bio",
+  head: {"Main star": "Star", "Value now / max": "Value", "From you": "From", "Dist ls": "ls", "Atmosphere": "Atm", "Bio / Geo": "Bio",
     "System tag": "Tag", "Seen by others": "Seen", "Lost: scan (FSS)": "FSS", "Lost: map (DSS)": "DSS", "Lost total": "Lost",
     "Unsold value": "Unsold", "Max from Sol": "Sol", "🏁 systems": "🏁", "ship losses": "losses", "Samples": "Samp",
-    "Bookmarked system": "System", "Jump ly": "ly", "Fuel used": "Used", "Fuel left": "Fuel", "Remaining ly": "Left"},
+    "Bookmarked system": "System", "Jump ly": "ly", "Fuel used": "Used", "Fuel left": "Fuel", "Remaining ly": "Left",
+    "Expires in": "Left", "Bounties by ship": "By ship", "Fighting": "Time", "Mining": "Time", "Prospected": "Prosp",
+    "Bodies scanned": "Bodies", "Species sampled": "Species", "Active days": "Days", "Refined by ship": "Ship t", "Refined by SRV": "SRV t",
+    "Mined t sold": "Sold t", "Value (estimate)": "Est.", "Star class": "Star", "Planet type": "Planet", "Species found": "Species"},
   state: {"in progress": "in prog"},
 };
 // the planet classes inside a longer text ("map 2 Water world T"), longest first so "Rocky Ice world" is not "Rocky"
@@ -263,7 +275,15 @@ function poiText(list) {
   return Object.keys(POI_NAMES).filter(k => by[k]).map(k => k === "titan" || k === "generation_ship" ? by[k].join(", ")
     : by[k].length === 1 ? `a ${POI_NAMES[k][0]}` : `${by[k].length} ${POI_NAMES[k][1]}`).join(" · ");
 }
-const poiTag = list => !list || !list.length ? "" : `<span class="nb poi" title="${esc(poiText(list))}">📍${list.length > 1 ? " " + list.length : ""}</span>`;
+// a Titan has the game's Titan marker (#13, 2026-10-15) in place of 📍; the other signals keep 📍
+const poiGlyphs = list => (list.some(p => p.kind === "titan") ? mk("titan", {gap: false}) : "") + (list.some(p => p.kind !== "titan") ? "📍" : "");
+const poiTag = list => !list || !list.length ? "" : `<span class="nb poi" title="${esc(poiText(list))}">${poiGlyphs(list)}${list.length > 1 ? " " + list.length : ""}</span>`;
+// Now's line of them: each Titan by name after its marker, then 📍 before the rest ("Titan Cocijo · 📍 a listening post")
+function poiLineHtml(list) {
+  const titans = list.filter(p => p.kind === "titan"), rest = list.filter(p => p.kind !== "titan");
+  return [titans.length ? `${mk("titan")}${esc(poiText(titans))}` : "",
+          rest.length ? `📍 ${esc(titans.length ? poiText(rest) : poiText(rest).replace(/^./, c => c.toUpperCase()))}` : ""].filter(Boolean).join(" · ");
+}
 // ⭐ rare stars in a system (a black hole, a Wolf-Rayet...: from Spansh's records too, before you go), what on hover
 const rareStarText = list => (list || []).map(r => r.main || !r.body ? `${r.what} (main star)` : `${r.what} at ${r.body}`).join(", ");
 const rareStarTag = list => !list || !list.length ? "" :
@@ -285,8 +305,15 @@ const SHIP_NAMES = {sidewinder: "Sidewinder", eagle: "Eagle", hauler: "Hauler", 
   orca: "Orca", ferdelance: "Fer-de-Lance", mamba: "Mamba", python: "Python", python_nx: "Python Mk II", type9: "Type-9 Heavy",
   belugaliner: "Beluga Liner", type9_military: "Type-10 Defender", anaconda: "Anaconda", federation_corvette: "Federal Corvette",
   cutter: "Imperial Cutter", mandalay: "Mandalay", type8: "Type-8 Transporter", cobramkv: "Cobra Mk V", corsair: "Corsair",
-  panthermkii: "Panther Clipper Mk II", explorer_nx: "Caspian Explorer", lakonminer: "Type-11 Prospector", smallcombat01_nx: "Kestrel Mk II"};
+  panthermkii: "Panther Clipper Mk II", explorer_nx: "Caspian Explorer", lakonminer: "Type-11 Prospector", smallcombat01_nx: "Kestrel Mk II",
+  mediumtransport01: "Lynx Highliner"};
 const shipName = t => SHIP_NAMES[(t || "").toLowerCase()] || (t || "").replace(/_/g, " ");
+// A ship type's picture (the CMDR tab's Inventory, 2026-10-15): static/ships/<symbol>.webp, one per SHIP_NAMES key
+// (test_tablet checks both ways), Frontier's ship rendered from Elite Dangerous Almanac's illustration by
+// scripts/build_ship_images.py (static/ships/CREDITS.txt); a type not in the table (a hull newer than it) has none
+const shipPicture = t => { const k = String(t || "").toLowerCase(); return Object.prototype.hasOwnProperty.call(SHIP_NAMES, k) ? `static/ships/${k}.webp` : null; };
+const SHIP_CARD_MS = 2000;   // a hover this long on an Inventory ship row shows its picture
+const SC = {timer: null, key: null};   // the ship card: the hover's pending timer, the ship shown ("symbol|name") or null
 // what to call a ship: its own name, or its type's proper name when it has none (the journal gives an unnamed
 // ship its type id as the name, "krait_mkii", which reads and speaks badly)
 const shipLabel = (name, type) => { const n = String(name || "").trim();
@@ -342,6 +369,49 @@ let carrierWarned = null;
 // galaxy map, as 🎯 on a route's row does; where auto-target can work (hwyAimBtn: canAim)
 const carrierAim = c => c && !c.aboard && !c.here && c.system && !(c.decommission && c.decommission.done)
   ? hwyAimBtn(c.system, "carrier", null, true) : "";
+// a carrier's marker (#13) by the pad layout's kind (outrider.pads.layout: "fleet", "squadron" for a four-letter name);
+// anything else is no carrier: none
+const carrierMk = kind => kind === "squadron" ? mk("squadron-carrier") : kind === "fleet" ? mk("fleet-carrier") : "";
+// 🛣 beside the carrier's 🎯 (the author, 2026-10-14): an exact route to your carrier's system plotted at once, without
+// Plot Route's screen (its form's saved exact options: injections, no neutron boosts, conservative range...); shown
+// only from CARRIER_PLOT_MIN_LY away; a Highway route you follow is replaced only once you say so (CP.ask). While the
+// plot runs (Plot Route's own poll, hwyPoll) the tile says so; a failed plot's reason is a toast
+const CARRIER_PLOT_MIN_LY = 250;
+const CP = {ask: false, to: null};
+function carrierPlot(c) {
+  if (!c || c.aboard || c.here || !c.system || (c.decommission && c.decommission.done) || !(c.distance >= CARRIER_PLOT_MIN_LY)) return "";
+  const p = H.data && H.data.plotting, hw = data && data.highway;
+  if (p && p.state === "running") return p.to === c.system ? ` <span class="unk cpwait">⏳ plotting a route there…</span>` : "";
+  if (CP.ask && hw && !hw.complete)
+    return ` <span class="cpask">replace your route to ${esc(hw.destination || "its end")}? ` +
+      `<button type="button" class="mini" data-carrierplot="yes">Replace</button> <button type="button" class="mini" data-carrierplot="no">Keep</button></span>`;
+  return ` <button type="button" class="mini cpbtn" data-carrierplot="go" title="plot an exact route to your carrier's system now (Plot Route's exact options)">🛣</button>`;
+}
+async function plotToCarrier() {
+  const c = data && data.carrier;
+  if (!c || !c.system) return;
+  const b = {plotter: "exact", to: c.system, injections: !!hwyCfg.injections, exclude_secondary: !!hwyCfg.exclude_secondary,
+             supercharged: !!hwyCfg.supercharged, no_neutrons: !!hwyCfg.no_neutrons};
+  if (hwyCfg.conservative != null) b.conservative = !!hwyCfg.conservative;
+  if (b.conservative && hwyCfg.conservative_ly != null) b.conservative_ly = hwyCfg.conservative_ly;
+  let r;
+  try { r = await apiJson("api/highway/plot", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(b)}); }
+  catch (err) { r = {error: err.message}; }
+  if (r.error) return toast(`No route plotted: ${r.error}`);
+  CP.to = c.system;
+  toast(`⏳ Plotting an exact route to ${c.system}`);
+  await loadHwy(true);   // starts Plot Route's poll while it runs
+  renderCarrier();
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-carrierplot]");
+  if (!b) return;
+  e.preventDefault();
+  const act = b.dataset.carrierplot, hw = data && data.highway;
+  CP.ask = act === "go" && !!hw && !hw.complete;   // a route you follow: ask first (the author)
+  if (act === "go" && !CP.ask || act === "yes") plotToCarrier();
+  renderCarrier();
+});
 // the tritium for the trip to you (S13 A): red when the depot lacks it, amber when a confirmed tritium line in the hold
 // covers what it lacks (moved into the depot first, or, past the depot's 1,000 t, topped up again on the way)
 const CARRIER_BURN_TITLE = "the game's fuel formula, checked against real carrier jumps: round(5 + ly × (25000 + capacity used + depot) / 200000) t a jump; a buy order's reserved space weighs nothing";
@@ -373,11 +443,11 @@ const crSign = n => n == null ? "?" : (n < 0 ? "−" : "") + credits(Math.abs(n)
 function carrierFinanceHtml(fi) {
   if (!fi) return "";
   const old = Date.now() - Date.parse(fi.ts) > 86400e3, w = fi.weeks;
-  const title = `balance ${crSign(fi.balance)} cr · reserve ${crSign(fi.reserve)} cr · available ${crSign(fi.available)} cr, from the carrier's last stats (${(fi.ts || "").slice(0, 10)}: opening its management writes them).` +
+  // the line says only "~N wks upkeep" (the author, 2026-10-14); how old the stats are goes in the title
+  const title = `balance ${crSign(fi.balance)} cr · reserve ${crSign(fi.reserve)} cr · available ${crSign(fi.available)} cr, from the carrier's last stats (${(fi.ts || "").slice(0, 10)}${old ? `: as of ${shortDay(fi.ts)}` : ""}: opening its management writes them).` +
     (fi.upkeep ? ` Upkeep ≈ ${credits(fi.upkeep)} cr a week at the published rates (the core and each service, a suspended one at its lower rate), not yet checked against the game's carrier Finance screen: the journal has no upkeep figure. Upkeep is drawn from the balance each week.` : "");
   return `<span id="carrierFin" class="${fi.warn ? "warnc" : ""}" title="${esc(title)}">balance <b>${crSign(fi.balance)}</b>` +
-    (w != null ? ` · ~<b>${w < 10 ? w.toFixed(1) : Math.floor(w).toLocaleString()}</b> week${w === 1 ? "" : "s"} of upkeep` : "") + `</span>` +
-    (old ? ` <span class="unk">(as of ${esc(shortDay(fi.ts))})</span>` : "");
+    (w != null ? ` · ~<b>${w < 10 ? w.toFixed(1) : Math.floor(w).toLocaleString()}</b> wks upkeep` : "") + `</span>`;
 }
 function renderCarrier() {
   const c = data && data.carrier, cl = document.getElementById("carrierLine");
@@ -386,6 +456,7 @@ function renderCarrier() {
   const none = !!data && !c;
   document.getElementById("tCarrier").hidden = none;
   document.getElementById("tiles").classList.toggle("nocarrier", none);
+  tileCols();
   if (!c) { cl.innerHTML = val(`<span class="unk">none seen</span>`); return; }
   // decommissioned (or being): in red with the date, rather than the tile vanishing (a mistake would go unseen)
   const dc = c.decommission;
@@ -397,7 +468,7 @@ function renderCarrier() {
   const fmtLy = d => d.toLocaleString("en-US", {maximumFractionDigits: 1});
   let where = c.aboard ? "<b>aboard</b>" : c.here ? "<b>in this system</b>"
     : `<span class="copy" data-name="${esc(c.system)}" title="click to copy">${esc(c.system)}</span>` + (c.distance != null ? ` · <b>${fmtLy(c.distance)} ly</b>` : "")
-      + carrierAim(c);
+      + carrierAim(c) + carrierPlot(c);
   // the game was not running when a booked jump left: this is where it was booked to go
   if (c.assumed) where += ` <span class="unk" title="the booked jump's destination: the journal confirms it at your next login">(booked jump, not yet confirmed)</span>`;
   // straight-line lower bounds: the real route is never shorter
@@ -432,7 +503,7 @@ function renderCarrier() {
   const tr = c.tritium;
   const dcLine = dc ? `<span class="noscoop" title="cancel it in the carrier's management until then">Decommissioning: scrapped ${esc(shortDay(dc.scrap_ts || ""))}` +
     `${dc.refund ? ` · ${credits(dc.refund)} cr back` : ""}</span>` : "";
-  cl.innerHTML = val(esc(c.name), esc(c.callsign || "")) + ln(dcLine) + ln(where) + ln(meet) + ln(plan) +
+  cl.innerHTML = val(mk("fleet-carrier") + esc(c.name), esc(c.callsign || "")) + ln(dcLine) + ln(where) + ln(meet) + ln(plan) +
     ln(carrierServicesHtml(c) +
        (tr ? ` · Tritium in Depot: <b>${tr.depot.toLocaleString()} t</b>` : c.fuel != null ? ` · ${c.fuel} t tritium` : "")) +
     ln(carrierFinanceHtml(c.finance)) +
@@ -501,18 +572,24 @@ function streakHtml(sk) {
 // "Spansh unavailable" / "No internet connection", or "refresh failed")
 const SPHERE_INCOMPLETE = /^(starting|asking|Spansh unavailable|No internet connection|refresh failed)/;
 // S42: the lookups down (data.health, the Spansh session's trace) in the Data tile's words: "No internet connection",
-// else "Spansh unavailable" per source; a failed search's own status too (the list stays incomplete until it answers)
-function lookupsDown(d) {
+// else "Spansh unavailable" per source, a certificate failure its own words (issue #9: "Spansh: couldn't verify
+// spansh.co.uk's certificate (expired): check this PC's date and time; ...", or with `short` "Spansh: certificate not
+// verified" for the folded tiles' line); a failed search's own status too (the list stays incomplete until it answers)
+function lookupsDown(d, short) {
   const h = (d && d.health) || {}, out = [];
   if (h.offline) out.push("No internet connection");
-  else for (const x of h.down || []) out.push(`${x.name} unavailable`);
+  else for (const x of h.down || []) {
+    out.push(x.kind === "certificate" ? `${x.name}: ${short ? "certificate not verified" : x.text || "certificate not verified"}`
+      : `${x.name} unavailable`);
+  }
   if (/^(Spansh unavailable|No internet connection)$/.test((d && d.status) || "") && !out.includes(d.status)
-      && !out.includes("No internet connection")) out.unshift(d.status);
+      && !out.includes("No internet connection") && !(h.down || []).some(x => `${x.name} unavailable` === d.status)) out.unshift(d.status);
   return out;
 }
 function horizon() {
   const p = data && data.position;
-  if (!p || SPHERE_INCOMPLETE.test(data.status || "")) return null;
+  // its claim (nothing closer is reported) holds only for a sphere around you, not one Nearby's Around put elsewhere
+  if (!p || SPHERE_INCOMPLETE.test(data.status || "") || nearElsewhere()) return null;
   const cut = data.sphere_cut, r = cut != null ? Math.min(cut, data.radius) : data.radius;
   const n = (Array.isArray(data.systems) ? data.systems : []).filter(s => sysId(s) !== sysId(p) && !s.visited && s.source !== "route")
     .sort((a, b) => a.distance - b.distance)[0];
@@ -609,7 +686,7 @@ function renderStrip() {
   td.className = "tile " + tcls; td.title = data.tail_error || (down.length ? "" : data.status) || "";
   // the folded tiles' line names it, in a few words, when the tile is coloured (the tile has the detail)
   dataBit = disconnected ? `not connected since ${disconnected}` : data.tail_error ? "journal tailing error" : pageError ? "page error"
-    : down.length ? down[0] : failed ? "server error" : fr && !fr.journal && fr.missing ? "no journals found" : text;
+    : down.length ? lookupsDown(data, true)[0] : failed ? "server error" : fr && !fr.journal && fr.missing ? "no journals found" : text;
   fl.innerHTML = val(`<span class="dot ${dot}"></span>${text}`);
   sl.innerHTML = problems.length ? problems.join(" · ") : /^asking|^fetching|^ok \(/.test(data.status || "") ? esc(data.status) : "Spansh ok";
   document.getElementById("backupLine").innerHTML = backupHtml(data.backup || {});
@@ -705,6 +782,41 @@ const VARIANT_COLOURS = {Amethyst: "#b48cf0", Aquamarine: "#6fe3c8", Black: "#8a
   White: "#f2f2f2", Yellow: "#f5d84a"};
 const colourName = name => { const m = /^(.* - )([A-Za-z]+)$/.exec(String(name || "")), c = m && VARIANT_COLOURS[m[2]];
   return c && hereBio().colours ? `${esc(m[1])}<span class="vc" style="--vc: ${c}">${esc(m[2])}</span>` : esc(name); };
+// Which header tiles this device shows (the author, 2026-10-14: there are many tiles now): an unticked one is left out
+// here, as a tile and from the one line alike; at least one stays. Per device (store tilesHidden, the tiles' keys), as
+// tilesMode; the tablet has its own strip. [key, the tile's id, its name in Settings → Display]
+const TILES = [["where", "tWhere", "Where I am"], ["cmdr", "tCmdr", "Commander"], ["fuel", "tFuel", "Fuel"], ["carrier", "tCarrier", "Carrier"],
+               ["unsold", "tUnsold", "Unsold"], ["data", "tData", "Data"]];
+const TILE_COL = {where: "1.5fr", cmdr: "0.75fr"};   // wide screens: Where half as much again, Commander less (as before)
+const tilesHidden = () => { const v = store.get("tilesHidden", null);
+  const off = Array.isArray(v) ? TILES.map(t => t[0]).filter(k => v.includes(k)) : [];
+  return off.length >= TILES.length ? [] : off; };   // never all of them
+const tileShown = k => !tilesHidden().includes(k);
+// the wide grid's columns: one per tile shown (the Carrier tile is also hidden with no carrier on record)
+function tileCols() {
+  const box = document.getElementById("tiles"), off = tilesHidden();
+  const cols = TILES.filter(([k, id]) => !off.includes(k) && !document.getElementById(id).hidden).map(([k]) => TILE_COL[k] || "1fr").join(" ") || "1fr";
+  if (box.style.getPropertyValue("--tile-cols") !== cols) box.style.setProperty("--tile-cols", cols);
+}
+function drawTileChoice() {
+  const off = tilesHidden();
+  // an attribute, not a class: the fuel, unsold and Data tiles set their className at each draw
+  for (const [k, id] of TILES) document.getElementById(id).toggleAttribute("data-off", off.includes(k));
+  tileCols();
+  document.querySelectorAll("#tilesShown [data-tile]").forEach(x => {
+    x.checked = !off.includes(x.dataset.tile);
+    x.disabled = x.checked && off.length === TILES.length - 1;   // the last one shown stays
+  });
+}
+document.getElementById("tilesShown").addEventListener("change", e => {
+  const k = e.target.dataset && e.target.dataset.tile; if (!k) return;
+  const off = new Set(tilesHidden());
+  if (e.target.checked) off.delete(k); else off.add(k);
+  if (off.size < TILES.length) store.set("tilesHidden", TILES.map(t => t[0]).filter(x => off.has(x)));
+  drawTileChoice();
+  if (data) render();   // the header's height changed, and the one line
+});
+drawTileChoice();
 const tilesModeEl = document.getElementById("tilesMode");
 const drawTilesMode = () => { tilesModeEl.value = tilesMode() || ""; };
 tilesModeEl.onchange = () => { store.set("tilesMode", tilesModeEl.value || null); drawTilesFold(); if (data) render(); };
@@ -718,18 +830,21 @@ function tilesLineHtml() {
   const p = data.position, f = data.fuel, cm = data.commander, u = data.unsold, c = data.carrier;
   const bit = (html, lvl, title) => `<span class="tl${lvl ? " tl-" + lvl : ""}"${title ? ` title="${esc(title)}"` : ""}>${html}</span>`;
   const ly = d => `${d.toLocaleString("en-US", {maximumFractionDigits: d < 10 ? 1 : 0})} ly`;
-  const out = [p ? `<span class="copy tl-sys" data-name="${esc(p.name)}" title="click to copy">${esc(p.name)}</span>` : `<span class="unk">${esc(noJumpText())}</span>`];
-  if (f && f.live && f.main != null) out.push(bit(`⛽ ${f.pct != null ? f.pct + "%" : f.main.toFixed(1) + " t"}`, tileLevel("tFuel"), "fuel in the main tank"));
-  if (cm && cm.credits != null) out.push(bit(`${credits(cm.credits)} cr`, "", "credits at login plus exploration and exobiology sales since"));
-  if (u && !u.error && u.total != null) out.push(bit(`unsold ${credits(u.total)}`, tileLevel("tUnsold"), "unsold data on board (estimate): hover the tiles for the detail"));
-  if (c) {
+  // each tile's bit only where this device shows the tile (Settings → Display); the system's name if nothing else is left
+  const where = p ? `<span class="copy tl-sys" data-name="${esc(p.name)}" title="click to copy">${esc(p.name)}</span>` : `<span class="unk">${esc(noJumpText())}</span>`;
+  const out = tileShown("where") ? [where] : [], on = k => tileShown(k);
+  if (on("fuel") && f && f.live && f.main != null) out.push(bit(`⛽ ${f.pct != null ? f.pct + "%" : f.main.toFixed(1) + " t"}`, tileLevel("tFuel"), "fuel in the main tank"));
+  if (on("cmdr") && cm && cm.credits != null) out.push(bit(`${credits(cm.credits)} cr`, "", "credits at login plus exploration and exobiology sales since"));
+  if (on("unsold") && u && !u.error && u.total != null) out.push(bit(`unsold ${credits(u.total)}`, tileLevel("tUnsold"), "unsold data on board (estimate): hover the tiles for the detail"));
+  if (on("carrier") && c) {
     const pl = c.planned, left = pl && pl.departure ? (Date.parse(pl.departure) - Date.now()) / 1000 : null;
     const where = c.aboard ? "aboard" : c.here ? "here" : c.distance != null ? ly(c.distance) : esc(c.system || "");
     const dep = left != null && left > 0 ? ` · departs in ${left >= 3600 ? `${Math.floor(left / 3600)} h ${Math.floor(left % 3600 / 60)} min` : `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")}`}` : "";
-    out.push(bit(`carrier ${where}${dep}`, dep && left < 300 && !c.aboard ? "urgent" : "", c.name || "your fleet carrier") + carrierAim(c));
+    out.push(bit(`${mk("fleet-carrier")}carrier ${where}${dep}`, dep && left < 300 && !c.aboard ? "urgent" : "", c.name || "your fleet carrier") + carrierAim(c));
   }
   const dl = tileLevel("tData");
-  if (dl) out.push(bit(dataBit, dl, "the Data tile: unfold the tiles for the detail"));
+  if (on("data") && dl) out.push(bit(dataBit, dl, "the Data tile: unfold the tiles for the detail"));
+  if (!out.length) out.push(where);
   return out.join(`<span class="tl-sep"> · </span>`);
 }
 function renderTilesLine() {
@@ -978,14 +1093,68 @@ function renderRoute() {
   }
   if (!r || !r.hops.length) { el.innerHTML = ""; return; }
   const n = r.hops.length;
-  const chips = r.hops.slice(0, 24).map(h => `<span class="hop${h.scoopable ? " sc" : h.scoopable === false ? " dry" : ""}${h.visited ? " vis" : ""}" ` +
-    `title="${esc(h.name)} · ${esc(h.star_class || "?")}${h.scoopable ? " (scoopable)" : h.scoopable === false ? " (not scoopable)" : ""} · ${h.ly} ly${h.visited ? " · visited" : ""}${h.known ? "" : " · not reported to Spansh"}">` +
-    `${esc(h.star_class || "?")}${h.known ? "" : "✦"}</span>`).join("");
+  // h.known: true, false (Spansh was asked and has no record: ✦) or null (never asked: no claim either way; Kurbo26,
+  // GitHub discussion #3: Sol said "not reported to Spansh")
+  // a chip copies its system's name (the page-wide .copy handler); ⛽ marks how far the fuel in the tank goes without
+  // scooping (the server's fuel_reach, worked out from the fuel aboard now: a scoop on the way moves it), ⛽✓ at the end
+  // when it makes the whole route (Kurbo26, GitHub discussion #3)
+  // a hop counts only while it keeps fr.reserve t aboard (5 % of the tank: the author, 2026-10-15); fr.learning: the fuel
+  // model is not complete yet, said rather than nothing (Kurbo26 saw no ⛽ at all in a ship Outrider had not learned)
+  const fr = r.fuel_reach && r.fuel_reach.hops != null ? r.fuel_reach : null, shown = Math.min(n, 24);
+  const learning = r.fuel_reach && r.fuel_reach.learning;
+  const keep = fr ? `, keeping ${fuelT(fr.reserve)} t in reserve` : "";
+  const reachMark = k => `<span class="freach" title="${k ? `the fuel in your tank makes ${k} jump${k === 1 ? "" : "s"} of this route without scooping${keep}: scoop or refuel by here`
+    : `the fuel in your tank does not make the next jump${keep}: scoop or refuel here`}">⛽</span>`;
+  const chips = r.hops.slice(0, 24).map((h, k) => (fr && !fr.whole && fr.hops === k ? reachMark(k) : "") +
+    `<span class="hop copy${h.scoopable ? " sc" : h.scoopable === false ? " dry" : ""}${h.visited ? " vis" : ""}" data-name="${esc(h.name)}" ` +
+    `title="${esc(h.name)} · ${esc(h.star_class || "?")}${h.scoopable ? " (scoopable)" : h.scoopable === false ? " (not scoopable)" : ""} · ${h.ly} ly${h.visited ? " · visited" : ""}${h.known === false ? " · not reported to Spansh" : ""}">` +
+    `${esc(h.star_class || "?")}${h.known === false ? "✦" : ""}</span>`).join("");
   el.innerHTML = `In-Game Route: <b>${n}</b> jump${n === 1 ? "" : "s"} · <b>${Math.round(r.ly).toLocaleString()}</b> ly` +
     (r.next_scoop ? ` · next scoop in <b>${r.next_scoop}</b>` : ` · <span class="warnc">no scoopable star on the route</span>`) +
     (r.longest_dry > 1 ? ` · <span class="${r.longest_dry >= 4 ? "warnc" : ""}">longest dry stretch ${r.longest_dry}</span>` : "") +
     (dryStretchHere() ? ` · ${dryStretchHtml()}` : "") +
-    ` <span class="hops">${chips}${n > 24 ? ` <span class="unk">+${n - 24}</span>` : ""}</span>`;
+    ` <span class="hops">${chips}${n > 24 ? ` <span class="unk">+${n - 24}</span>` : ""}` +
+    (fr && fr.whole ? `<span class="freach whole" title="the fuel in your tank makes the whole route without scooping, with ${fuelT(fr.spare)} t to spare">⛽<span class="good">✓</span></span>`
+      : fr && fr.hops >= shown ? `<span class="freach past" title="the fuel in your tank makes ${fr.hops} jumps of this route without scooping${keep}">⛽ ${fr.hops}</span>`
+      : learning ? `<span class="freach past unk" title="how far your fuel goes shows once Outrider has learned this ship's fuel use: ${learning} more jump${learning === 1 ? "" : "s"} in it">⛽ ?</span>` : "") +
+    `</span>`;
+}
+// #12: the pad diagram (overlay.pad_map_items' twin, from the payload's docking.map: outrider.pads.where): a starport seen
+// from the slot looking in (12 sectors, 3 depths, the slot's lights green on the right), a carrier from above, bow up;
+// your pad filled in. An SVG for Now (the desktop's and the tablet's)
+const PAD_SHELLS = [1, 0.625, 0.455, 0.25];
+const PAD_SECTORS = [[0, 1], [-0.5, 0.866], [-0.866, 0.5], [-1, 0], [-0.866, -0.5], [-0.5, -0.866],
+                     [0, -1], [0.5, -0.866], [0.866, -0.5], [1, 0], [0.866, 0.5], [0.5, 0.866]];
+function padMapSvg(m) {
+  const pad = m.pad, f = n => n.toFixed(1), parts = [];
+  if (m.kind === "starport") {
+    const R = 110, c = 116, ring = (r, cls) => parts.push(`<polygon class="${cls}" points="${[...Array(12).keys()].map(j =>
+      `${f(c + Math.cos((15 + 30 * j) * Math.PI / 180) * r)},${f(c + Math.sin((15 + 30 * j) * Math.PI / 180) * r)}`).join(" ")}"/>`);
+    PAD_SHELLS.forEach((s, k) => ring(R * s, k ? "pm-wall" : "pm-out"));
+    for (let j = 0; j < 12; j++) {
+      const a = (15 + 30 * j) * Math.PI / 180, r0 = R * PAD_SHELLS[3];
+      parts.push(`<line class="pm-wall" x1="${f(c + Math.cos(a) * r0)}" y1="${f(c + Math.sin(a) * r0)}" x2="${f(c + Math.cos(a) * R)}" y2="${f(c + Math.sin(a) * R)}"/>`);
+    }
+    const slot = R * PAD_SHELLS[3] * 0.8;
+    parts.push(`<line class="pm-red" x1="${f(c - slot)}" y1="${c}" x2="${c - 2}" y2="${c}"/><line class="pm-green" x1="${c + 2}" y1="${c}" x2="${f(c + slot)}" y2="${c}"/>`);
+    (m.pads || []).forEach(([sec, d, k, of], i) => {
+      const [dx, dy] = PAD_SECTORS[sec], r = R * (PAD_SHELLS[d] + PAD_SHELLS[d + 1]) / 2;
+      const a = Math.atan2(dy, dx) + (k - (of + 1) / 2) * 9 * Math.PI / 180, x = c + Math.cos(a) * r, y = c + Math.sin(a) * r;
+      parts.push(i + 1 === pad ? `<circle class="pm-me" cx="${f(x)}" cy="${f(y)}" r="10"/><text class="pm-num" x="${f(x)}" y="${f(y + 4)}">${pad}</text>`
+                               : `<circle class="pm-pad" cx="${f(x)}" cy="${f(y)}" r="3.5"/>`);
+    });
+    return `<svg class="now-padmap" viewBox="0 0 232 232" role="img" aria-label="pad ${pad}, seen from the slot looking in">${parts.join("")}</svg>`;
+  }
+  // the deck's outline from the server (outrider/pads.py CARRIER_OUTLINE: bow at -46, stern at 40)
+  const decks = m.kind === "squadron" ? [26, -26] : [0], u = 2.6, w = (52 * decks.length + 4) * u, cx = w / 2, cy = 47 * u;
+  decks.forEach(xo => { const hx = cx + xo * u;
+    parts.push(`<polygon class="pm-out" points="${(m.outline || []).map(([x, y]) => `${f(hx + x * u)},${f(cy + y * u)}`).join(" ")}"/>`); });
+  (m.pads || []).forEach(([x, y, bw, bh], i) => {
+    const me = i + 1 === pad;
+    parts.push(`<rect class="${me ? "pm-me" : "pm-box"}" x="${f(cx + x * u)}" y="${f(cy + y * u)}" width="${f(bw * u)}" height="${f(bh * u)}"/>`);
+    if (me || bw >= 7) parts.push(`<text class="${me ? "pm-num" : "pm-lbl"}" x="${f(cx + (x + bw / 2) * u)}" y="${f(cy + (y + bh / 2) * u + 4)}">${i + 1}</text>`);
+  });
+  return `<svg class="now-padmap" viewBox="0 0 ${f(w)} ${f(88 * u)}" role="img" aria-label="pad ${pad}, the carrier from above, bow up">${parts.join("")}</svg>`;
 }
 // ---- Now mode: five big lines for a second monitor, readable from the chair ----
 function renderNow() {
@@ -993,6 +1162,12 @@ function renderNow() {
   const el = document.getElementById("nowBody"), p = data.position, f = data.fuel, t = data.target, a = data.arrival;
   if (!p) { el.innerHTML = `<div class="now-sys">${esc(noJumpText())}</div>`; renderSurface(); return; }
   const lines = [`<div class="now-sys">${esc(p.name)}</div>`];
+  // #3: docking: the pad in large letters (the author, 2026-10-14), or why the station refused; gone once docked
+  const dk = data.docking;
+  if (dk && dk.pad != null) lines.push(`<div class="now-pad">PAD ${esc(dk.pad)}<span>${carrierMk(dk.layout)}${esc(dk.station || "")}</span>` +
+    (dk.where ? `<span class="now-where">${esc(dk.where)}</span>` : "") + (dk.map ? padMapSvg(dk.map) : "") + `</div>`);
+  else if (dk && dk.words && Date.now() - Date.parse(dk.ts) < 60000)
+    lines.push(`<div class="now-card alert">🛬 Docking denied${dk.station ? ` at ${esc(dk.station)}` : ""}: ${esc(dk.words)}</div>`);
   // the arrival verdict, for twenty seconds after a jump
   if (a && a.id64 === posId() && Date.now() - Date.parse(a.ts) < 20000)
     lines.push(`<div class="now-card ${a.undiscovered ? "yes" : "no"}">${a.undiscovered ? "🏁 Undiscovered — first discovery is yours" : "Already discovered"}</div>`);
@@ -1042,7 +1217,7 @@ function renderNow() {
     if (siteBodies.length)   // Guardian or Thargoid sites, an anomaly, on this system's bodies
       lines.push(`<div class="now-line now-sites"><span class="ok">${esc(siteText(siteBodies.map(b => ({body: b.name, sites: b.sites}))))}</span></div>`);
     if (hd && hd.pois && hd.pois.length)   // FSS signals worth a detour: Titans, beacons, listening posts...
-      lines.push(`<div class="now-line now-poi"><span class="ok">📍 ${esc(poiText(hd.pois).replace(/^./, c => c.toUpperCase()))}</span></div>`);
+      lines.push(`<div class="now-line now-poi"><span class="ok">${poiLineHtml(hd.pois)}</span></div>`);
     // green gas giants here: the model's guesses (check them in the system map) and any your codex confirms
     const gggs = hd && hd.bodies ? hd.bodies.filter(b => b.ggg) : [];
     if (gggs.length) {
@@ -1411,7 +1586,7 @@ function renderSurface() {
   // Overview: the same map and legend in the lower half of the system pane, where a body's detail panel goes; an
   // open body panel takes the spot, and the map comes back when it is closed. Not while the pane shows another system.
   const ovBox = document.getElementById("ovMap"), hv = document.getElementById("hereView");
-  const onOv = show && view === "overview" && !ovState.collapsed && !selectedBody && !pinnedSystem;
+  const onOv = show && view === "overview" && !selectedBody && !pinnedSystem;
   ovBox.hidden = !onOv;
   hv.classList.toggle("mapon", onOv);
   document.getElementById("ovHere").classList.toggle("hasMap", onOv);
@@ -1577,6 +1752,9 @@ function renderLeaving(l) {
 function statusPill(s) {
   let label = s.status, title = "", short = null;
   if (s.status === "no bodies") { label = "no scan data"; title = "known to exist, but nobody has reported scanning anything"; }
+  // a system of your own route plots that Spansh's answer did not cover (it was unreachable, or a busy region's answer
+  // stopped short): never "unreported", which would claim it was asked
+  else if (s.status === "unasked") { label = "not looked up"; title = "Spansh's answer did not cover it (unreachable, or a busy region's list stopped short): whether anyone reported it is not known"; }
   else if (s.status === "explored") label = "fully scanned";
   else if (s.status === "partial") {
     label = s.body_count ? `${Math.floor(100 * s.bodies_known / s.body_count)}% scanned` : "partly scanned";
@@ -1611,7 +1789,8 @@ function star(s) {
 }
 
 // the tablet keeps its own page (a desktop browser opening /tablet to try it must not lose its view) and has no Overview
-const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "firsts", "galnet", "ship", "cmdr"];
+// in the nav's order (tests/test_tablet.py checks it against page.html's tb-page buttons and TB.groups)
+const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "ship", "cmdr", "firsts", "galnet"];
 let view = TABLET ? store.get("tabletView", "now") : store.get("view", "near");
 if (view === "rich" || view === "navroute") view = "hwy";   // Road to Riches had a tab of its own for a day (PR #1): it is a route type of Plot Route now
 if (TABLET && !TABLET_VIEWS.includes(view)) view = "now";
@@ -1711,21 +1890,27 @@ function paneTop(...ids) { for (const id of ids) { const p = document.getElement
 const VIEW_PANE = {overview: "nearPane", near: "nearPane", here: "hereMain", bio: "bioPane", bm: "bmPane", search: "searchPane",
                    hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane", galnet: "gnPane", ship: "shipPane", cmdr: "cmdrPane"};
 // ---- Compact tables: a table wider than its box (its pane, the Overview's split, a phone) switches to its short forms
-// (compact: level 1), then to tighter ones that also drop or merge low-value columns (compact2: level 2), and back once
-// there is room again. Decided by fit, not by screen size, so a wide pane looks exactly as it always did.
+// (compact: level 1), then to tighter ones that also drop or merge low-value columns (compact2: level 2; compact3: level
+// 3, a last step for a table that merges columns only when dropping some was not enough: Nearby, the author 2026-10-15),
+// and back once there is room again. Decided by fit, not by screen size, so a wide pane looks exactly as it always did.
 // The width compared is the table's min-content width (what it needs at the least, wrapping cells wrapped), measured
 // with each level's forms in turn; going back to a longer form needs COMPACT_SLACK px to spare, so a scrollbar that
 // comes and goes with the row heights cannot make it flap.
 const FIT_TABLES = ["nearTable", "hereTable", "firstsTable", "leftTable", "bioTable", "codexTable", "histTable", "tripTable",
-                    "topTable", "logTable", "sTable", "bmTable", "hwyTable"];
+                    "topTable", "logTable", "sTable", "bmTable", "hwyTable", "cmMissions", "cmCombat", "cmMining",
+                    "cmEarnSales", "cmEarnStations", "cmEarnSpecies", "cmEarnShips", "cmEarnOre", "cmEarnOreAt", "cmEarnOreBest",
+                    "cmEarnStars", "cmEarnBodies", "cmEarnFound", "cmEarnEst"];
+// boxes whose FIT_TABLES are drawn later, replaced whole at each draw (the CMDR tab's): watched, so a new table is fitted
+const FIT_HOSTS = ["cmdrBody"];
 const COMPACT_SLACK = 24;
 // widths[l]: the table's width with level l's forms (measured in order; later ones may be missing); current: its level now
+const COMPACT_LEVELS = 4;   // 0 (as drawn), compact, compact2, compact3
 function compactLevel(widths, avail, current) {
-  for (let l = 0; l < 3 && widths[l] != null; l++) if (widths[l] <= avail - (l < current ? COMPACT_SLACK : 0)) return l;
-  return widths.length >= 3 ? 2 : -1;   // -1: measure the next level
+  for (let l = 0; l < COMPACT_LEVELS && widths[l] != null; l++) if (widths[l] <= avail - (l < current ? COMPACT_SLACK : 0)) return l;
+  return widths.length >= COMPACT_LEVELS ? COMPACT_LEVELS - 1 : -1;   // -1: measure the next level
 }
-const tableLevel = t => t.classList.contains("compact2") ? 2 : t.classList.contains("compact") ? 1 : 0;
-const setTableLevel = (t, l) => { t.classList.toggle("compact", l >= 1); t.classList.toggle("compact2", l >= 2); };
+const tableLevel = t => t.classList.contains("compact3") ? 3 : t.classList.contains("compact2") ? 2 : t.classList.contains("compact") ? 1 : 0;
+const setTableLevel = (t, l) => { t.classList.toggle("compact", l >= 1); t.classList.toggle("compact2", l >= 2); t.classList.toggle("compact3", l >= 3); };
 // the room a table has: its parent's content box (the pane in app mode, the page or the Overview's split otherwise)
 function tableRoom(t) {
   const p = t.parentElement; if (!p) return 0;
@@ -1737,13 +1922,13 @@ function fitTable(t) {
   const avail = tableRoom(t);
   if (!(avail > 0)) return;
   // nothing to do unless the room, the table's size, its contents or its own classes (lostcols) changed
-  const sig = [avail, t.offsetWidth, t.rows.length, t.textContent.length, t.className.replace(/\s*\bcompact2?\b/g, "")].join("|");
+  const sig = [avail, t.offsetWidth, t.rows.length, t.textContent.length, t.className.replace(/\s*\bcompact[23]?\b/g, "")].join("|");
   if (t._fitSig === sig) return;
   const cur = tableLevel(t), pane = t.closest(".pane"), keep = [pane && pane.scrollTop, pane && pane.scrollLeft, t.scrollLeft, window.scrollY];
   const widths = [];
   let lvl = -1;
   t.style.width = "min-content";
-  for (let l = 0; l < 3 && lvl < 0; l++) {
+  for (let l = 0; l < COMPACT_LEVELS && lvl < 0; l++) {
     setTableLevel(t, l);
     widths.push(Math.ceil(Math.max(t.scrollWidth, t.offsetWidth)));
     lvl = compactLevel(widths, avail, cur);
@@ -1754,7 +1939,7 @@ function fitTable(t) {
   if (pane) { if (pane.scrollTop !== keep[0]) pane.scrollTop = keep[0]; if (pane.scrollLeft !== keep[1]) pane.scrollLeft = keep[1]; }
   if (t.scrollLeft !== keep[2]) t.scrollLeft = keep[2];
   if (!pane && window.scrollY !== keep[3] && window.scrollTo) window.scrollTo(window.scrollX, keep[3]);
-  t._fitSig = [tableRoom(t), t.offsetWidth, t.rows.length, t.textContent.length, t.className.replace(/\s*\bcompact2?\b/g, "")].join("|");
+  t._fitSig = [tableRoom(t), t.offsetWidth, t.rows.length, t.textContent.length, t.className.replace(/\s*\bcompact[23]?\b/g, "")].join("|");
 }
 let fitQueued = false;
 function fitTables() { fitQueued = false; FIT_TABLES.forEach(id => fitTable(document.getElementById(id))); }
@@ -1776,6 +1961,11 @@ function fitSoon() {
     const t = document.getElementById(id); if (!t) continue;
     if (ro) { ro.observe(t); if (t.parentElement) ro.observe(t.parentElement); }
     if (mo) mo.observe(t, {childList: true, subtree: true, characterData: true});
+  }
+  for (const id of FIT_HOSTS) {
+    const h = document.getElementById(id); if (!h) continue;
+    if (ro) ro.observe(h);
+    if (mo) mo.observe(h, {childList: true, subtree: true, characterData: true});
   }
   if (!ro) window.addEventListener("resize", fitSoon);
 }
@@ -1799,13 +1989,14 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
   ["refuelshort", "a Highway route plotted with the exact plotter: the fuel aboard won't reach the next refuel stop (once per system; at a refuel stop itself the route's line only shows how much to scoop)", "alert"],
   ["lastscoop", "any route Outrider follows (the game's plotted route, the Highway, a survey route's legs): at the last scoopable star before stars you can't scoop, when the fuel aboard won't cover them (once per stretch, not while scooping)", "alert"],
-  ["autotarget", "auto-target (after a supercharge when it is on, a test, Target next, 🎯, the co-pilot button's tap): whether the system was targeted, and nothing to target when the button found none", null],
+  ["autotarget", "auto-target (after a supercharge when it is on, a test, Target next, a target button, the co-pilot button's tap): whether the system was targeted, and nothing to target when the button found none", null],
   ["wrongtarget", "a route you follow (the Highway, a survey or trade route): the system targeted in game is not its next stop (once per target, after the galaxy map closes; never off the route, nor for a later stop of the route, which the line shows as stops ahead)", "alert"],
   ["find", "a valuable body just scanned (over your highlight levels); one someone else mapped is not named, but said once per system (\"already mapped, still worth mapping\")", "find"],
   ["jumponium", "a landable body just scanned has a material your FSD injections are short of (premium or standard at 2 or fewer): said with the FSS debrief, or alone when the FSS never completes", "find"],
   ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed; within 100 m of a plant you tagged where the next sample would count", "alert"],
   ["approach", "approaching a landable body at or over your high-gravity level with unsold data over the amber level or rebuy multiple", "alert"],
   ["bodybrief", "approaching a body with biological signals: what they could be (the FSS already said so, so off by default)", null],
+  ["docking", "docking: the pad the station gave you (said every time, shown big on Now and in the overlay's Surface radar place), and why one refused when it is not obvious (no pad free, ship too big, access restricted, hostile, your offences, a fighter out)", null],
   ["sell", "docked where you can sell, and what you banked", "cash"],
   ["saleleft", "a sale left data aboard: Universal Cartographics sells 50 systems a page, so a sale that stops after one page leaves the rest unsold (said once the pages stop and the estimate has caught up); likewise completed samples still unsold after a Vista Genomics sale", "alert"],
   ["unsold", "unsold data crosses a threshold", "cash"],
@@ -1831,7 +2022,7 @@ const UNSPOKEN = new Set(Object.keys(UNSPOKEN_WHY));
 const alertCfgBase = () => Object.assign({enabled: false}, Object.fromEntries(ALERTS.map(([k]) => [k, true])),
   // a notification on every jump (or scoop, or FSS) would be noise: these are spoken by default, not notified
   {jump: false, honk: false, brief: false, fss: false, mapped: false, scoop: false, scoopstop: false, supercharge: false, highway: false, autotarget: false, wrongtarget: false,
-   sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false});
+   docking: false, sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false});
 const alertCfg = Object.assign(alertCfgBase(), store.get("alerts", {}));
 // off until you tick them (the whole row): the jumponium call-out
 const OFF_KINDS = {jumponium: false};
@@ -2055,9 +2246,10 @@ const JUMP_LINE_WAIT = 8000;   // ms: the jump line's latest start after the cha
 // ms after Status.json says "in the tunnel" (it says so about 2 s before the countdown ends): the line then starts
 // with the tunnel itself (the author's timing, in game 2026-10-03)
 const JUMP_TUNNEL_DELAY = 2500;
-const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "curious", "highway", "refuelshort", "lastscoop", "riches", "exo", "trade", "autotarget", "wrongtarget"]);
-// a rig confirmation answers your own press, like a line asked for
-const speechPrio = (kind, tag) => DANGER.has(tag) || kind === "hull" || kind === "fuel" ? 0 : kind === "manual" || kind === "rigs" ? 1
+const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "curious", "highway", "refuelshort", "lastscoop", "riches", "exo", "trade", "autotarget", "wrongtarget", "docking"]);
+// a rig confirmation answers your own press, like a line asked for; so does the docking pad (#3: your request's answer,
+// wanted at once)
+const speechPrio = (kind, tag) => DANGER.has(tag) || kind === "hull" || kind === "fuel" ? 0 : kind === "manual" || kind === "rigs" || kind === "docking" ? 1
   : ["find", "signals", "codex", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "bodybrief", "supercharge", "jumponium"].includes(kind) ? 3 : 2;
 // the queue without what went stale by `now` with the ship at `pos`
 const speechExpire = (items, now, pos) => items.filter(it => now - it.notBefore <= SPEECH_MAX_AGE
@@ -2503,6 +2695,7 @@ const spokenStar = c => !c ? "star" : /^D/.test(c) ? "white dwarf" : c === "N" ?
   : `${c} star`;
 // sample values for the ▶ try button
 const LINE_SAMPLES = {
+  docking_granted: {pad: 34, station: "Jameson Memorial"}, docking_denied: {reason: "no pad free for your ship: try again shortly", station: "Jameson Memorial"},
   speech_on: {}, game_start: {}, game_exit: {}, heat: {},
   arrival_undiscovered: {system: "Drojau LL-O b26-3"}, arrival_discovered: {system: "Drojau LL-O b26-3"},
   leaving: {text: "A 2, a class two gas giant, plus 1.4M to map"},
@@ -2672,7 +2865,7 @@ function highGStakes(m) {
 // the arrival briefing: verdict, body count, star, then the best unmapped planet and the richest bio over your levels
 function arrivalBriefText(m) {
   const verdict = m.undiscovered && !(m.visits > 1) ? "Undiscovered." : m.visits > 1 ? "Visited before." : m.status === "explored" ? "Fully scanned."
-    : m.in_spansh ? "Known." : m.undiscovered === false ? "Known, not in Spansh." : "";
+    : m.in_spansh ? "Known." : m.undiscovered === false ? (m.in_spansh === false ? "Known, not in Spansh." : "Known.") : "";   // null: Spansh never asked
   // the first crossing into a galactic region this session opens the briefing ("Entering the Norma Arm.")
   const bits = [m.region && m.region.spoken ? `Entering ${m.region.spoken}.` : "", verdict];
   if (m.body_count) bits.push(m.all_found ? `All ${nBodies(m.body_count)} found.` : `${nBodies(m.body_count)}.`);
@@ -3035,13 +3228,13 @@ function render() {
   document.getElementById("bmTable").hidden = view !== "bm";
   document.getElementById("bmTools").hidden = view !== "bm";
   const nearPinned = view === "near" && !!pinnedSystem;
-  document.getElementById("hereView").hidden = !(view === "here" || nearPinned || (view === "overview" && !ovState.collapsed));
+  document.getElementById("hereView").hidden = !(view === "here" || nearPinned || view === "overview");
   document.querySelector("main").classList.toggle("nearPinned", nearPinned);
   document.getElementById("firstsView").hidden = view !== "firsts";
   document.getElementById("galnetView").hidden = view !== "galnet";
   document.getElementById("shipView").hidden = view !== "ship";
   if (view === "ship") loadShip();
-  document.getElementById("cmdrView").hidden = view !== "cmdr";   // this fork's Commander view (static/fork.js)
+  document.getElementById("cmdrView").hidden = view !== "cmdr";
   if (view === "cmdr") loadCmdr();
   if (view === "galnet") loadGalnet();
   if (view === "firsts") { loadFirsts(); loadLeft(); }
@@ -3054,7 +3247,7 @@ function render() {
   if (view === "log") { logUnsentShow(); if (L.key === null) loadLog(); else tailLog(); }
   document.getElementById("bioView").hidden = view !== "bio";
   if (view === "bio") { if (bioMode !== "runs") { loadChecklist(); if (CL.find) clDrawSide(); } else loadBio(); }   // a ☆ set from the find's list
-  if (view === "here" || nearPinned || (view === "overview" && !ovState.collapsed) || view === "now") {   // Now reads Here's data
+  if (view === "here" || nearPinned || view === "overview" || view === "now") {   // Now reads Here's data
     loadHere();
     // tab and pane keep different modes; and the in-game target moves without a scan (review F4): redraw, no refetch
     if (hereData && (lastHereCtx !== hereCtx() || lastHereDest !== hereDestKey() || lastHerePlan !== herePlanKey())) renderHere();
@@ -3090,24 +3283,32 @@ function render() {
   } else M.open = false;
   if (view === "hwy") { loadHwy(); loadRich(); loadNavRoute(); }
   refreshPop();
-  const jr = effRange();
-  let rows = data.systems.filter(s => sysId(s) !== sysId(p))
+  const jr = effRange(), elsewhere = nearElsewhere(), na = data.near_around || {around: "here"};
+  // around another system (Nearby's Around) your own system is one of its rows; around you it is the header's
+  let rows = data.systems.filter(s => elsewhere || sysId(s) !== sysId(p))
     .filter(s => showVisited.checked || !s.visited)
     .filter(s => showExplored.checked || s.status !== "explored")
-    .filter(s => !oneJump.checked || !jr || s.distance <= jr);
+    .filter(s => !oneJump.checked || !jr || lyFromYou(s) <= jr)
+    .filter(nearFilter);
+  const far0 = x => x == null ? Infinity : x;
   rows.sort(sortWith("near", sortKey("near") === "name"
     ? (a, b) => a.name.localeCompare(b.name, undefined, {numeric: true})
     : sortKey("near") === "value" ? (a, b) => (b.value_max || 0) - (a.value_max || 0) || a.distance - b.distance
+    : sortKey("near") === "from" ? (a, b) => far0(lyFromYou(a)) - far0(lyFromYou(b)) || a.distance - b.distance
     : (a, b) => a.distance - b.distance));
+  nearShown = rows.map(s => s.name);   // ⧉ Copy visible: what the list shows, in its order
   // Fuel: the nearest scoopable star you can reach (visited or not) gets a tag when the tank is low.
   const fuel = data.fuel, lowFuel = fuel && fuel.live && fuel.pct != null && fuel.pct < 30;
-  const scoopNext = lowFuel && data.systems.filter(s => sysId(s) !== sysId(p) && s.main_scoopable && (!jr || s.distance <= jr))
-    .sort((a, b) => a.distance - b.distance)[0];
+  const scoopNext = lowFuel && data.systems.filter(s => sysId(s) !== sysId(p) && s.main_scoopable && (!jr || lyFromYou(s) <= jr))
+    .sort((a, b) => far0(lyFromYou(a)) - far0(lyFromYou(b)))[0];
   const unvisited = data.systems.filter(s => !s.visited).length;
   document.getElementById("subKnown").textContent = data.systems.length;
   document.getElementById("subUnvisited").textContent = unvisited;
+  const subAround = elsewhere ? ` around <b class="copy" data-name="${esc(na.name)}" title="click to copy">${esc(na.name)}</b>` : "";
+  if (document.getElementById("subAround").innerHTML !== subAround) document.getElementById("subAround").innerHTML = subAround;
   document.getElementById("subCut").innerHTML = data.sphere_cut != null
-    ? ` · <span class="warn" title="Spansh knows more systems in range than Outrider fetches; the list is complete only out to ${data.sphere_cut} ly. A smaller radius shows them all.">complete to ${data.sphere_cut} ly</span>` : "";
+    ? ` · <span class="warn" title="${esc(SPHERE_CUT_WORDS(data.sphere_cut))}">complete to ${data.sphere_cut} ly</span>` : "";
+  renderNearAround();
   const rs = document.getElementById("radiusSel"), choices = data.radius_choices || [data.radius];
   if (rs.dataset.opts !== choices.join(",")) {   // rebuilt only when the choices change, so an open list stays open
     rs.innerHTML = choices.map(r => `<option value="${r}">${r}</option>`).join(""); rs.dataset.opts = choices.join(",");
@@ -3133,7 +3334,8 @@ function render() {
     const src = t.source === "edsm" ? " (known to EDSM only)" : "";
     const hz = hazardNote(t.star_class);
     const hop = t.hop;
-    tEl.innerHTML = `Target: <b>${esc(t.name)}</b>${hop ? ` · ${hopCostHtml(hop)}` : row ? ` · ${row.distance.toFixed(2)} ly` : ""}${sc}` +
+    const rowLy = row && lyFromYou(row);   // from you, also while Nearby is around another system
+    tEl.innerHTML = `Target: <b>${esc(t.name)}</b>${hop ? ` · ${hopCostHtml(hop)}` : rowLy != null ? ` · ${rowLy.toFixed(2)} ly` : ""}${sc}` +
       ` · <span class="t-${t.status.replace(" ", "")}">${label}${src}</span>${targetCounts(t)}` + (hz ? ` · <span class="hazard">⚠ ${hz}</span>` : "");
   }
   renderLeaving(t && t.leaving);
@@ -3147,31 +3349,37 @@ function render() {
   // the 🎯 (nearAimBtn) left of each name, in a column of its own width (the author, 2026-10-14): your own system's row
   // keeps the space, so the names stay in line; no column where auto-target cannot work
   const aimCol = canAim();
+  document.getElementById("nearTable").classList.toggle("around", elsewhere);   // its From you column
+  const distTh = document.getElementById("nearDistTh"), distTitle = elsewhere ? `ly from ${na.name} (the system Nearby is around)` : "ly from you";
+  if (distTh.title !== distTitle) distTh.title = distTitle;
   document.getElementById("rows").innerHTML = rows.map(s => {
     const isPrev = prev && sysId(s) === sysId(prev);
-    const far = jr && s.distance > jr;
-    const jumps = jr ? jumpsFor(s.distance) : null;
+    const ly = lyFromYou(s), far = jr && ly != null && ly > jr;
+    const jumps = jr && ly != null ? jumpsFor(ly) : null;   // from you, wherever the list is around
     const cls = [s.visited && "visited", far && "far", isPrev && "prev", scoopNext && sysId(s) === sysId(scoopNext) && "scoopnext",
                  data.next_stop && s.id === data.next_stop.id && "nextstop",
                  pinnedSystem === s.id && "pinned",
                  data.target && sysId(s) === sysId(data.target) && "target"]
       .filter(Boolean).join(" ");
     const known = s.body_count ? `${s.bodies_known}/${s.body_count}` : (s.bodies_known || "");
-    // compact2 merges: the status badges go under the name, the notable tags under the bodies
+    // compact3 merges (compact2 drops Jumps and Known first): the status badges go under the name, the notable tags under
+    // the bodies
     const status = statusPill(s) + (s.mapped ? statusBadge("s-mapped", `${s.mapped} mapped`, "DSS-mapped bodies, from your own journal", `🗺${s.mapped}`) : "") +
-      (s.source === "own" ? statusBadge("s-own", "yours only", "Spansh doesn't have this system; data is from your own scans") : "") +
+      (s.source === "own" ? statusBadge("s-own", "yours only", s.in_spansh === false ? "Spansh doesn't have this system; data is from your own scans"
+                                                                                      : "data is from your own scans (Spansh's answer did not cover this system)") : "") +
       (s.source === "edsm" ? `<span class="badge s-edsm" title="Spansh is unreachable; this comes from EDSM (no body data)">EDSM</span>` : "");
     const nb = notable(s);
     return `<tr class="${cls}" data-id="${esc(s.id)}">
       <td class="bmcell">${bmIcon(s.id, s.name, bms)}</td>
       <td class="name" data-name="${esc(s.name)}" title="click to copy">${aimCol ? `<span class="nearaim">${nearAimBtn(s)}</span>` : ""}${isPrev
-        ? `<span class="prevmark" title="you just came from here">↩</span>` : ""}${nameWords(s.name)}${firstsIcon(s.firsts)}<div class="sf2 sub2">${status}</div></td>
-      <td class="num dist"${far ? ` title="beyond your max jump range"` : ""}>${s.distance.toFixed(2)}</td>
+        ? `<span class="prevmark" title="you just came from here">↩</span>` : ""}${nameWords(s.name)}${firstsIcon(s.firsts)}<div class="sf3 sub2">${status}</div></td>
+      <td class="num dist"${far && !elsewhere ? ` title="beyond your max jump range"` : ""}>${s.distance.toFixed(2)}</td>
+      <td class="num fromcol"${far ? ` title="beyond your max jump range"` : ""}>${elsewhere && ly != null ? ly.toFixed(2) : ""}</td>
       <td class="num hide-sm c2hide">${jumps == null ? "" : jumps === 1 ? "1" : `<span class="unk">${jumps}</span>`}</td>
-      <td class="c2hide">${status}</td>
-      <td>${star(s)}</td><td class="bodies" data-pop data-id="${esc(s.id)}">${bodies(s)}${nb ? `<div class="sf2 sub2 notable">${nb}</div>` : ""}</td>
-      <td class="notable c2hide">${nb}</td><td class="num hide-sm" title="${valueTitle(s)}">${valueCell(s)}</td><td class="num hide-sm c2hide">${known}</td></tr>`;
-  }).join("") || `<tr><td colspan="10" class="unk">${emptyMessage(rows)}</td></tr>`;
+      <td class="c3hide">${status}</td>
+      <td>${star(s)}</td><td class="bodies" data-pop data-id="${esc(s.id)}">${bodies(s)}${nb ? `<div class="sf3 sub2 notable">${nb}</div>` : ""}</td>
+      <td class="notable c3hide">${nb}</td><td class="num hide-sm" title="${valueTitle(s)}">${valueCell(s)}</td><td class="num hide-sm c2hide">${known}</td></tr>`;
+  }).join("") || `<tr><td colspan="11" class="unk">${emptyMessage(rows)}</td></tr>`;
   refocus("rows", fkRows);
   renderBoxelMode();
   document.getElementById("updateLine").hidden = !data.restart_needed;
@@ -3189,6 +3397,99 @@ function render() {
   if (TABLET) tabRender();
   // the strips drawn above may have grown the header past what app mode leaves room for (or shrunk it back)
   if (applyAppMode()) { renderSurface(); drawMap(); drawHwyMap(); }
+}
+// ---- Nearby's Around and filters (2026-10-14: the ideas of Rainmangames' PR #8, "Lock System", built on S49's Around).
+// Around is saved on the server (POST api/nearby/around, meta near_around) so every window and the tablet agree: you (the
+// list follows your ship), your destination, carrier or next stop (it follows them), this system (locked where you are
+// now) or a system by name (GET api/find first, as Search's). Away from you Dist is from there, From you and Jumps from
+// you, and a strip above the list names the centre. Spansh is asked when the centre changes and on ↻ (paced), nothing on a
+// timer. The filters are this device's (store): one mass code, the systems nobody reported a scan of; ⧉ Copy visible.
+const NEAR_AROUND = [["here", "you"], ["destination", "your destination"], ["carrier", "your carrier"], ["next_stop", "your next stop"],
+                     ["lock", "lock this system"], ["system", "a system…"]];
+const NEAR_AROUND_WHAT = {lock: "locked", system: "", destination: "your destination", carrier: "your carrier", next_stop: "your next stop"};
+// the list is around another system (not you, and placed): its rows' distance is from there
+const nearElsewhere = () => { const na = data && data.near_around; return !!(na && na.around !== "here" && !na.why && na.x != null); };
+// a row's distance from you: its own around you, else from its coordinates (null when either is unknown)
+const lyFromYou = s => {
+  if (!nearElsewhere()) return s.distance;
+  const p = data.position;
+  return p && p.x != null && Array.isArray(s.xyz) ? Math.hypot(p.x - s.xyz[0], p.y - s.xyz[1], p.z - s.xyz[2]) : null;
+};
+const SPHERE_CUT_WORDS = cut => `Spansh returned its maximum: the list is complete only to ${cut} ly — a smaller radius shows them all`;
+// a procedural name's mass code ("Smojooe GW-W c1-4": c); null for a named system
+const massOf = name => { const m = /\b[A-Z]{2}-[A-Z] ([a-h])\d+(?:-\d+)?$/.exec(String(name || "")); return m ? m[1] : null; };
+const NO_SCAN = new Set(["no bodies", "unreported", "unasked"]);   // nobody has reported a scan of it
+const nearMassSel = document.getElementById("nearMass"), nearNoScan = document.getElementById("nearNoScan");
+nearMassSel.value = /^[a-h]$/.test(store.get("nearMass", "")) ? store.get("nearMass", "") : "";
+nearNoScan.checked = store.get("nearNoScan", false) === true;
+nearMassSel.onchange = () => { store.set("nearMass", nearMassSel.value); render(); };
+nearNoScan.onchange = () => { store.set("nearNoScan", nearNoScan.checked); render(); };
+const nearFilter = s => (!nearMassSel.value || massOf(s.name) === nearMassSel.value) && (!nearNoScan.checked || NO_SCAN.has(s.status));
+let nearShown = [];   // the names of the rows the list shows, in its order
+document.getElementById("nearCopy").onclick = () => nearShown.length
+  ? copyText(nearShown.join("\n"), `${nearShown.length} system name${nearShown.length === 1 ? "" : "s"}`) : toast("no systems shown to copy");
+const NA = {typing: false, busy: false, strip: null};   // typing: "a system…" picked, its name not sent yet
+const nearAroundSel = document.getElementById("nearAround"), nearAroundName = document.getElementById("nearAroundName");
+async function setNearAround(kind, name) {
+  if (NA.busy) return;
+  NA.busy = true;
+  const a = kind === "system" ? await aroundParam("system", name) : {around: kind};
+  let r = a.error ? {error: a.error} : null;
+  if (!r) try {
+    r = await apiJson("api/nearby/around", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({around: a.around})});
+  } catch (err) { r = {error: err.message}; }
+  NA.busy = false;
+  if (r.error) toast(r.error);
+  else { NA.typing = false; if (data) data.near_around = r.near_around; }
+  if (data) render();
+}
+nearAroundSel.onchange = () => {
+  NA.typing = nearAroundSel.value === "system";
+  nearAroundName.hidden = !NA.typing;
+  if (NA.typing) return nearAroundName.focus();
+  setNearAround(nearAroundSel.value);
+};
+nearAroundName.onchange = () => { if (nearAroundName.value.trim()) setNearAround("system", nearAroundName.value); };
+async function nearRefresh() {
+  let r;
+  try { r = await apiJson("api/nearby/refresh", {method: "POST"}); } catch (err) { r = {error: err.message}; }
+  toast(r.error || "asking Spansh again…");
+}
+document.getElementById("nearStrip").addEventListener("click", e => {
+  if (e.target.closest("[data-nearback]")) setNearAround("here");
+  else if (e.target.closest("[data-nearrefresh]")) nearRefresh();
+});
+// the Around select, the strip above the list and the Boxel mode's hint, from the payload's near_around
+function renderNearAround() {
+  const na = data.near_around || {around: "here"}, p = data.position;
+  const kind = NA.typing ? "system" : NEAR_AROUND.some(([v]) => v === na.around) ? na.around : "here";
+  aroundOptions(nearAroundSel, NEAR_AROUND, {lock: na.around === "lock" && na.name || p && p.name,
+                                             system: na.around === "system" && na.name, destination: na.around === "destination" && na.name});
+  if (document.activeElement !== nearAroundSel && !NA.busy) nearAroundSel.value = kind;
+  nearAroundName.hidden = kind !== "system";
+  if (kind === "system" && !NA.typing && document.activeElement !== nearAroundName && na.name) nearAroundName.value = na.name;
+  const bx = document.getElementById("nearAroundBx"), bxText = na.around !== "here"
+    ? `Nearby's Focus/Lock (${[na.name, NEAR_AROUND_WHAT[na.around]].filter(Boolean).join(", ")}) is for Standard: a boxel has its own centre` : "";
+  bx.hidden = nearMode() !== "boxel" || !bxText;
+  if (bx.textContent !== bxText) bx.textContent = bxText;
+  const parts = [];
+  if (na.around !== "here") {
+    const back = `<button type="button" class="mini" data-nearback title="Nearby around you again: it follows your ship">✕ back to you</button>`;
+    if (!nearElsewhere()) {
+      parts.push(`<div class="nsline">⌖ ${esc((NEAR_AROUND.find(([v]) => v === na.around) || [])[1] || na.around)}: ` +
+                 `${esc(na.why || "not placed yet")}; Nearby is around you meanwhile · ${back}</div>`);
+    } else {
+      const what = NEAR_AROUND_WHAT[na.around];
+      parts.push(`<div class="nsline">⌖ Around <span class="copy nscentre" data-name="${esc(na.name)}" title="click to copy">${esc(na.name)}</span>` +
+        `${what ? ` (${what})` : ""}${na.from_you != null ? ` · ${na.from_you.toLocaleString("en-US", {maximumFractionDigits: 1})} ly from you` : ""}` +
+        ` · ${data.radius} ly sphere · <button type="button" class="mini" data-nearrefresh${na.refreshing ? " disabled" : ""} ` +
+        `title="ask Spansh again for this sphere (at most every ${Math.round((na.refresh_gap_s || 120) / 60)} minutes; it is asked by itself only when the centre changes)">↻ refresh</button> · ${back}</div>`);
+    }
+  }
+  if (data.sphere_cut != null) parts.push(`<div class="nsline warn">${esc(SPHERE_CUT_WORDS(data.sphere_cut))}</div>`);
+  const html = parts.join(""), strip = document.getElementById("nearStrip");
+  if (NA.strip !== html) { strip.innerHTML = html; NA.strip = html; }
+  strip.hidden = !html;
 }
 // ---- boxel exploration (2026-10-11): Nearby's Standard / Boxel switch (one choice per browser, the Overview pane and
 // the Nearby tab alike). Boxel lists the boxel you are in, or one kept (📌, or picked below), by number: your visits
@@ -3219,6 +3520,7 @@ function renderBoxelMode() {
   const on = nearMode() === "boxel";
   document.querySelectorAll("input[name=nearMode]").forEach(r => { r.checked = r.value === nearMode(); });
   document.getElementById("nearWrap").classList.toggle("boxel", on);
+  document.getElementById("overView").classList.toggle("boxel", on);   // Focus/Lock sits on the Overview's bar there
   document.getElementById("nearPane").hidden = on;
   document.getElementById("boxelPane").hidden = !on;
   if (!on || !data) return;
@@ -3312,7 +3614,7 @@ function drawBoxel() {
       (d.done ? `<button type="button" class="try" data-bxdone="0" title="take the done mark back">undo done</button>`
         : !d.complete ? `<button type="button" class="try" data-bxdone="1" title="finished with this boxel, complete or not: it leaves the recommendations (a kept boxel is let go)">✓ Done with this boxel</button>` : "") +
       (d.end != null ? `<button type="button" class="try" data-bxretry="1" title="a failed search is not always a missing name: offer the numbers above it again">retry above -${d.end}</button>` : "") +
-      (!b.standard ? `<span class="unk">a hand-made sector: 🎯 cannot check its systems</span>` : "") + `</div>`;
+      (!b.standard ? `<span class="unk">a hand-made sector: ${mk("destination")}target cannot check its systems</span>` : "") + `</div>`;
     const rowHtml = r => { const s = r.summary;
       return `<tr class="${[r.visited && "visited", r.n === d.next && "next", !r.visited && !r.spansh && "try", d.skip_known && r.scanned && !r.visited && "skipped"].filter(Boolean).join(" ")}">` +
         `<td class="n">-${r.n}</td><td class="name copy" data-name="${esc(r.name)}" title="click to copy">${nameWords(r.name)}${s ? firstsIcon(s.firsts) : ""}</td>` +
@@ -3374,7 +3676,7 @@ document.getElementById("boxelPane").addEventListener("change", e => {
   else if (e.target.id === "bxSkip") boxelPost({skip_known: e.target.checked});
 });
 function emptyMessage(rows) {
-  const others = data.systems.filter(s => sysId(s) !== posId()).length;
+  const others = data.systems.filter(s => nearElsewhere() || sysId(s) !== posId()).length;
   if (/^asking|^fetching/.test(data.status)) return "loading…";
   if (/^(Spansh unavailable|No internet connection|refresh failed)/.test(data.status)) return `${/^refresh/.test(data.status) ? "The lookup failed" : esc(data.status)} — the list is incomplete, so no conclusions about undiscovered systems yet.`;
   if (others > rows.length) return `${others - rows.length} system${others - rows.length === 1 ? "" : "s"} hidden by the filters above.`;
@@ -3538,7 +3840,6 @@ function pinSystem(id) {
   // the system you are in is not "pinned": Here shows it anyway, with its to-do line
   pinnedSystem = posId() === String(id) ? null : String(id);
   forgetOtherHere();
-  if (view === "overview" && ovState.collapsed) { ovState.collapsed = false; saveOv(); }   // else the pin shows nothing
   if (selectedBody) closeBody(); hidePop(); render(); renderHere(); paneTop("hereMain");
 }
 function unpinSystem() { pinnedSystem = null; forgetOtherHere(); if (selectedBody) closeBody(); render(); renderHere(); paneTop("hereMain"); }
@@ -3569,17 +3870,19 @@ async function loadHere() {
 }
 // ---- Overview: the Here section and the Nearby table shown together ----
 // Defaults: side by side, nearby on the left and this system on the right at 40%.
-const ovState = Object.assign({layout: "side", collapsed: false, flip: false, split: 40}, store.get("overview", {}));
+const ovState = Object.assign({layout: "side", flip: false, split: 40}, store.get("overview", {}));
+delete ovState.collapsed;   // the ▾ This system fold is gone (the author, 2026-10-14): the system pane always shows
 const ovHome = {here: null, near: null};   // where the sections live when not in the overview
 function placeOverview() {
   const ov = document.getElementById("overView"), here = document.getElementById("hereView"), near = document.getElementById("nearWrap");
   const paneHere = document.getElementById("ovHere"), paneNear = document.getElementById("ovNear");
   if (!ovHome.here) { ovHome.here = here.nextSibling; ovHome.near = near.nextSibling; }
-  // the Standard / Boxel switch: on the Overview's own bar, left of "This system" (the author, 2026-10-11); in
-  // Nearby's options on the Nearby tab
-  const mode = document.querySelector(".nearmode"), bar = document.querySelector("#overView .ovbar"), opts = document.getElementById("nearOpts");
+  // the Standard / Boxel switch with Around beside it: on the Overview's own bar (the author, 2026-10-11 and
+  // 2026-10-14); on Nearby's top bar on the Nearby tab
+  const mode = document.querySelector(".nearhead"), bar = document.querySelector("#overView .ovbar"), head = document.getElementById("nearHead");
   if (view === "overview") { if (mode.parentNode !== bar) bar.insertBefore(mode, bar.firstChild); }
-  else if (mode.parentNode !== opts) opts.insertBefore(mode, opts.firstChild);
+  else if (mode.parentNode !== head) head.appendChild(mode);
+  head.hidden = view === "overview";
   if (view === "overview") {
     if (here.parentNode !== paneHere) paneHere.appendChild(here);
     if (near.parentNode !== paneNear) paneNear.appendChild(near);
@@ -3588,16 +3891,14 @@ function placeOverview() {
     if (here.parentNode === paneHere) main.insertBefore(here, ovHome.here);
     if (near.parentNode === paneNear) main.insertBefore(near, ovHome.near);
   }
-  ov.className = `${ovState.layout}${ovState.collapsed ? " collapsed" : ""}${ovState.flip ? " flip" : ""}`;
+  ov.className = `${ovState.layout}${ovState.flip ? " flip" : ""}`;
   ov.style.setProperty("--ovw", ovState.split + "%");
   paneHere.classList.toggle("compact", ovState.layout === "side");
   paneHere.classList.toggle("hasDetail", !!selectedBody);
   here.classList.toggle("detail", !!selectedBody);
-  document.getElementById("ovCollapse").textContent = (ovState.collapsed ? "▸ " : "▾ ") + "This system";
   const r = document.querySelector(`input[name=ovLayout][value="${ovState.layout}"]`); if (r) r.checked = true;
 }
 const saveOv = () => store.set("overview", ovState);
-document.getElementById("ovCollapse").onclick = () => keepPanes(() => { ovState.collapsed = !ovState.collapsed; saveOv(); render(); });
 document.getElementById("ovFlip").onclick = () => keepPanes(() => { ovState.flip = !ovState.flip; saveOv(); render(); });
 document.querySelectorAll("input[name=ovLayout]").forEach(r => r.onchange = () => keepPanes(() => { ovState.layout = r.value; saveOv(); render(); }));
 // Drag the divider: the system pane's share of the width, 20-70 %.
@@ -4699,17 +5000,45 @@ const saveNearest = () => store.set("nearest", {stations: NR.stations, carriers:
 const AROUND_KINDS = [["here", "you"], ["destination", "your destination"], ["carrier", "your carrier"], ["next_stop", "your next stop"],
                       ["system", "a system…"]];
 // an Around select's options, named from the payload; your carrier and the next stop greyed out while there is none
-function aroundOptions(sel) {
+// `kinds`: the select's own list (Nearby's adds "lock this system"), `extra`: names for its other options
+function aroundOptions(sel, kinds = AROUND_KINDS, extra = {}) {
   if (!sel) return;
   const p = data && data.position, cr = data && data.carrier, ns = data && data.next_stop;
-  const named = {here: p && p.name, carrier: cr && cr.system, next_stop: ns && ns.name}, none = {carrier: !cr, next_stop: !ns};
-  if (!sel.options.length) sel.innerHTML = AROUND_KINDS.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+  const named = Object.assign({here: p && p.name, carrier: cr && cr.system, next_stop: ns && ns.name}, extra), none = {carrier: !cr, next_stop: !ns};
+  if (!sel.options.length) sel.innerHTML = kinds.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
   for (const o of sel.options) {
-    const base = (AROUND_KINDS.find(([v]) => v === o.value) || [])[1], t = named[o.value] ? `${base} (${named[o.value]})` : base;
+    const base = (kinds.find(([v]) => v === o.value) || [])[1], t = named[o.value] ? `${base} (${named[o.value]})` : base;
     if (o.textContent !== t) o.textContent = t;
     o.disabled = !!none[o.value] && sel.value !== o.value;
   }
 }
+// ---- #5 (Kurbo26, GitHub discussion #3): 📋 beside each system or station name field (Plot Route's From, To and
+// Station, Search's Find a system by name, the "a system…" boxes of Nearby's Focus/Lock, Search's and the Nearest
+// finder's Around) fills it from the
+// GAME PC's clipboard, read by the server: a browser window that never takes focus cannot read its own. For this PC's
+// browser and the Android app only (the author, 2026-10-14): GET api/clipboard says whether this device can
+// (body.canpaste). Filled as typing would be (input, then change): the "a system…" boxes act on it, Plot Route only
+// fills (no plot by itself) ----
+async function checkPaste() {
+  let r;
+  try { r = await apiJson("api/clipboard"); } catch { r = null; }
+  document.body.classList.toggle("canpaste", !!(r && r.can));
+}
+async function pasteInto(field) {
+  let r;
+  try { r = await apiJson("api/clipboard/paste", {method: "POST"}); } catch (err) { r = {error: err.message}; }
+  if (!r || r.error || !r.text) return toast((r && r.error) || "nothing to paste");
+  field.value = r.text;
+  field.dispatchEvent(new Event("input", {bubbles: true}));
+  field.dispatchEvent(new Event("change", {bubbles: true}));
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest(".pastebtn");
+  if (!b || !b.previousElementSibling) return;
+  e.preventDefault();
+  pasteInto(b.previousElementSibling);
+});
+checkPaste();
 // what a request sends as `around`: the kind, or for a typed name its id64 from GET api/find; {error} when there is none
 async function aroundParam(kind, name) {
   if (kind !== "system") return {around: AROUND_KINDS.some(([v]) => v === kind) ? kind : "here"};
@@ -4757,7 +5086,7 @@ async function loadNearest() {
   renderNearest();
 }
 function nearRowHtml(r) {
-  const who = r.kind === "carrier" ? `<b>${esc(r.name || r.callsign)}</b>${r.name ? ` <span class="unk">${esc(r.callsign)}</span>` : ""}` : `<b>${esc(r.name)}</b>`;
+  const who = r.kind === "carrier" ? `${mk("fleet-carrier")}<b>${esc(r.name || r.callsign)}</b>${r.name ? ` <span class="unk">${esc(r.callsign)}</span>` : ""}` : `<b>${esc(r.name)}</b>`;
   const badge = r.dssa ? ` <span class="dssabadge" title="Deep Space Support Array carrier: stationed for explorers, open to all${r.until ? `, until ${esc(r.until)}` : ""}">🛰 DSSA</span>` : "";
   const kind = r.kind === "carrier" ? `Fleet carrier${r.own ? " · yours" : r.dssa && r.until ? ` · stationed until ${esc(r.until)}` : ""}` : esc(r.station_type || "Station");
   const sv = r.services || [], tk = TRADER_KINDS.find(k => sv.includes(k));
@@ -5976,6 +6305,9 @@ function diedHtml(x) {
   return ` <span class="lost" title="${esc(title)}">✗${x.died > 1 ? x.died : ""}</span>`;
 }
 const openSessions = new Set();
+// the CMDR tab's "History ›" (its career block): History's Career row brought into view at the next draw with data
+// ("career"), or its Trips (Earnings' per-trip line: "trips"); false: nothing to bring
+let histReveal = false;
 function renderHistory() {
   renderLastSession();
   const h = histData, st = document.getElementById("hStatus");
@@ -6004,6 +6336,10 @@ function renderHistory() {
         <td class="num hide-sm">${(e.First_Footfalls || 0).toLocaleString()}</td><td class="num" title="organic species encountered">${(o.Organic_Species_Encountered || 0).toLocaleString()}</td>` +
         soldCell((e.Exploration_Profits || 0) + (o.Organic_Data_Profits || 0), "exploration profits and organic data profits, the game's statistics") +
         `<td class="num hide-sm c2hide"></td></tr>`); }
+  if (histReveal) {   // "career": its row; "trips": the Trips heading (the Ledger), from the CMDR tab's Earnings
+    const r = histReveal === "trips" ? document.getElementById("tripTable").previousElementSibling : document.querySelector("#histAll tr.career");
+    histReveal = false; if (r) revealIn(r, "start");
+  }
   const fmtD = t => t ? t.slice(0, 10) : "start";
   // compact: "✗ 09-01 −12.3M" (the split between carto and bio stays in the full form and the title)
   const lossHtml = ls => ls.map(l => {
@@ -6057,7 +6393,7 @@ function renderHistory() {
       <td class="num">${s.firsts}</td><td class="num hide-sm c2hide">${s.bodies_first}</td><td class="num">${s.mapped}</td>
       <td class="num hide-sm">${s.footfalls}</td><td class="num">${s.samples}</td>${soldCell(s.sold)}<td class="num hide-sm c2hide">${s.codex_new}</td></tr>` +
       (open ? `<tr><td colspan="11" class="systems">${s.systems.map(x => `<span><span class="name" data-name="${esc(x.name)}" title="click to copy">${esc(x.name)}</span>` +
-        `${x.kind === "CarrierJump" ? " 🚢" : x.kind === "Location" ? " ⟳" : ""} <span class="unk">${x.ts.slice(11, 16)}</span></span>`).join("")}</td></tr>` : "");
+        `${x.kind === "CarrierJump" ? " " + mk("fleet-carrier", {gap: false, label: "a carrier jump"}) : x.kind === "Location" ? " ⟳" : ""} <span class="unk">${x.ts.slice(11, 16)}</span></span>`).join("")}</td></tr>` : "");
   }).join("") || `<tr><td colspan="11" class="unk">No jumps in this period.</td></tr>`;
 }
 document.getElementById("histRows").addEventListener("click", e => {
@@ -6405,7 +6741,7 @@ function mapPopHtml(pt, touch = false) {
     (pt.onroute ? `<div class="unk">${esc(pt.onroute)}</div>` : "") +
     (b ? `<div class="sec">★ ${esc(b.note) || "bookmarked"}</div>` : "") +
     (!touch ? `<div class="sec unk">${mapClickWords(pt)}</div>` : `<div class="sec mapacts">` +
-      (mapAimable(pt) && canAim() ? `<button type="button" class="mini" data-aim="next" data-route="system" data-aimid="${esc(String(pt.id))}">🎯 Target</button> ` : "") +
+      (mapAimable(pt) && canAim() ? `<button type="button" class="mini" data-aim="next" data-route="system" data-aimid="${esc(String(pt.id))}">${mk("destination")}Target</button> ` : "") +
       `<button type="button" class="mini" data-mapcopy="${esc(pt.name)}">Copy name</button></div>`);
 }
 // S72: a mouse click on a system: target it (canAim) or copy its name; a run under way is said, not doubled
@@ -6523,7 +6859,7 @@ function hwyLineHtml(s, {short = false, glyph = true} = {}) {
                  (short ? hwyAimBtn(s.nearest.name) : "") : "");
   const n = s.next;
   if (!n) return `${g}To ${hwyName(s.destination)}`;
-  const bits = [`${s.index === 0 && s.at == null ? "Start" : "Next"}: ${hwyName(n.name)}${short ? hwyAimBtn(n.name) : ""}`];
+  const bits = [`${mk("waypoint")}${s.index === 0 && s.at == null ? "Start" : "Next"}: ${hwyName(n.name)}${short ? hwyAimBtn(n.name) : ""}`];
   if (s.target_check) bits.push(targetCheckHtml(s.target_check));   // S11
   if (n.neutron) bits.push(`<span class="hwyn" title="a neutron star: supercharge your FSD there">⚡ neutron</span>`);
   if (n.jumps > 1) bits.push(`${n.jumps} jumps`);
@@ -6583,8 +6919,10 @@ const canAim = () => !!(data && data.game_pc !== false && data.autotarget && dat
 function hwyAimBtn(name, route = null, index = null, icon = false) {
   if (!canAim()) return "";
   const key = route ? `${route}:${index ?? ""}` : "next", r = hwyRun, mine = r && r.kind === "next" && !r.done && (r.key || "next") === key;
-  const label = !mine ? (icon ? "🎯" : "🎯 target") : r.n > 0 ? `🎯 in ${r.n} s` : "🎯 targeting…";
-  return ` <button type="button" class="mini hwyaim${icon ? " icon" : ""}" data-aim="next"` +
+  // the game's destination marker (#13) where 🎯 was; an icon alone is named by its aria-label
+  const bare = icon && !mine, aim = mk("destination", {gap: !bare});
+  const label = !mine ? (icon ? aim : `${aim}target`) : r.n > 0 ? `${aim}in ${r.n} s` : `${aim}targeting…`;
+  return ` <button type="button" class="mini hwyaim${icon ? " icon" : ""}" data-aim="next"${bare ? ` aria-label="target ${esc(name)}"` : ""}` +
     (route ? ` data-route="${route}"${index != null ? ` data-${route === "system" ? "aimid" : "index"}="${esc(String(index))}"` : ""}` : "") + `${mine ? " disabled" : ""}` +
     ` title="target ${esc(name)} in the galaxy map${hwyFront() ? " (Outrider brings the game to the front)" : TABLET ? ""
       : ", 5 s from now: click back into the game meanwhile"}">${label}</button>`;
@@ -6633,8 +6971,9 @@ function hwyFront() {
 // the strip under the header: only on Overview, Nearby and Here, only with a route
 function renderHwyLine() {
   const el = hEl("hwyLine"), hw = data && data.highway, sv = data && data.survey, kind = lineKind(hw, sv);
-  const line = !["overview", "near", "here"].includes(view) ? "" : kind === "rich" ? surveyLineHtml(sv, {short: true})
-    : hw ? hwyLineHtml(hw, {short: true}) : "";
+  // on every view, as the target and arrival lines are: the header is the header (the author, 2026-10-15; it used to
+  // show on Overview, Nearby and Here only)
+  const line = kind === "rich" ? surveyLineHtml(sv, {short: true}) : hw ? hwyLineHtml(hw, {short: true}) : "";
   // S2's bit rides on the In-Game Route strip when there is one, else here
   const html = line && dryStretchHere() && !(data.route && data.route.hops && data.route.hops.length) ? `${line} · ${dryStretchHtml()}` : line;
   if (el.innerHTML !== html) el.innerHTML = html;
@@ -6678,7 +7017,7 @@ function surveyLineHtml(s, {short = false, glyph = true} = {}) {
   if (s.off_route) return `${g}<span class="hwyoff">Off Route: Detour</span>${short ? "" : ` · ${k.name}`}`;
   const n = s.next;
   if (!n) return `${g}${k.name} to ${hwyName(s.destination)}${left}`;
-  const bits = [`${s.index === 0 && s.at == null ? "Start" : "Next"}: ${n.station ? `${esc(n.station)}, ` : ""}${hwyName(n.name)}${short ? hwyAimBtn(n.name, "survey", s.index) : ""}`];
+  const bits = [`${mk("waypoint")}${s.index === 0 && s.at == null ? "Start" : "Next"}: ${n.station ? `${esc(n.station)}, ` : ""}${hwyName(n.name)}${short ? hwyAimBtn(n.name, "survey", s.index) : ""}`];
   if (s.target_check) bits.push(targetCheckHtml(s.target_check));   // S11
   if (n.jumps > 1) bits.push(`${n.jumps} jumps`);
   if (n.distance != null) bits.push(`${Number(n.distance).toFixed(1)} ly`);
@@ -6707,6 +7046,11 @@ async function loadHwy(force = false) {
   if (d.error) { H.error = d.error; H.key = null; }
   else { H.error = null; H.data = d; }
   if (d.plotting && d.plotting.state === "running" && !H.poll) hwyPoll();
+  if (CP.to && d.plotting && d.plotting.state !== "running") {   // the carrier's 🛣 plot has ended
+    if (d.plotting.state === "failed") toast(`No route to ${CP.to}: ${d.plotting.error || "the plot failed"}`);
+    CP.to = null;
+    renderCarrier();
+  }
   renderHwy();
   if (!d.error && view === "hwy" && hwyKey() !== H.key) loadHwy();   // the route moved while this was asked: again
 }
@@ -8412,8 +8756,9 @@ const hullBand = h => !h || h.pct == null ? 0 : h.pct < 25 ? 2 : h.pct < 50 ? 1 
 // so the absence of a known one is not a reason to panic, and the text says so
 function scoopHint() {
   const p = data.position, jr = effRange(), sr = data.fuel && data.fuel.scoop_rate;
-  const s = (data.systems || []).filter(x => sysId(x) !== sysId(p) && x.main_scoopable).sort((a, b) => a.distance - b.distance)[0];
-  return s ? `nearest known scoopable: ${s.name} · ${s.distance.toFixed(1)} ly${jr && s.distance > jr ? " (beyond one jump)" : ""}`
+  const s = (data.systems || []).filter(x => sysId(x) !== sysId(p) && x.main_scoopable && lyFromYou(x) != null)
+    .sort((a, b) => lyFromYou(a) - lyFromYou(b))[0], d = s && lyFromYou(s);   // from you, wherever Nearby is around
+  return s ? `nearest known scoopable: ${s.name} · ${d.toFixed(1)} ly${jr && d > jr ? " (beyond one jump)" : ""}`
            : `no known scoopable star nearby (${sr ? scoopRateText(sr) : "most unreported stars are scoopable"}: check the galaxy map)`;
 }
 // Jumps of fuel left: at your pace (the fuel model's, else your recent burn), else at max range.
@@ -8851,6 +9196,14 @@ function onData() {
       else if (m.kind === "wrong_target" && m.system && m.next)   // S11: the game targets another system than the next stop
         alertOut("wrongtarget", `Targeted ${m.system}, not the next stop`, `the next stop is ${m.next}`, {tag: "wrong_target",
                  say: () => line("wrong_target", {system: m.system, next: m.next}, `You've targeted ${m.system}. The next stop is ${m.next}.`)});
+      else if (m.kind === "docking" && m.what === "granted" && m.pad != null)   // #3: the pad, said every time (the author);
+        // #12: then where it is, a plain sentence after the personality's line (the green lights now and then: the server's)
+        alertOut("docking", `🛬 Pad ${m.pad}`, [m.station, m.where].filter(Boolean).join(" · "), {tag: "docking",
+                 say: () => line("docking_granted", {pad: m.pad, station: m.station || "the station"}, `Pad ${m.pad}.`) +
+                   (m.say_where ? " " + m.say_where : "")});
+      else if (m.kind === "docking" && m.what === "denied" && m.words)   // #3: only the reasons that are not obvious
+        alertOut("docking", "🛬 Docking denied", `${m.station ? m.station + ": " : ""}${m.words}`, {tag: "docking",
+                 say: () => line("docking_denied", {reason: m.words, station: m.station || "the station"}, `Docking denied: ${m.words}.`)});
       else if (m.kind === "highway" && m.text)   // the Neutron Highway's arrival line, detour, back on it, complete: plain words for now
         alertOut("highway", m.text.replace(/\.$/, ""), "", {tag: "highway", say: m.text});
       else if (m.kind === "autotarget" && m.what === "nothing")   // the co-pilot button's press with no route system to target
@@ -9017,7 +9370,7 @@ const speechLogFacts = e => [e.kind + (e.tag ? "/" + e.tag : ""), e.crew, e.styl
 // the tally's short names (the alerts table has only the long descriptions)
 const ALERT_SHORT = {arrival: "Arrival", game: "Game start and quit", jump: "FSD charge", honk: "Honk", brief: "Arrival brief", fss: "FSS",
   leaving: "Leaving", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped", supercharge: "Supercharge", find: "Find",
-  jumponium: "Jumponium", sampling: "Sampling", approach: "High-g approach", bodybrief: "Body brief", sell: "Selling", saleleft: "Sale left data",
+  jumponium: "Jumponium", sampling: "Sampling", approach: "High-g approach", bodybrief: "Body brief", docking: "Docking", sell: "Selling", saleleft: "Sale left data",
   unsold: "Unsold", firstsseen: "Firsts scanned by others", hull: "Hull and danger", carrier: "Carrier", codex: "Codex", phenomena: "Stellar phenomena", ggg: "Green gas giant?", rare_star: "Rare star", surface_site: "Surface sites", signal_poi: "Signals worth a detour", curious: "Curiosities", loss: "Ship lost", rigs: "Rigs", rigleash: "Rig leash",
   rigsout: "Rigs out", mapped: "Mapped", signals: "Signals", highway: "Neutron Highway", refuelshort: "Short of the refuel stop", lastscoop: "Last scoopable star", autotarget: "Auto-target", wrongtarget: "Wrong target", manual: "Asked for",
   exo: "Exomastery route", riches: "Survey routes", trade: "Trade route", uploads: "Uploads failing"};
@@ -9148,6 +9501,35 @@ const askLogText = () => ((AL.data && AL.data.questions) || []).map(q => `${hms(
   `${askLogFacts(q).length ? `  [${askLogFacts(q).join(", ")}]` : ""}\n    ${htmlText(askMatchText(q))}` + (q.answer ? `\n    answer: ${q.answer}` : "")).join("\n");
 document.getElementById("askLogBox").addEventListener("toggle", () => { drawAskLog(); loadAskLog(); });
 document.getElementById("askLogCopy").onclick = () => copyText(askLogText() || "(nothing asked yet)", `${((AL.data && AL.data.questions) || []).length} questions`);
+// ---- Voice commands: the questions the voice answers without the AI (GET api/ask/commands, from resources/ask.json as
+// the server read it at start: what each does, the phrases that ask it, the words that narrow it), in Settings → Voice's
+// fold and the tablet's Voice commands… sheet. Fetched once, when either first opens (or the Settings filter starts).
+const VC = {data: null, loading: null};
+function loadVoiceCmds() {
+  if (VC.data && !VC.data.error) return Promise.resolve(VC.data);
+  if (!VC.loading) VC.loading = apiJson("api/ask/commands").catch(e => ({error: e.message}))
+    .then(d => { VC.data = d; VC.loading = null; return d; });
+  return VC.loading;
+}
+const VC_AI = {on: "Anything else goes to the AI layer.", unset: "The AI layer is switched on but not set up, so anything else is answered with what the voice knows.",
+  off: "Anything else is answered with what the voice knows (the AI layer is off)."};
+function voiceCmdsHtml(d) {
+  if (!d) return `<div class="unk">loading…</div>`;
+  if (d.error) return `<div class="unk">Could not load the voice commands: ${esc(d.error)}</div>`;
+  const q = p => `“${esc(p)}”`;
+  return `<p class="vcnote">Ask through the Android app (its wake word, or Ask on the tablet). A question is the first command with one of ` +
+    `its phrases as whole words in it, case and punctuation ignored; a word more narrows some. ${esc(VC_AI[d.ai] || "")}</p>` +
+    d.groups.map(g => `<h4 class="vcgroup">${esc(g.name)}</h4>` + g.commands.map(c =>
+      `<div class="vcrow" data-vc="${esc(c.command)}"><b class="vctitle">${esc(c.title)}</b>${c.description ? ` <span class="vcdesc">${esc(c.description)}</span>` : ""}` +
+      `<div class="vcphr">${c.phrases.map(q).join(" · ")}</div>` +
+      (c.narrowing.length ? `<ul class="vcnarrow">${c.narrowing.map(n => `<li>${n.words.map(q).join(", ")} → ${esc(n.means)}</li>`).join("")}</ul>` : "") +
+      `</div>`).join("")).join("");
+}
+async function drawVoiceCmds(el) {
+  if (!VC.data || VC.data.error) el.innerHTML = voiceCmdsHtml(null);
+  el.innerHTML = voiceCmdsHtml(await loadVoiceCmds());
+}
+document.getElementById("voiceCmds").addEventListener("toggle", e => { if (e.target.open) drawVoiceCmds(document.getElementById("voiceCmdList")); });
 // ---- alert settings ----
 const alertDialog = document.getElementById("alertDialog");
 // a heading over a group of alerts in the list, before its first one: the discoveries together, each still its own row
@@ -9403,6 +9785,7 @@ function drawTts() {
   document.getElementById("soundFiles").textContent = !sf ? "" : (own.length ? `Your own sounds: ${own.join(", ")}.` : "No sound files of your own found.")
     + ((sf.problems || []).length ? ` Not used: ${sf.problems.join("; ")}.` : "");
   drawServerPlay();
+  drawPadDelay();
   drawStyleVoices();
   if (crewUi) { drawCrew(); drawVoiceMemory(); }
   drawSpeechBtn();
@@ -9573,6 +9956,23 @@ async function vmPost(key, value) {
   drawVoiceMemory();
   return r;
 }
+// how long after a docking grant the pad is said ([speech] pad_delay: the server holds the line; Kurbo26, 2026-10-15)
+function drawPadDelay() {
+  const el = document.getElementById("padDelay");
+  if (el && data && data.pad_delay != null && document.activeElement !== el) el.value = data.pad_delay;
+}
+document.getElementById("padDelay").onchange = async e => {
+  const v = Number(e.target.value), m = document.getElementById("padDelayMsg");
+  if (e.target.value === "" || !Number.isInteger(v) || v < 0 || v > 20) { m.textContent = "a whole number of seconds, 0 to 20"; m.className = "hint warnc"; return; }
+  let r;
+  try { r = await apiJson("api/config", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({speech: {pad_delay: v}})}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  r = r || {error: "?"};
+  if (!r.error && data) data.pad_delay = v;
+  m.textContent = r.error ? `Not saved: ${r.error}` : "Saved in the config file ([speech] pad_delay)";
+  m.className = r.error ? "hint warnc" : "hint";
+  e.target.blur();
+};
 document.getElementById("vmKeep").onchange = e => { if (e.target.value) vmPost("voices_loaded", e.target.value); else drawVmKeep(); };
 document.getElementById("vmPreload").onchange = e => vmPost("voices_preload", e.target.checked);
 
@@ -9587,7 +9987,7 @@ const ROW_WORDS = {discovery: "target verdicts", arrival: "arrivals", game: "sta
   scoop: "tank full", scoopstop: "scooping stopped", supercharge: "supercharges", exo: "Exomastery routes", riches: "survey routes",
   trade: "trade routes", highway: "the Highway", refuelshort: "fuel short of a refuel", lastscoop: "last scoop", autotarget: "auto-target",
   wrongtarget: "wrong target", find: "valuable bodies", jumponium: "jumponium", sampling: "sampling", approach: "high-g approaches",
-  bodybrief: "bio bodies ahead", sell: "sales", saleleft: "data left after a sale", unsold: "unsold data", firstsseen: "someone scanning your firsts",
+  bodybrief: "bio bodies ahead", docking: "docking pads", sell: "sales", saleleft: "data left after a sale", unsold: "unsold data", firstsseen: "someone scanning your firsts",
   hull: "hull, heat, interdiction", carrier: "your carrier", codex: "codex", phenomena: "phenomena", ggg: "green gas giants",
   rare_star: "rare stars", surface_site: "surface sites", signal_poi: "signals", curious: "curiosities", loss: "losses",
   rigs: "rigs", rigleash: "the rig leash", rigsout: "rigs out", uploads: "uploads"};
@@ -9598,7 +9998,7 @@ const ROW_KEYS = {arrival: ["arrival_undiscovered", "arrival_discovered", "regio
   scoop: ["tank_full"], scoopstop: ["scoop_stopped"], supercharge: ["supercharged"], refuelshort: ["fuel_short"], lastscoop: ["fuel_last_scoop"],
   autotarget: ["autotarget_nothing"], wrongtarget: ["wrong_target"], find: ["find_body", "find_bio", "mapped_before", "sample_clear"],
   jumponium: ["jumponium"], sampling: ["bio_done_last", "bio_done_more", "bio_tag_near", "left_body"], approach: ["high_g"],
-  bodybrief: ["body_brief"], sell: ["docked_sell", "sold", "undocked_unsold"], saleleft: ["sale_left"], unsold: ["unsold_warn", "unsold_urgent"],
+  bodybrief: ["body_brief"], docking: ["docking_granted", "docking_denied"], sell: ["docked_sell", "sold", "undocked_unsold"], saleleft: ["sale_left"], unsold: ["unsold_warn", "unsold_urgent"],
   firstsseen: ["firsts_seen"], hull: ["hull", "heat", "interdicted"], carrier: ["carrier_arrived", "carrier_departs"], codex: ["codex"],
   phenomena: ["phenomena"], ggg: ["ggg"], rare_star: ["rare_star"], surface_site: ["surface_site"], signal_poi: ["signal_poi"],
   curious: ["curious"], loss: ["ship_lost"], rigleash: ["rig_leash"]};
@@ -10119,12 +10519,8 @@ labEl("labSave").onclick = async () => {
   if (!labEl("labText").value.trim()) { labMsg("Type something first", true); return; }
   const p = labPick(), blob = await labFetch(labOwnText(), p);
   if (!blob) return;
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `outrider-${p.voice || "voice"}${p.speaker != null ? `-${p.speaker}` : ""}.wav`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  labMsg(`Saved as ${a.download}`);
+  const name = `outrider-${p.voice || "voice"}${p.speaker != null ? `-${p.speaker}` : ""}.wav`;
+  if (saveBlob(blob, name)) labMsg(`Saved as ${name}`);
 };
 // ---- How is it said (a review suggestion the author picked, 2026-10-12): the pronunciation table, word by word ----
 // api/pronounce: the shipped words with yours on top; a respelling ("fon-TIK-yoo-loo-uh") is tried as "{...}" in a line
@@ -10284,6 +10680,537 @@ function starWords(cls, lum) {
   }
   return LUMINOSITY_WORDS[l] || LUMINOSITY_WORDS[l.replace(/[ab]+$/, "")] || "";   // "Vab", "IIIb": their class
 }
+// ---- The Commander view (GET /api/commander/<tab>, outrider/commander.py): who you are in the game (CMDR), what you own (Inventory),
+// what engineering takes against your materials (Engineering), the missions you hold (Missions) and how your combat
+// and mining sessions went (Sessions) and what exploration, exobiology and mining paid you (Earnings: outrider/earnings.py,
+// for this device's period), as Outrider keeps them from the journals (outrider/commander.py's folds, in the
+// database). A tab is asked for when opened, and again when the payload's commander_version has moved since (a line
+// the view reads was handled; Engineering also on the materials' version, Earnings on history_version (a jump, a sale,
+// a death) and its period),
+// as loadMat keys on its own; Refresh reads it again now. Credits and the carrier are the payload's (the Commander and
+// Carrier tiles' own figures), drawn at every render ----
+// CM: tab (the one shown), data / error / key (the versions it was read at) / loading per tab, q and craft
+// (Engineering's filter), open (its modules unfolded), period (Earnings': {year, month}, "" for none), chartW (the
+// box's width at the last draw: how many of the chart's months get a label)
+const CM = {tab: "profile", data: {}, error: {}, key: {}, loading: {}, q: "", craft: false, open: {}, period: {year: "", month: ""}, chartW: 0};
+const CM_TABS = ["profile", "inventory", "engineering", "missions", "sessions", "earnings"];
+const CM_SOON_S = 1800;   // a mission expiring within this is marked (outrider.commander.MISSION_SOON_S)
+const cmKey = tab => `${data && data.commander_version}` + (tab === "engineering" ? `|${data && data.materials && data.materials.version}` : "") +
+  (tab === "earnings" ? `|${data && data.history_version}|${emPeriodKey(CM.period)}` : "");
+// Earnings' period, this device's (store cmEarnPeriod: "" all time, "2026" a year, "2026-03" a month; per device like
+// cmdrTab, in neither settings list): the stored text read back (anything else is all time), the text, the query
+const emPeriodFrom = v => { const m = /^(\d{4})(?:-(0[1-9]|1[0-2]))?$/.exec(typeof v === "string" ? v : "");
+  return m ? {year: m[1], month: m[2] ? String(+m[2]) : ""} : {year: "", month: ""}; };
+const emPeriodKey = p => p.year ? p.year + (p.month ? "-" + String(p.month).padStart(2, "0") : "") : "";
+const emQuery = p => p.year ? `?year=${p.year}${p.month ? `&month=${p.month}` : ""}` : "";
+// a new period: kept for this device and asked for (newRequest in loadCmdr: an older period's late answer is dropped)
+function setEarnPeriod(year, month = "") {
+  CM.period = {year: year || "", month: year && month ? String(month) : ""};
+  store.set("cmEarnPeriod", emPeriodKey(CM.period));
+  if (view === "cmdr" && CM.tab === "earnings") loadCmdr(); else renderCmdr();
+}
+
+async function loadCmdr(force = false) {
+  const tab = CM.tab, key = cmKey(tab);
+  if (!force && CM.key[tab] === key) return renderCmdr();
+  CM.key[tab] = key;
+  const g = newRequest("cmdr:" + tab);   // a Refresh during a read: only the newest answer is kept
+  CM.loading[tab] = true;
+  renderCmdr();
+  let d;
+  try { d = await apiJson("api/commander/" + tab + (tab === "earnings" ? emQuery(CM.period) : "")); } catch (err) { d = {error: err.message}; }
+  if (!isNewest("cmdr:" + tab, g)) return;
+  CM.loading[tab] = false;
+  if (!d || d.error) { CM.error[tab] = (d && d.error) || "no answer"; CM.key[tab] = null; }   // asked again at the next render
+  else { CM.error[tab] = null; CM.data[tab] = d; }
+  if (view === "cmdr" && CM.tab === tab) renderCmdr();
+}
+function setCmdrTab(t) {
+  CM.tab = CM_TABS.includes(t) ? t : "profile";
+  store.set("cmdrTab", CM.tab);
+  if (view === "cmdr") loadCmdr();
+}
+// the controls sit above the pane, in the page from the start: wired once
+CM.tab = CM_TABS.includes(store.get("cmdrTab", "profile")) ? store.get("cmdrTab", "profile") : "profile";
+CM.period = emPeriodFrom(store.get("cmEarnPeriod", ""));
+document.querySelectorAll("[name=cmdrTab]").forEach(x => x.addEventListener("change", () => setCmdrTab(x.value)));
+document.getElementById("cmEarnYear").addEventListener("change", e => setEarnPeriod(e.target.value));
+document.getElementById("cmEarnMonth").addEventListener("change", e => setEarnPeriod(CM.period.year, e.target.value));
+// the chart's month labels are thinned to the box's width: drawn again when it changes (nothing is written when the
+// labels stay the same)
+if (typeof ResizeObserver === "function") new ResizeObserver(() => {
+  if (view === "cmdr" && CM.tab === "earnings") (window.requestAnimationFrame || setTimeout)(() => { if (view === "cmdr" && CM.tab === "earnings") cmdrDrawBody(); });
+}).observe(document.getElementById("cmdrBody"));
+document.getElementById("cmRefresh").addEventListener("click", () => loadCmdr(true));
+document.getElementById("cmFilter").addEventListener("input", e => { CM.q = e.target.value; cmdrDrawBody(); });
+document.getElementById("cmCraft").addEventListener("change", e => { CM.craft = e.target.checked; cmdrDrawBody(); });
+document.getElementById("cmdrBody").addEventListener("toggle", e => { const k = e.target.dataset && e.target.dataset.cmmod; if (k) CM.open[k] = e.target.open; }, true);
+// links out of the tab (should 5: the tiles stay informational, the links go from here): the career to History's
+// Career row, Earnings' per-trip line to History's Trips (the Ledger); a material Engineering is short of to the
+// Materials tab (filtered to it) and its ⇄ to the nearest trader. In the tab: a month's bar in Earnings' chart picks that month
+function cmdrGo(el) {
+  const t = el.closest("[data-trader]"), m = el.closest("[data-cmmat]"), h = el.closest("[data-cmgo]"), e = el.closest("[data-emmonth]");
+  if (t) openNearest({need: [t.dataset.trader]});
+  else if (m) {   // the grid redrawn here: a Materials tab drawn already is not fetched again on the switch
+    mFilter.value = m.dataset.cmmat; mHeld.checked = false; store.set("mHeld", false);
+    const b = document.querySelector('[data-view="mat"]'); if (b) b.click();
+    if (matData && !matData.error) renderMat();
+  }
+  else if (h) { histReveal = h.dataset.cmgo === "trips" ? "trips" : "career"; const b = document.querySelector('[data-view="hist"]'); if (b) b.click(); }
+  else if (e) { const [y, mo] = e.dataset.emmonth.split("-"); setEarnPeriod(y, String(+mo)); }
+  return !!(t || m || h || e);
+}
+document.getElementById("cmdrBody").addEventListener("click", e => cmdrGo(e.target));
+document.getElementById("cmdrBody").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.dataset && e.target.dataset.cmmat != null && cmdrGo(e.target)) e.preventDefault(); });
+// Inventory's ship pictures (2026-10-15): a mouse resting SHIP_CARD_MS on a ship's row shows its type's picture in a
+// card beside the row (#shipCard: fixed, kept inside the window, never scrolling the page), gone when the pointer leaves
+// it; on the tablet (no hover) a tap on the ship's name opens or closes it and a tap anywhere else closes it; Escape
+// closes it. Only rows of a type with a picture (data-shipimg) take part. pointerenter / pointerleave do not bubble: the
+// listeners catch them on the way down (capture) and keep the row's own, not its cells'
+const shipCardKey = row => `${row.dataset.shipimg}|${(row.querySelector(".cmshipname") || {}).textContent || ""}`;
+function shipCardHide() {
+  clearTimeout(SC.timer); SC.timer = null; SC.key = null;
+  const card = document.getElementById("shipCard");
+  if (!card.hidden) { card.hidden = true; card.innerHTML = ""; }
+}
+function shipCardShow(row) {
+  const src = shipPicture(row && row.dataset.shipimg), card = document.getElementById("shipCard");
+  if (!src || !row.isConnected || view !== "cmdr" || CM.tab !== "inventory") return shipCardHide();
+  const type = shipName(row.dataset.shipimg), name = (row.querySelector(".cmshipname") || {}).textContent || type;
+  card.innerHTML = `<img src="${esc(src)}" width="300" height="200" loading="lazy" decoding="async" alt="${esc(type)}">` +
+    `<div class="shipcardname"><b>${esc(name)}</b>${type !== name ? ` <span class="unk">${esc(type)}</span>` : ""}</div>`;
+  card.querySelector("img").addEventListener("error", shipCardHide);   // no picture after all: no empty card
+  card.hidden = false; SC.key = shipCardKey(row);
+  // below the row, from its name; above it when there is no room below; always inside the window
+  const r = row.getBoundingClientRect(), c = card.getBoundingClientRect(), gap = 6;
+  let top = r.bottom + gap;
+  if (top + c.height > innerHeight - 8) top = r.top - c.height - gap;
+  card.style.left = Math.max(8, Math.min(r.left + 12, innerWidth - c.width - 8)) + "px";
+  card.style.top = Math.max(8, Math.min(top, innerHeight - c.height - 8)) + "px";
+}
+document.getElementById("cmdrBody").addEventListener("pointerenter", e => {
+  const row = e.target;
+  if (e.pointerType === "touch" || !row.matches || !row.matches("tr[data-shipimg]")) return;   // a tap: the tablet's own
+  if (SC.key && SC.key === shipCardKey(row)) return;   // the same ship (its row drawn again under the pointer)
+  shipCardHide();
+  SC.timer = setTimeout(() => { SC.timer = null; shipCardShow(row); }, SHIP_CARD_MS);
+}, true);
+document.getElementById("cmdrBody").addEventListener("pointerleave", e => {
+  if (e.pointerType !== "touch" && e.target.matches && e.target.matches("tr[data-shipimg]")) shipCardHide();
+}, true);
+document.addEventListener("click", e => {
+  if (!TABLET) return;
+  const name = e.target.closest && e.target.closest("#cmdrBody tr[data-shipimg] .cmshipname");
+  if (name && SC.key !== shipCardKey(name.closest("tr"))) shipCardShow(name.closest("tr"));
+  else if (SC.key || SC.timer) shipCardHide();
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && (SC.key || SC.timer)) shipCardHide(); });
+// small pure helpers
+const cmNum = v => v == null ? "" : esc(Number(v).toLocaleString());
+const cmCr = v => v == null || v === 0 ? "" : `${esc(credits(v))} cr`;
+const cmCrS = v => v == null || v === 0 ? "" : dual(`${esc(credits(v))} cr`, esc(credits(v)));   // in a fitted table
+const cmWhen = ts => ts ? esc(String(ts).slice(0, 16).replace("T", " ")) : "";
+function cmSpan(s) {   // seconds as "2 d 3 h", "3 h 20 min", "12 min"
+  if (s == null) return "";
+  const m = Math.max(0, Math.round(s / 60)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
+  return d ? `${d} d ${h} h` : h ? `${h} h ${m % 60} min` : `${m} min`;
+}
+// both forms of a span in a fitted table: "2 h 0 min" / "2h00", "2 d 7 h" / "2d7h", "12 min" / "12m"
+function cmSpanDual(s) {
+  if (s == null) return "";
+  const m = Math.max(0, Math.round(s / 60)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
+  return dual(cmSpan(s), d ? `${d}d${h}h` : h ? `${h}h${String(m % 60).padStart(2, "0")}` : `${m}m`);
+}
+const cmWhenDual = ts => ts ? dual(cmWhen(ts), esc(shortForm("when", String(ts).slice(0, 16).replace("T", " ")))) : "";
+const cmAsOf = (ts, how) => ts ? `<span class="unk" title="${esc(how)}">as of ${cmWhen(ts)}</span>` : "";
+// head: [label, numeric, extra class (c1hide / c2hide)]; id: one of FIT_TABLES (its headings' SHORT_FORMS.head)
+const cmTable = (head, rows, id) => `<table class="cmtable"${id ? ` id="${id}"` : ""}><thead><tr>${head.map(([label, num, cls]) => {
+  const c = [num ? "num" : "", cls || ""].filter(Boolean).join(" "), short = id ? SHORT_FORMS.head[label] : null;
+  return `<th${c ? ` class="${c}"` : ""}>${short != null ? dual(label, esc(short)) : label}</th>`; }).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
+const cmCls = m => esc((m.size != null && m.size > 0 ? m.size : "") + (m.rating || ""));
+// a session's tons refined: the ship's, and the SRV's apart
+const cmRefined = (ship, srv) => (ship || !srv ? `<b>${cmNum(ship)} t</b>` : "") +
+  (srv ? `${ship ? " + " : ""}<span class="unk" title="refined by the SRV (surface mining), apart from the ship's">${cmNum(srv)} t SRV</span>` : "");
+// the game marks a ship (or a module) hot: wanted. The same red ⚖ beside the ship you fly, a stored ship or module
+const cmHot = (x, what = "ship") => x && x.hot ? ` <span class="cmhot" title="hot: this ${what} is wanted">⚖&#xFE0E;</span>` : "";
+// a ship's build opened in EDSY or Coriolis (the server's links: outrider/shipyard_links.py, from its latest Loadout);
+// a ship never boarded since the journals begin has none. A new tab (the Android app opens it in the browser)
+const cmBuild = x => x.links && x.links.edsy && x.links.coriolis
+  ? ` <span class="cmlinks"><a href="${esc(x.links.edsy)}" target="_blank" rel="noopener" title="this ship's build in EDSY, the ship designer: from its latest Loadout">EDSY ↗</a>` +
+    ` <a href="${esc(x.links.coriolis)}" target="_blank" rel="noopener" title="this ship's build in Coriolis, the ship designer: from its latest Loadout">Coriolis ↗</a></span>`
+  : ` <span class="cmlinks unk" title="no build on record for this ship yet: board it once to record its build">no build</span>`;
+const cmTile = (k, v, title = "") => v == null || v === "" ? "" : `<span class="cmfig"${title ? ` title="${esc(title)}"` : ""}><span class="unk">${k}</span><b>${v}</b></span>`;
+
+// your fleet carrier as the Carrier tile has it (State.carrier_summary): its balance and weeks of upkeep, or its
+// decommissioning in red. Pure.
+function cmdrCarrierHtml(c) {
+  if (!c) return "";
+  const dc = c.decommission, fi = c.finance, w = fi ? fi.weeks : null;
+  const money = dc ? ` · <span class="short" title="its decommissioning was requested ${esc(shortDay(dc.ts || ""))}">${dc.done ? "Decommissioned" : "Decommissioning"} ${esc(shortDay(dc.scrap_ts || dc.ts || ""))}</span>`
+    : fi ? ` · <span class="${fi.warn ? "warnc" : ""}">balance <b>${esc(crSign(fi.balance))}</b>` +
+      (w != null ? ` · ~<b>${esc(w < 10 ? w.toFixed(1) : Math.floor(w).toLocaleString())}</b> wks upkeep` : "") + `</span>` : "";
+  return `<div class="cmrep"><span class="unk">Fleet carrier:</span> <b>${esc(c.name || "")}</b> ${esc(c.callsign || "")}${money}` +
+    `${c.fuel != null ? ` · ${cmNum(c.fuel)} t tritium` : ""} <span class="unk">(the Carrier tile's figures)</span></div>`;
+}
+
+// CMDR: who you are in the game: ranks with the way to the next, credits and assets, the fleet, the career. Pure but
+// for the payload's commander (credits) and carrier: the tiles' own.
+function cmdrProfileHtml(d) {
+  const p = d.profile;
+  if (!p) return `<div class="hwyttl">No commander yet</div><div class="unk">Shown once the journals hold a login.</div>`;
+  const a = p.assets || {}, cm = data && data.commander, car = data && data.carrier;
+  const rank = r => `<tr><td class="unk">${esc(r.title)}</td><td><b>${esc(r.name)}</b></td>` +
+    `<td class="cmbarcell">${r.progress == null ? "" : `<span class="cmbar" title="${Math.round(r.progress)}% of the way to ${esc(r.next || "")}"><span style="width:${Math.round(r.progress)}%"></span></span> <span class="unk">${Math.round(r.progress)}%</span>`}</td>` +
+    `<td>${r.next ? `<span class="unk">next:</span> ${esc(r.next)}` : `<span class="ok">the top</span>`}` +
+    `${r.to_next != null ? ` <span title="an estimate: about this much more ${esc(r.earned_by || "")}: the rank's step by the community's post-Update-14 table (the Frontier forum, 2 Jan 2023) times the share your game says is still to go${r.uncertain ? ". This step's figure is itself an estimate" : ""}">in about <b>${esc(credits(r.to_next))} cr</b>${r.uncertain ? ` <span class="unk">(uncertain)</span>` : ""}</span>` : ""}</td></tr>`;
+  const rep = Object.entries(p.reputation || {}).map(([k, v]) => `${esc(k)} <b class="${v >= 35 ? "ok" : v <= -35 ? "short" : ""}">${Math.round(v)}%</b>`).join(" · ");
+  const ship = x => { const label = shipLabel(x.name, x.type), type = x.type_name || shipLabel(null, x.type);
+    return `<tr><td><b>${esc(label)}</b>${type !== label ? ` <span class="unk">${esc(type)}</span>` : ""}${cmHot(x)}${cmBuild(x)}</td>` +
+      `<td>${x.current ? `<span class="ok">you fly it</span>` : x.in_transit ? `<span class="warnc">in transit</span>` : esc([x.system, x.station].filter(Boolean).join(" · ") || "?")}</td>` +
+      `<td class="num">${cmCr(x.value)}</td></tr>`; };
+  const fig = c => c.kind === "cr" ? `${esc(credits(c.value))} cr` : c.kind === "ly" ? `${cmNum(Math.round(c.value))} ly`
+    : c.kind === "time" ? `${cmNum(Math.round(c.value / 3600))} h` : cmNum(c.value);
+  // the Commander tile's credits (the login's plus sales since), worded and explained as the tile does
+  const cr = cm && cm.credits != null ? `≈ ${esc(credits(cm.credits))} cr` : "";
+  const crTitle = cm ? `Credits at login (${(cm.login_ts || "").replace("T", " ").slice(0, 16)} UTC)${cm.credits_login != null ? ": " + cm.credits_login.toLocaleString() : ""}` +
+    " plus exploration and exobiology sales since, as the Commander tile. Other spending and income (market, repairs, missions) is not tracked." : "";
+  const fin = car && !car.decommission && car.finance;
+  return `<div class="hwyttl">CMDR ${esc(p.commander || "?")}${p.squadron ? ` <span class="unk">· ${esc(p.squadron)}</span>` : ""}` +
+    `${p.power ? ` <span class="unk">· pledged to ${esc(p.power.name)}${p.power.rank != null ? `, rank ${cmNum(p.power.rank)}` : ""}${p.power.merits != null ? `, ${cmNum(p.power.merits)} merits` : ""}</span>` : ""}` +
+    ` ${cmAsOf(p.ts, "the login these figures are from: the game writes ranks and statistics then")}</div>` +
+    `<div class="cmfigs">${cmTile("Credits", cr || `<span class="unk">unknown</span>`, crTitle)}${cm && cm.loan ? cmTile("Loan", cmCr(cm.loan)) : ""}` +
+    `${cmTile("Net worth", cmCr(a.wealth), "the game's own total (Statistics: current wealth) at that login")}` +
+    `${cmTile("Fleet", a.fleet ? `${cmCr(a.fleet)} · ${cmNum(a.ships)} ship${a.ships === 1 ? "" : "s"}` : a.ships ? `${cmNum(a.ships)} ship${a.ships === 1 ? "" : "s"}` : "", "hull and modules of every ship listed below")}` +
+    `${cmTile("Stored modules", cmCr(a.modules))}${fin ? cmTile("Carrier balance", `${esc(crSign(fin.balance))} cr`, "the Carrier tile's balance, from the carrier's last stats") : ""}</div>` +
+    `<h3 class="subhead">Ranks</h3>` + (p.ranks.length ? `<table class="cmtable cmranks"><tbody>${p.ranks.map(rank).join("")}</tbody></table>` : `<div class="unk">No ranks on record.</div>`) +
+    (rep ? `<div class="cmrep"><span class="unk">Reputation:</span> ${rep}</div>` : "") +
+    `<h3 class="subhead">Fleet <span class="cmcount">${p.fleet.length}</span></h3>` +
+    (p.fleet.length ? cmTable([["Ship"], ["Where"], ["Value", 1]], p.fleet.map(ship)) : `<div class="unk">No ship on record yet.</div>`) +
+    cmdrCarrierHtml(car) +
+    (p.career.length ? `<h3 class="subhead">Career <button type="button" class="mini" data-cmgo="hist" title="History's Career row: the game's statistics beside your sessions">History ›</button></h3>` +
+      `<div class="cmfigs">${p.career.map(c => cmTile(esc(c.label), fig(c))).join("")}</div>` : "");
+}
+
+// Inventory. Pure.
+function cmdrInventoryHtml(d) {
+  const s = d.ships || {ships: []}, m = d.modules || {modules: []}, lk = d.locker || {kinds: []}, suits = d.suits || [];
+  const shipRow = x => {
+    const label = shipLabel(x.name, x.type), type = x.type_name || shipLabel(null, x.type);
+    const where = x.current ? `<span class="ok">you fly it</span>` : x.in_transit ? `<span class="warnc">in transit</span>`
+      : esc([x.system, x.station].filter(Boolean).join(" · ") || "?");
+    const move = x.transfer_cost ? `${cmCr(x.transfer_cost)}${x.transfer_s ? ` · ${cmSpan(x.transfer_s)}` : ""}` : "";
+    // a type with a picture: the row shows it on a hover, its name on a tap on the tablet (shipCardShow)
+    const pic = shipPicture(x.type) ? ` data-shipimg="${esc(String(x.type).toLowerCase())}"` : "";
+    return `<tr${pic}><td><b${pic ? ` class="cmshipname"` : ""}>${esc(label)}</b>${type !== label ? ` <span class="unk">${esc(type)}</span>` : ""}${x.ident ? ` <span class="unk">${esc(x.ident)}</span>` : ""}` +
+      `${cmHot(x)}${cmBuild(x)}</td><td>${where}</td><td class="num">${cmCr(x.value)}</td><td class="num">${move}</td></tr>`;
+  };
+  const modRow = x => `<tr><td><span class="cmcls">${cmCls(x)}</span> <b>${esc(x.name)}</b>${x.mount ? ` <span class="unk">${esc(x.mount)}</span>` : ""}` +
+    `${cmHot(x, "module")}</td>` +
+    `<td>${x.blueprint ? `<b>${esc(x.blueprint)}</b>${x.level ? ` G${cmNum(x.level)}` : ""}` : `<span class="unk">stock</span>`}</td>` +
+    `<td>${x.in_transit ? `<span class="warnc">in transit</span>` : esc(x.system || "?")}</td><td class="num">${cmCr(x.value)}</td>` +
+    `<td class="num">${x.transfer_cost ? `${cmCr(x.transfer_cost)}${x.transfer_s ? ` · ${cmSpan(x.transfer_s)}` : ""}` : ""}</td></tr>`;
+  const held = lk.kinds.filter(k => k.items.length);
+  const suitRow = x => `<tr><td><b>${esc(x.loadout || "?")}</b></td><td>${esc(x.suit)}${x.class ? ` <span class="unk">G${cmNum(x.class)}</span>` : ""}` +
+    `${x.mods.length ? `<div class="unk">${esc(x.mods.join(", "))}</div>` : ""}</td>` +
+    `<td>${x.weapons.map(w => `<div>${esc(w.name)}${w.class ? ` <span class="unk">G${cmNum(w.class)}</span>` : ""}${w.mods.length ? ` <span class="unk">${esc(w.mods.join(", "))}</span>` : ""}</div>`).join("")}</td></tr>`;
+  return `<h3 class="subhead">Ships <span class="cmcount">${s.ships.length}</span> ${cmAsOf(s.ts, "the stored ships as the last shipyard you opened listed them, with the ships bought, sold, swapped, sent for or renamed since")}</h3>` +
+    (s.ships.length ? cmTable([["Ship"], ["Where"], ["Value", 1], ["To bring it here", 1]], s.ships.map(shipRow)) : "") +
+    (s.ts ? "" : `<div class="unk">Your stored ships are listed once you open a shipyard: the game writes the list then.</div>`) +
+    `<h3 class="subhead">Stored modules <span class="cmcount">${m.modules.length}</span> ${cmAsOf(m.changed || m.ts, "as the last outfitting you opened listed them" +
+      (m.changed ? `${m.ts ? ` (${cmWhen(m.ts)})` : ""}, with the modules stored, taken, sent for or sold from storage since: a module stored since shows its value once outfitting lists it` : ""))}</h3>` +
+    (m.modules.length ? cmTable([["Module"], ["Engineering"], ["Where"], ["Value", 1], ["To bring it here", 1]], m.modules.map(modRow))
+      : `<div class="unk">${m.ts || m.changed ? "None stored." : "Listed once you open outfitting: the game writes the list then."}</div>`) +
+    `<h3 class="subhead">Ship locker ${cmAsOf(lk.ts, "the locker as the game last wrote it whole: a journal line that lists it, or ShipLocker.json")}</h3>` +
+    (held.length ? `<div class="cmlocker">${held.map(k => `<div><b>${esc(k.name)}</b>${k.items.map(i =>
+      `<div class="cmitem"><span>${esc(i.name)}${i.mission ? ` <span class="unk" title="a mission's own">mission</span>` : ""}</span><b>${cmNum(i.count)}</b></div>`).join("")}</div>`).join("")}</div>`
+      : `<div class="unk">${lk.ts ? "Empty." : "Nothing on record (Odyssey writes it at login)."}</div>`) +
+    `<h3 class="subhead">Suit loadouts <span class="cmcount">${suits.length}</span></h3>` +
+    (suits.length ? cmTable([["Loadout"], ["Suit"], ["Weapons"]], suits.map(suitRow))
+      : `<div class="unk">A loadout is listed once you create or wear one: the journal names it then.</div>`);
+}
+
+// Engineering: the blueprints by module, each grade's materials against what you hold (green: enough, red: short, as
+// the Materials tab). Pure (CM.q, CM.craft, CM.open; the filter and the switch are above the pane).
+function cmdrEngineeringHtml(d) {
+  if (typeof forkEngineeringHtml === "function") return forkEngineeringHtml(d);   // this fork: static/fork.js draws the tab
+  const q = CM.q.trim().toLowerCase();
+  const eng = d.engineers || [], unlocked = eng.filter(e => e.progress === "Unlocked").length;
+  const gradeRow = g => {
+    // short: a link to the Materials tab on it, and ⇄ the nearest trader of its kind (as the Materials tab's own)
+    const mats = g.materials.map(x => x.have >= x.need ? `<span class="cmmat ok" title="you hold ${cmNum(x.have)}">${esc(x.name)} ${cmNum(x.have)}/${cmNum(x.need)}</span>`
+      : `<span class="cmshort"><span class="cmmat short cmlink" data-cmmat="${esc(x.name)}" role="link" tabindex="0" title="you hold ${cmNum(x.have)}: show it in the Materials tab">${esc(x.name)} ${cmNum(x.have)}/${cmNum(x.need)}</span>${traderBtn(x.category, true)}</span>`).join("");
+    const who = g.engineers.map(e => `<span class="${e.ready ? "ok" : "unk"}" title="${esc(e.progress ? `${e.progress}${e.rank != null ? `, crafts up to grade ${e.rank}` : ""}` : "not met yet")}">${esc(e.name)}</span>`).join(", ");
+    return `<tr><td><b>G${cmNum(g.grade)}</b></td><td><div class="cmstats">${mats}</div></td>` +
+      `<td class="num ${g.rolls ? "ok" : "unk"}" title="how many times you could craft this grade now">${g.rolls ? `×${cmNum(g.rolls)}` : "–"}</td><td>${who}</td></tr>`;
+  };
+  const groups = new Map();
+  for (const b of d.blueprints || []) {
+    if (q && !`${b.module} ${b.name} ${b.grades.map(g => g.materials.map(x => x.name).join(" ")).join(" ")}`.toLowerCase().includes(q)) continue;
+    const grades = CM.craft ? b.grades.filter(g => g.rolls > 0) : b.grades;
+    if (!grades.length) continue;
+    if (!groups.has(b.module)) groups.set(b.module, []);
+    groups.get(b.module).push(`<h4 class="cmbp">${esc(b.name)}</h4>` + cmTable([["Grade"], ["Materials <span class=\"unk\">(held / one roll)</span>"], ["Rolls", 1], ["Engineers"]], grades.map(gradeRow)));
+  }
+  const open = k => q || CM.craft || CM.open[k];   // a filter shows what it found
+  if (d.unreadable) return `<div class="short">Blueprint table unreadable: resources/blueprints.json is missing or damaged (a fresh copy of Outrider brings it back).</div>`;
+  return `<div class="unk cmnote">${eng.length ? `${unlocked} of ${eng.length} engineers unlocked` : "no engineer on record yet"} · ship modules only: no experimental effects, suits or weapons</div>` +
+    ([...groups].map(([mod, list]) => `<details class="cmmod" data-cmmod="${esc(mod)}"${open(mod) ? " open" : ""}><summary><b>${esc(mod)}</b> <span class="unk">${list.length} blueprint${list.length === 1 ? "" : "s"}</span></summary>${list.join("")}</details>`).join("")
+      || `<div class="unk">Nothing matches.</div>`);
+}
+
+// Missions: the time left counted here at each draw (the answer is read only when a journal line moves the version). Pure
+// but for the clock.
+function cmdrMissionsHtml(d) {
+  const now = Date.now();
+  const all = (d.missions || []).map(m => {
+    const left = m.expiry ? Math.round((Date.parse(m.expiry) - now) / 1000) : null;
+    return Object.assign({}, m, {left, soon: left != null && left >= 0 && left <= CM_SOON_S, expired: left != null && left < 0});
+  });
+  const rows = all.map(m => {
+    const need = [m.commodity, m.target].filter(Boolean).map(esc).join(" · ") +
+      (m.count != null ? ` <b>${m.delivered != null ? `${cmNum(m.delivered)}/` : ""}${cmNum(m.count)}</b>` : "");
+    const exp = m.left == null ? `<span class="unk">no limit</span>` : m.expired ? `<span class="short">expired</span>`
+      : `<span class="${m.soon ? "warnc" : ""}" title="${cmWhen(m.expiry)} UTC">${cmSpanDual(m.left)}</span>`;
+    const where = [m.system, m.station].filter(Boolean).map(esc);   // compact: the system alone, the station in its title
+    return `<tr><td><b>${esc(m.name || "?")}</b>${m.wing ? ` <span class="unk">wing</span>` : ""}${m.passengers ? ` <span class="unk">${dual("passengers", "pax")}</span>` : ""}` +
+      `${m.redirected ? ` <span class="ok" title="the game sent you on: usually back to hand it in">${dual("redirected", "redir.", {title: false})}</span>` : ""}</td>` +
+      `<td class="c2hide">${esc(m.faction || "")}</td><td>${where.length > 1 ? dual(where.join(" · "), where[0]) : where.join("")}</td><td>${need}</td>` +
+      `<td class="num">${cmCrS(m.reward)}</td><td class="num">${exp}</td></tr>`;
+  });
+  const soon = all.filter(m => m.soon).length;
+  return `<div class="hwyttl">${rows.length ? `${rows.length} mission${rows.length === 1 ? "" : "s"}` : "No missions"}` +
+    `${soon ? ` <span class="warnc">· ${soon} expiring within half an hour</span>` : ""}</div>` +
+    (rows.length ? cmTable([["Mission"], ["Faction", 0, "c2hide"], ["Where"], ["What"], ["Reward", 1], ["Expires in", 1]], rows, "cmMissions")
+      : `<div class="unk">Missions you accept are listed here with where they go, what they ask and when they run out.</div>`);
+}
+
+// Sessions: the totals, then each combat and each mining session (per login; the SRV's refinery apart from the
+// ship's mining: its tons are not in t/h). Pure.
+function cmdrSessionsHtml(d) {
+  const all = d.sessions || [], t = d.totals || {combat: {}, mining: {}};
+  const list = o => Object.entries(o || {}).map(([k, v]) => `${esc(k)} ${cmNum(v)}`).join(", ");
+  // fitted tables (compact: short dates, spans and credits; compact2 drops the lists by ship and of minerals, the limpets)
+  const combat = all.filter(s => s.combat).map(s => { const c = s.combat; return `<tr><td>${cmWhenDual(s.start)}</td><td>${esc(s.ship || "")}</td>` +
+    `<td class="num"><b>${cmNum(c.kills)}</b></td><td class="c2hide">${list(c.by_ship)}</td><td class="num">${cmCrS(c.bounties)}</td><td class="num">${cmCrS(c.bonds)}</td>` +
+    `<td class="num">${cmNum(c.per_hour)}</td><td class="num">${cmSpanDual(c.seconds)}</td><td class="num">${c.deaths ? `<span class="short">${cmNum(c.deaths)}</span>` : ""}</td></tr>`; });
+  const mining = all.filter(s => s.mining).map(s => { const m = s.mining; return `<tr><td>${cmWhenDual(s.start)}</td><td>${esc(s.ship || "")}</td>` +
+    `<td class="num">${cmRefined(m.tons, m.srv_tons)}</td><td class="c2hide">${list(m.refined)}${m.srv_tons ? `${m.tons ? " · " : ""}<span class="unk">SRV:</span> ${list(m.srv_refined)}` : ""}</td>` +
+    `<td class="num">${cmNum(m.per_hour)}</td>` +
+    `<td>${cmNum(m.prospected)}${m.prospected ? ` <span class="unk c1hide">${list(m.content)}${m.motherlodes ? ` · ${cmNum(m.motherlodes)} core${m.motherlodes === 1 ? "" : "s"}` : ""}</span>` : ""}</td>` +
+    `<td class="num c2hide" title="prospector / collector limpets launched">${m.prospectors || m.collectors ? `${cmNum(m.prospectors)} / ${cmNum(m.collectors)}` : ""}</td>` +
+    `<td class="num">${cmSpanDual(m.seconds != null ? m.seconds : m.srv_seconds)}</td><td class="num">${cmCrS(m.sold)}</td></tr>`; });
+  const days = d.days || 30, c = t.combat, m = t.mining;
+  const latest = `<span class="unk" title="each from a login to the next">your sessions of the last ${cmNum(days)} days, ${cmNum(d.max || 40)} at most</span>`;
+  return `<h3 class="subhead">Combat ${latest}</h3>` +
+    (combat.length ? `<div class="cmfigs">${cmTile("Sessions", cmNum(c.sessions))}${cmTile("Kills", cmNum(c.kills))}${cmTile("Bounties", cmCr(c.bounties))}${cmTile("Combat bonds", cmCr(c.bonds))}${cmTile("Deaths", c.deaths ? cmNum(c.deaths) : "")}</div>` +
+      cmTable([["Session"], ["Ship"], ["Kills", 1], ["Bounties by ship", 0, "c2hide"], ["Bounties", 1], ["Bonds", 1], ["Kills/h", 1], ["Fighting", 1], ["Deaths", 1]], combat, "cmCombat")
+      : `<div class="unk">No fighting in the last ${cmNum(days)} days.</div>`) +
+    `<h3 class="subhead">Mining ${latest}</h3>` +
+    (mining.length ? `<div class="cmfigs">${cmTile("Sessions", cmNum(m.sessions))}${cmTile("Refined", m.tons || !m.srv_tons ? `${cmNum(m.tons)} t` : "")}` +
+      `${cmTile("SRV refined", m.srv_tons ? `${cmNum(m.srv_tons)} t` : "", "the SRV's refinery: surface mining")}${cmTile("Asteroids prospected", cmNum(m.prospected))}${cmTile("Sold", cmCr(m.sold))}</div>` +
+      cmTable([["Session"], ["Ship"], ["Refined", 1], ["What", 0, "c2hide"], ["t/h", 1], ["Prospected"], ["Limpets", 1, "c2hide"], ["Mining", 1], ["Sold", 1]], mining, "cmMining")
+      : `<div class="unk">No mining in the last ${cmNum(days)} days.</div>`);
+}
+
+// Earnings (NEXT-VERSION #7, GET /api/commander/earnings?year=&month=, outrider/earnings.py): what exploration,
+// exobiology and mining paid you in the period. Exact figures are the game's (what each sale paid); Outrider's own
+// estimates (the systems sold by value, the data lost to deaths) only under Estimates and the Lost figure, always
+// labelled so. The chart is every month of all time, the period's months highlighted; a bar picks its month. Pure but
+// for CM.period (the picker above the pane) and CM.chartW (the box's width: the month labels that fit).
+const EM_KINDS = [["carto", "Cartography", "Carto"], ["bio", "Exobiology", "Exo"], ["mining", "Mining", "Mining"]];
+const EM_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const EM_PH = 150, EM_TOP = 10, EM_LH = 20, EM_YAX = 52;   // the chart: plot height, room above it, the labels' row, the y axis (px)
+const EM_STEPS = [1, 2, 3, 4, 6, 12, 24, 36, 60, 120];      // a month label every so many months (calendar-aligned)
+const emExact = v => `${Math.round(v || 0).toLocaleString()} cr`;
+const emCr = v => `<span title="${esc(emExact(v))}">${esc(credits(v || 0))} cr</span>`;
+// in a fitted table: "12.3M cr" / "12.3M", the exact sum in the title; nothing for no value (a mining sale's base and bonus)
+const emCrS = v => v == null ? "" : dual(`<span title="${esc(emExact(v))}">${esc(credits(v))} cr</span>`, esc(credits(v)), {title: emExact(v)});
+const emPlural = (n, one, many = one + "s") => `${cmNum(n)} ${n === 1 ? one : many}`;
+// a station's type as the journal names it ("FleetCarrier", "CraterOutpost") in words
+const emType = t => !t ? "" : /^(Coriolis|Orbis|Ocellus|Bernal|Dodec)$/.test(t) ? t : t === "MegaShip" ? "megaship"
+  : t.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+// a ship (the answer's {id, name, type, type_name}) as the rest of the tab names it; unknown: a line from before Outrider
+// kept the ship, or a ride
+function emShip(s) {
+  if (!s) return `<span class="unk" title="not known: from before Outrider kept the ship, or a ride">?</span>`;
+  const label = shipLabel(s.name, s.type) || `ship ${s.id}`, type = s.type_name || shipLabel(null, s.type);
+  return `<b>${esc(label)}</b>${type && type !== label ? ` <span class="unk c1hide">${esc(type)}</span>` : ""}`;
+}
+const emWhat = w => w.systems != null ? emPlural(w.systems, "system") : w.species != null ? emPlural(w.species, "species", "species")
+  : `${cmNum(w.tons)} t ${esc(w.commodity || "")}${w.of > w.tons ? ` <span class="unk c2hide" title="the rest was bought, not mined: trade, left out">of ${cmNum(w.of)} t</span>` : ""}`;
+const emKind = k => { const x = EM_KINDS.find(e => e[0] === k) || [k, k, k];
+  return `<span class="emsw ${esc(x[0])}"></span>${dual(esc(x[1]), esc(x[2]))}`; };
+const emDay = ts => ts ? dual(esc(String(ts).slice(0, 10)), esc(shortForm("day", String(ts).slice(0, 10)))) : "";
+// the y axis: steps of 1, 2, 2.5 or 5 × 10^n, 3 or 4 of them, the top one reaching the highest month: [step, top]
+function emAxis(max) {
+  if (!(max > 0)) return [1, 3];
+  for (let p = 10 ** Math.max(0, Math.floor(Math.log10(max)) - 1); ; p *= 10)
+    for (const f of [1, 2, 2.5, 5]) {
+      const step = f * p, n = Math.ceil(max / step);
+      if (step === Math.round(step) && n <= 4) return [step, Math.max(3, n) * step];
+    }
+}
+// the months labelled: every one that fits, else every 2nd, 3rd... month of the calendar (Jan, Apr, Jul, Oct), then years
+function emLabelStep(n, width) {
+  const fit = Math.max(1, Math.floor(Math.max(0, width - EM_YAX - 14) / (TABLET ? 62 : 52)));
+  return EM_STEPS.find(s => Math.ceil(n / s) <= fit) || EM_STEPS[EM_STEPS.length - 1];
+}
+// The monthly bars (all time): cartography, exobiology, mining stacked, to one scale; the period's months highlighted (the
+// others dimmed under a band) when the period is a year or a month; a title per bar with its three figures. Sized to its
+// box: the bars in % of the width, the height fixed (never the window's)
+function emChartHtml(months, p, width) {
+  const n = months.length, tot = m => (m.carto || 0) + (m.bio || 0) + (m.mining || 0);
+  const [step, top] = emAxis(Math.max(...months.map(tot)));
+  const y = v => +(EM_TOP + EM_PH - v / top * EM_PH).toFixed(2), H = EM_TOP + EM_PH + EM_LH;
+  const pc = x => (x * 100 / n).toFixed(3) + "%";
+  const pre = p.year ? (p.month ? `${p.year}-${String(p.month).padStart(2, "0")}` : `${p.year}-`) : null;
+  const inP = m => pre != null && m.month.startsWith(pre);
+  const ticks = []; for (let i = 1; i * step <= top; i++) ticks.push(i * step);
+  const ls = emLabelStep(n, width || 640);
+  let first = true;
+  const label = (m, i) => {
+    const [yy, mm] = m.month.split("-").map(Number);
+    if (ls <= 12 ? (mm - 1) % ls : mm !== 1 || yy % (ls / 12)) return "";
+    const t = ls >= 12 ? String(yy) : EM_MONTHS[mm - 1].slice(0, 3) + (mm === 1 || first ? ` ’${String(yy).slice(2)}` : "");
+    first = false;
+    return `<text class="emlbl" x="${pc(i + 0.5)}" y="${H - 5}" text-anchor="middle">${esc(t)}</text>`;
+  };
+  const on = months.map(inP), a = on.indexOf(true), b = on.lastIndexOf(true);
+  const bars = months.map((m, i) => {
+    const [yy, mm] = m.month.split("-").map(Number);
+    let base = 0, segs = "";
+    for (const [k] of EM_KINDS) {
+      const v = m[k] || 0; if (!(v > 0)) continue;
+      segs += `<rect class="emseg ${k}" x="${pc(i + 0.15)}" width="${pc(0.7)}" y="${y(base + v)}" height="${(v / top * EM_PH).toFixed(2)}"/>`;
+      base += v;
+    }
+    const tip = `${EM_MONTHS[mm - 1]} ${yy}: cartography ${emExact(m.carto)}, exobiology ${emExact(m.bio)}, mining ${emExact(m.mining)}; ` +
+      `total ${emExact(tot(m))}${tot(m) ? " (click: this month)" : ""}`;
+    return `<g class="embar${pre == null ? "" : on[i] ? " on" : " dim"}"${tot(m) ? ` data-emmonth="${esc(m.month)}"` : ""} data-total="${tot(m)}"><title>${esc(tip)}</title>` +
+      `<rect class="emhit" x="${pc(i)}" width="${pc(1)}" y="0" height="${EM_TOP + EM_PH}"/>${segs}</g>`;
+  }).join("");
+  return `<div class="emlegend">${EM_KINDS.map(([k, full]) => `<span><span class="emsw ${k}"></span>${full}</span>`).join("")}` +
+    `<span class="unk">· every month${pre != null ? ", this period's highlighted" : ""}; a bar shows its month's figures</span></div>` +
+    `<div class="emchart"><svg class="emyax" width="${EM_YAX}" height="${H}" aria-hidden="true">` +
+    ticks.map(v => `<text x="${EM_YAX - 6}" y="${y(v) + 4}" text-anchor="end">${esc(credits(v))}</text>`).join("") + `</svg>` +
+    `<svg class="emplot" width="100%" height="${H}" role="img" aria-label="credits earned each month: cartography, exobiology and mining">` +
+    (a >= 0 ? `<rect class="emband" x="${pc(a)}" width="${pc(b - a + 1)}" y="0" height="${EM_TOP + EM_PH}"/>` : "") +
+    ticks.map(v => `<line class="emgrid" x1="0" x2="100%" y1="${y(v)}" y2="${y(v)}"/>`).join("") + bars +
+    `<line class="embase" x1="0" x2="100%" y1="${y(0)}" y2="${y(0)}"/>` + months.map(label).join("") + `</svg></div>`;
+}
+// the period picker above the pane: All time, the years with a sale (newest first), the months of the chosen year with
+// one (the period asked for is always listed, even with nothing in it)
+function cmdrEarnPicker() {
+  const d = CM.data.earnings, p = CM.period, ys = document.getElementById("cmEarnYear"), ms = document.getElementById("cmEarnMonth");
+  const years = [...new Set([...((d && d.years) || []).map(String), ...(p.year ? [p.year] : [])])].sort().reverse();
+  const yh = `<option value="">All time</option>` + years.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  const had = new Set(((d && d.months) || []).filter(m => m.carto || m.bio || m.mining).map(m => m.month));
+  const mons = !p.year ? [] : EM_MONTHS.map((_, i) => i + 1).filter(m => had.has(`${p.year}-${String(m).padStart(2, "0")}`) || String(m) === p.month);
+  const mh = `<option value="">Whole year</option>` + mons.map(m => `<option value="${m}">${EM_MONTHS[m - 1]}</option>`).join("");
+  if (ys._drawn !== yh) { ys.innerHTML = yh; ys._drawn = yh; }
+  if (ms._drawn !== mh) { ms.innerHTML = mh; ms._drawn = mh; }
+  ys.value = p.year; ms.value = p.month; ms.hidden = !p.year;
+}
+function cmdrEarningsHtml(d) {
+  const t = d.totals || {}, c = t.carto || {}, b = t.bio || {}, mi = t.mining || {}, months = d.months || [];
+  const p = d.period || {kind: "all", label: "All time"}, est = d.estimates || {}, lost = est.lost || {}, mn = d.mining || {};
+  const notes = (d.notes || []).length ? `<ul class="emnotes unk">${d.notes.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : "";
+  if (!months.length && !t.sales)
+    return `<div class="hwyttl">No sales yet</div><div class="unk cmnote">Nothing sold to Universal Cartographics, Vista Genomics or a ` +
+      `market for ore you mined is in your journals yet. Once you sell, this shows what it paid, month by month, where and with which ship.</div>` + notes;
+  // base + bonus, less the NPC crew's share when one was hired (the total is what you were paid)
+  const sub = (base, bonus, crew) => `<span class="unk emsub">${emCr(base)} + ${emCr(bonus)} bonus${crew ? ` − ${emCr(crew)} crew` : ""}</span>`;
+  const figs = `<div class="cmfigs emfigs">` +
+    cmTile("Total earned", `${emCr(t.total)}<span class="unk emsub">${emPlural(t.sales || 0, "sale")}</span>`, "cartography, exobiology and mining: exactly what each sale paid") +
+    cmTile("Cartography", emCr(c.total) + sub(c.base, c.bonus, c.crew), "Universal Cartographics: the base and the bonus the game paid, less your NPC crew's share") +
+    cmTile("Exobiology", emCr(b.total) + sub(b.base, b.bonus, b.crew), "Vista Genomics: the base and the first-logged bonus the game paid, less your NPC crew's share") +
+    cmTile("Mining", `${emCr(mi.total)}<span class="unk emsub">${cmNum(mi.tons || 0)} t mined</span>`, "the ore you mined and sold (bought tons and your own carrier left out)") +
+    cmTile("Lost (estimate)", lost.deaths ? `~${emCr(lost.value)}<span class="unk emsub">${emPlural(lost.deaths, "death")} · estimate</span>` : `<span class="unk">no deaths</span>`,
+      "an estimate: the data you died with, as History's Ledger values it") + `</div>`;
+  const sold = d.sales || [];
+  const saleRow = s => `<tr><td>${cmWhenDual(s.ts)}</td><td>${emKind(s.kind)}</td>` +
+    `<td>${s.station ? `${esc(s.station)}${s.station_type ? ` <span class="unk c1hide">${esc(emType(s.station_type))}</span>` : ""}` : `<span class="unk">?</span>`}</td>` +
+    `<td class="c2hide">${emShip(s.ship)}</td><td>${emWhat(s.what || {})}</td><td class="num c2hide">${emCrS(s.base)}</td>` +
+    `<td class="num c2hide">${emCrS(s.bonus)}</td><td class="num"><b>${emCrS(s.total)}</b></td></tr>`;
+  const sales = `<h3 class="subhead">Sales <span class="cmcount">${cmNum((t.sales || 0))}</span></h3>` +
+    (sold.length ? cmTable([["When"], ["Kind"], ["Where"], ["Ship", 0, "c2hide"], ["What"], ["Base", 1, "c2hide"], ["Bonus", 1, "c2hide"], ["Total", 1]], sold.map(saleRow), "cmEarnSales") +
+      (d.more ? `<div class="unk cmnote">${emPlural(d.more, "more sale")} not shown: the ⬇ CSV above has every one.</div>` : "")
+      : `<div class="unk cmnote">No sales in ${esc(p.kind === "all" ? "your journals" : p.label)}.</div>`);
+  const st = d.stations || [];
+  const stations = !st.length ? "" : `<h3 class="subhead">Where you sold</h3>` +
+    cmTable([["Station"], ["Type", 0, "c2hide"], ["Sales", 1], ["Earned", 1]], st.map(x =>
+      `<tr><td><b>${esc(x.name)}</b></td><td class="c2hide">${esc(emType(x.type))}</td><td class="num">${cmNum(x.sales)}</td><td class="num">${emCrS(x.total)}</td></tr>`), "cmEarnStations");
+  const sp = d.species || [];
+  const species = !sp.length ? "" : `<h3 class="subhead">Species <span class="unk">· what each paid, exact</span></h3>` +
+    cmTable([["Species"], ["Sold", 1], ["Value", 1, "c2hide"], ["Bonus", 1, "c2hide"], ["Total", 1]], sp.map(x =>
+      `<tr><td><b>${esc(x.name)}</b></td><td class="num">${cmNum(x.count)}</td><td class="num c2hide">${emCrS(x.value)}</td><td class="num c2hide">${emCrS(x.bonus)}</td>` +
+      `<td class="num">${emCrS(x.total)}</td></tr>`), "cmEarnSpecies");
+  const sh = d.ships || [];
+  const ships = !sh.length ? "" : `<h3 class="subhead">Ships <span class="unk">· jumps, scans, samples and sales made flying each</span></h3>` +
+    cmTable([["Ship"], ["Jumps", 1], ["ly", 1], ["Bodies scanned", 1], ["Species sampled", 1], ["Earned", 1], ["Active days", 1]], sh.map(x =>
+      `<tr><td>${emShip(x)}</td><td class="num">${cmNum(x.jumps)}</td><td class="num">${cmNum(Math.round(x.ly || 0))}</td><td class="num">${cmNum(x.bodies)}</td>` +
+      `<td class="num">${cmNum(x.species)}</td><td class="num">${emCrS(x.earnings)}</td><td class="num">${cmNum(x.days)}</td></tr>`), "cmEarnShips");
+  const own = mn.own_carrier || {}, ore = mn.commodities || [], at = mn.stations || [], best = mn.best || [];
+  const ownLine = own.sales ? `<div class="unk cmnote">Left out: ${emPlural(own.sales, "sale")} of mined ore to your own carrier (${cmNum(own.tons)} t, ` +
+    `${emCr(own.total)}): your own money.</div>` : "";
+  const mining = `<h3 class="subhead">Mining</h3>` + (!ore.length && !mn.sales ? `<div class="unk cmnote">No mining in this period.</div>` :
+    `<div class="cmfigs">${cmTile("Earned", emCr(mn.earned))}${cmTile("Mined tons sold", `${cmNum(mn.tons)} t`)}${cmTile("Sales", cmNum(mn.sales))}</div>` +
+    (ore.length ? cmTable([["Commodity"], ["Refined by ship", 1], ["Refined by SRV", 1, "c2hide"], ["Mined t sold", 1], ["Earned", 1], ["cr/t", 1]], ore.map(x =>
+      `<tr><td><b>${esc(x.name)}</b></td><td class="num">${x.refined ? `${cmNum(x.refined)} t` : ""}</td><td class="num c2hide">${x.refined_srv ? `${cmNum(x.refined_srv)} t` : ""}</td>` +
+      `<td class="num">${x.sold ? `${cmNum(x.sold)} t` : ""}</td><td class="num">${x.earned ? emCrS(x.earned) : ""}</td><td class="num">${cmNum(x.per_ton)}</td></tr>`), "cmEarnOre") : "") +
+    (at.length ? `<h4 class="cmbp">Where you sold it</h4>` + cmTable([["Station"], ["Sales", 1], ["Tons", 1], ["Earned", 1], ["cr/t", 1]], at.map(x =>
+      `<tr><td><b>${esc(x.name)}</b>${x.type ? ` <span class="unk c1hide">${esc(emType(x.type))}</span>` : ""}</td><td class="num">${cmNum(x.sales)}</td>` +
+      `<td class="num">${cmNum(x.tons)} t</td><td class="num">${emCrS(x.earned)}</td><td class="num">${cmNum(x.per_ton)}</td></tr>`), "cmEarnOreAt") : "") +
+    (best.length ? `<h4 class="cmbp">Best sales</h4>` + cmTable([["When"], ["Commodity"], ["Tons", 1], ["Earned", 1], ["cr/t", 1], ["Where", 0, "c2hide"]], best.map(x =>
+      `<tr><td>${cmWhenDual(x.ts)}</td><td><b>${esc(x.commodity)}</b></td><td class="num">${cmNum(x.tons)} t</td><td class="num">${emCrS(x.earned)}</td>` +
+      `<td class="num">${cmNum(x.per_ton)}</td><td class="c2hide">${esc(x.station || "")}</td></tr>`), "cmEarnOreBest") : "")) + ownLine;
+  const cm = d.common || {}, stars = cm.stars || [], bodies = cm.bodies || [], found = cm.species || [];
+  const common = `<h3 class="subhead">Most common <span class="unk">· in this period</span></h3>` + (!stars.length && !bodies.length && !found.length
+    ? `<div class="unk cmnote">Nothing found in this period.</div>` : `<div class="emtrio">` +
+    (stars.length ? `<div>${cmTable([["Star class"], ["Systems", 1]], stars.map(x => `<tr><td>${sfText("star", x.name || x.class || "?")}</td><td class="num">${cmNum(x.count)}</td></tr>`), "cmEarnStars")}</div>` : "") +
+    (bodies.length ? `<div>${cmTable([["Planet type"], ["Bodies", 1]], bodies.map(x => `<tr><td>${sfText("planet", x.type || "?")}</td><td class="num">${cmNum(x.count)}</td></tr>`), "cmEarnBodies")}</div>` : "") +
+    (found.length ? `<div>${cmTable([["Species found"], ["Runs", 1]], found.map(x => `<tr><td>${esc(x.name)}</td><td class="num">${cmNum(x.count)}</td></tr>`), "cmEarnFound")}</div>` : "") + `</div>`);
+  const tops = est.top_systems || [];
+  const estimate = v => dual(`~${esc(credits(v || 0))} cr <span class="unk">estimate</span>`, `~${esc(credits(v || 0))}`, {title: `~${emExact(v)}: an estimate`});
+  const estimates = `<h3 class="subhead">Estimates <span class="unk">· Outrider's, not the game's</span></h3>` +
+    `<div class="cmrep">Data lost to deaths: ${lost.deaths ? `<b>~${emCr(lost.value)}</b> <span class="unk">estimate</span>` +
+      `${lost.bio ? ` <span class="unk">(cartography ~${emCr(lost.carto)}, exobiology ~${emCr(lost.bio)})</span>` : ""} · ${emPlural(lost.deaths, "death")}` +
+      `${lost.ships ? `, ${emPlural(lost.ships, "ship")} lost` : ""} <span class="unk">(History's Ledger)</span>` : `<span class="unk">none: no deaths in this period</span>`}</div>` +
+    (tops.length ? `<div class="unk cmnote">The systems you sold by Outrider's value of your scans of them (an estimate: the game pays per page of systems, ` +
+      `not per system), ${emPlural(est.systems || 0, "system")} sold in this period:</div>` +
+      cmTable([["System"], ["Bodies", 1], ["Value (estimate)", 1], ["Sold", 0, "c2hide"]], tops.map(x =>
+        `<tr><td><b>${esc(x.name)}</b></td><td class="num">${cmNum(x.bodies)}</td><td class="num">${estimate(x.value)}</td><td class="c2hide">${emDay(x.sold)}</td></tr>`), "cmEarnEst") : "");
+  const ledger = `<div class="cmrep">Each trip's figures, sale to sale, with what it paid and what deaths lost: ` +
+    `<button type="button" class="mini" data-cmgo="trips" title="History's Trips: the Ledger">History › Trips</button></div>`;
+  return `<div class="hwyttl">${esc(p.label || "All time")}</div>` + figs +
+    (months.length ? emChartHtml(months, {year: p.year ? String(p.year) : "", month: p.month ? String(p.month) : ""}, CM.chartW) : "") +   // the answer's own period
+    sales + stations + species + ships + mining + common + estimates + notes + ledger;
+}
+
+const CM_HTML = {profile: cmdrProfileHtml, inventory: cmdrInventoryHtml, engineering: cmdrEngineeringHtml, missions: cmdrMissionsHtml, sessions: cmdrSessionsHtml,
+                 earnings: cmdrEarningsHtml};
+// the tab's own content (the pane); drawn only when it changed, so a <details> keeps its state and the pane its place
+function cmdrDrawBody() {
+  const el = document.getElementById("cmdrBody");
+  const tab = CM.tab, d = CM.data[tab];
+  CM.chartW = el.clientWidth;   // Earnings' chart: its month labels thinned to fit
+  const h = CM.error[tab] && !d ? `<div class="short">Could not be read: ${esc(CM.error[tab])}</div>`
+    : !d ? `<div class="unk">${CM.loading[tab] ? "Reading your journals…" : ""}</div>` : CM_HTML[tab](d);
+  if (el.innerHTML !== h) el.innerHTML = h;
+}
+// the controls above the pane (the tab switch, Engineering's filter, the status), then the pane
+function renderCmdr() {
+  const tab = CM.tab, st = document.getElementById("cmdrStatus");
+  if (tab !== "inventory" && (SC.key || SC.timer)) shipCardHide();   // a ship's picture is Inventory's own
+  document.querySelectorAll("[name=cmdrTab]").forEach(x => { x.checked = x.value === tab; });
+  document.getElementById("cmEngCtl").hidden = tab !== "engineering";
+  document.getElementById("cmEarnCtl").hidden = tab !== "earnings";
+  if (tab === "earnings") cmdrEarnPicker();
+  const s = CM.loading[tab] ? "reading…" : CM.error[tab] && CM.data[tab] ? `could not be read again: ${CM.error[tab]}` : "from your journals";
+  if (st.textContent !== s) st.textContent = s;
+  cmdrDrawBody();
+}
+
 // ---- Settings → Uploads (EDDN, EDSM, Inara): the switches, what each has sent, why it is held, the accounts ----
 const UPLOAD_NAMES = {eddn: ["EDDN", "the data network Spansh, EDSM, Inara and others read: systems, scans, signals, markets, as they happen"],
                       edsm: ["EDSM", "your flight log and scans, to your EDSM account (in batches: each jump, docking)"],
@@ -10325,7 +11252,7 @@ function uploadLineHtml(u) {
 // seconds, never ticking text), newest first: "12:04 sent 37 (11:58–12:04)", "11:58 ✗ unreachable: <the raw error> ·
 // trying again at 12:00"; what it did at start; and what is on hold, with Try again
 const UPLOAD_KIND_WORDS = {dns: "address not found", offline: "no network", refused: "unreachable", timeout: "no answer in time",
-  tls: "secure connection failed", http5xx: "failing", rate: "asked to slow down", http4xx: "refused", bad_answer: "an odd answer", other: "failed"};
+  certificate: "certificate not verified", tls: "secure connection failed", http5xx: "failing", rate: "asked to slow down", http4xx: "refused", bad_answer: "an odd answer", other: "failed"};
 const upTime = t => {
   const d = new Date(t * 1000);
   if (isNaN(d)) return "?";
@@ -10337,7 +11264,8 @@ function uploadRecentLine(e, newest) {
   const span = e.rounds > 1 && e.first !== e.at ? ` (${upTime(e.first)}–${upTime(e.at)})` : "";
   if (e.state === "fail") {
     const tries = e.rounds > 1 ? ` · ${e.rounds} tries since ${upTime(e.first)}` : "";
-    return `<div class="uprow fail">${upTime(e.at)} <span class="bad">✗ ${esc(UPLOAD_KIND_WORDS[e.kind] || "failed")}</span>: ` +
+    // a certificate failure (issue #9) in the server's words: the host and what to check (the clock, then an update)
+    return `<div class="uprow fail">${upTime(e.at)} <span class="bad">✗ ${esc(e.say || UPLOAD_KIND_WORDS[e.kind] || "failed")}</span>: ` +
       `<span class="upraw">${esc(e.error || "")}</span>${tries}${newest && e.next ? ` · trying again at ${upTime(e.next)}` : ""}</div>`;
   }
   if (e.state === "held") return `<div class="uprow">${upTime(e.at)} <span class="bad">⏸ held</span>: ${esc(e.held || "")}</div>`;
@@ -10693,18 +11621,21 @@ const OV_PANELS = [["system", "System", "the bodies worth your time, in supercru
                    ["alerts", "Alerts", "the page's alerts for a few seconds (8 s, danger 15 s in red): every kind switched on in Settings → Alerts; needs the page open"],
                    ["route", "Route", "the route ahead: the game's own route (jumps, light years, the next jumps with their stars, the next scoop) and the Highway's next stop"]];
 // the panel table's headings, short so the table fits the Settings dialog (the author, 2026-10-14); the full wording on
-// hover. Combat and Docked sit under "Hide when mode": a ticked box hides the panel in that mode
+// hover. Combat and Docked sit under "Hide in mode": a ticked box hides the panel in that mode
 const OV_HEADS = (() => {
   const th = (text, title, attrs = "") => `<th${attrs} title="${title}">${text}</th>`, r2 = ` rowspan="2"`;
   return `<tr>${th("Panel", "tick a panel to show it; hover its name for what it shows", r2)}` +
-    th("Hide when mode", "a ticked box hides the panel in that mode", ` colspan="2" class="ovgrp"`) +
+    th("Hide in mode", "a ticked box hides the panel in that mode", ` colspan="3" class="ovgrp"`) +
     th("Corner", "placed from: the corner of the game window (or the middle of its top or bottom edge) it is kept from", r2) +
     th("X %", "across: how far in from that corner's side, in % of the game window's width", r2) +
     th("Y %", "down: how far in from that corner's top or bottom, in % of the game window's height", r2) +
-    th("Size %", "its size, in %", r2) + th("BG %", "background: its background's opacity, in % (0: text only)", r2) +
+    th("Size %", "its size, in % (multiplied with All Panels' Scale); under it, how tall its smallest text comes out in the game window (shown while the overlay window draws): never under 9 px", r2) +
+    th("Text", "its text size: small, normal or large, or as all panels (All Panels' Text Size above)", r2) +
+    th("BG %", "background: its background's opacity, in % (0: text only)", r2) +
     th("Opac. %", "opacity: the whole panel's, in %", r2) + `<th${r2}></th></tr><tr>` +
     th("Combat", "the HUD in combat mode (analysis only): ticked, hidden in your ship while the HUD is in combat mode, shown only in analysis mode (in the SRV, on foot and over the galaxy map it shows as the others)") +
-    th("Docked", "ticked: hidden while docked (the ship at a station, a carrier or a port, or you on foot in a station, hangar or social space); the Target panel still shows over the galaxy map") + `</tr>`;
+    th("Docked", "ticked: hidden while docked (the ship at a station, a carrier or a port, or you on foot in a station, hangar or social space); the Target panel still shows over the galaxy map") +
+    th("Foot", "ticked: hidden on foot (in a station or on a planet's surface)") + `</tr>`;
 })();
 const OV_CORNERS = {nw: "top left", n: "top centre", ne: "top right", sw: "bottom left", s: "bottom centre", se: "bottom right"};
 let overlayDrawn = "", overlayNote = "";
@@ -10733,7 +11664,17 @@ function overlayHtml(o) {
   const opt = (vals, cur, label = v => v) => vals.map(v => `<option value="${v}"${v === cur ? " selected" : ""}>${esc(label(v))}</option>`).join("");
   const pct = v => Math.round(v * 100);
   const lay = o.layout || {};
-  const ana = new Set(o.analysis_only || []), dock = new Set(o.hide_docked || []);
+  const ana = new Set(o.analysis_only || []), dock = new Set(o.hide_docked || []), foot = new Set(o.hide_on_foot || []);
+  // the 4K TV report (2026-10-14): what each size comes to, from the game window's height the overlay window reports
+  // (text_px: none without a window drawing), and when the floor holds it; one line under the table names those panels
+  const tpx = o.text_px || {}, floor = o.min_text_px || 9, heldBy = [];
+  const sizeFig = (id, name) => {
+    const t = tpx[id];
+    if (!t) return "";
+    if (t.held) heldBy.push(name);
+    return t.held ? `<div class="ovpx warnc" title="held at ${floor} px: your screen is too small to go lower">held at ${t.px} px</div>`
+      : `<div class="ovpx unk" title="its smallest text in the game window at these sizes">≈ ${t.px} px text</div>`;
+  };
   const rows = OV_PANELS.map(([id, name, what]) => {
     const e = lay[id] || {}, on = !!(o.panels || {})[id];
     const num = (k, v, min, max, title) => `<td><input type="number" data-ovlay="${id}" data-k="${k}" min="${min}" max="${max}" step="1" value="${v}" title="${title}"></td>`;
@@ -10742,11 +11683,14 @@ function overlayHtml(o) {
     // 2026-10-14: the radar has no box, it shows only on a body's surface); data-find: Find a setting finds them by key
     const docked = id === "radar" ? `<td class="ovana unk" title="the radar shows only on a body's surface">–</td>`
       : `<td class="ovana"><input type="checkbox" data-ovdocked="${id}" data-find="overlay.hide_docked"${dock.has(id) ? " checked" : ""} title="${esc(name)}: hidden while docked${id === "body" ? " (still shown over the galaxy map)" : ""}"></td>`;
+    const onFoot = `<td class="ovana"><input type="checkbox" data-ovfoot="${id}" data-find="overlay.hide_on_foot"${foot.has(id) ? " checked" : ""} title="${esc(name)}: hidden on foot"></td>`;
     return `<tr class="${on ? "" : "ovoff"}"><th><label title="${esc(what)}"><input type="checkbox" data-ovpanel="${id}"${on ? " checked" : ""}> ${esc(name)}</label></th>` +
-      `<td class="ovana"><input type="checkbox" data-ovanalysis="${id}" data-find="overlay.analysis_only"${ana.has(id) ? " checked" : ""} title="${esc(name)}: hidden in your ship while the HUD is in combat mode (shown only in analysis mode)"></td>${docked}<td><select data-ovlay="${id}" data-k="corner" title="the corner of the game window it is placed from">${opt(Object.keys(OV_CORNERS), e.corner, c => OV_CORNERS[c])}</select></td>` +
+      `<td class="ovana"><input type="checkbox" data-ovanalysis="${id}" data-find="overlay.analysis_only"${ana.has(id) ? " checked" : ""} title="${esc(name)}: hidden in your ship while the HUD is in combat mode (shown only in analysis mode)"></td>${docked}${onFoot}<td><select data-ovlay="${id}" data-k="corner" title="the corner of the game window it is placed from">${opt(Object.keys(OV_CORNERS), e.corner, c => OV_CORNERS[c])}</select></td>` +
       num("x", pct(e.x || 0), 0, 95, "how far in from that corner's side, in % of the game window's width") +
       num("y", pct(e.y || 0), 0, 95, "how far in from that corner's top or bottom, in % of the game window's height") +
-      num("scale", pct(e.scale || 1), 50, 250, "its size, in %") + num("bg", pct(e.bg ?? 0.65), 0, 100, "its background's opacity, in % (0: text only)") +
+      num("scale", pct(e.scale || 1), 20, 250, "its size, in % (multiplied with All Panels' Scale)").replace("</td>", sizeFig(id, name) + "</td>") +
+      `<td><select data-ovlay="${id}" data-k="text" title="${esc(name)}: its text size">${opt(["", "small", "normal", "large"], e.text || "", v => v || "as all panels")}</select></td>` +
+      num("bg", pct(e.bg ?? 0.65), 0, 100, "its background's opacity, in % (0: text only)") +
       num("alpha", pct(e.alpha ?? 1), 10, 100, "the whole panel's opacity, in %") +
       `<td><a href="#" data-ovreset="${id}" title="reset: back to where it started" aria-label="reset">↺</a></td></tr>`;
   }).join("");
@@ -10755,10 +11699,21 @@ function overlayHtml(o) {
     // S25: with it on the overlay stays over the game while another window is active, unless other windows cover it
     `<label class="mod"><input type="checkbox" data-ov="show_inactive"${o.show_inactive ? " checked" : ""}> Keep showing when Elite is not the active window ` +
     `<span class="hint">still hidden while other windows cover the game (a native Wayland window is not seen)</span></label>` +
-    `<div class="mod">Theme <select data-ov="theme">${opt(OV_THEMES, o.theme)}</select> · text <select data-ov="text_size">${opt(["small", "normal", "large"], o.text_size)}</select></div>` +
-    `<div class="mod"><button type="button" class="try" data-ovact="test">${o.test ? `test panels: ${o.test} s` : "▶ Show test panels"}</button> ` +
-    `<button type="button" class="try" data-ovact="arrange">${o.arrange ? `✓ Done arranging (${Math.ceil(o.arrange / 60)} min left)` : "✥ Arrange panels"}</button></div>` +
+    // #12: the pad diagram while docking at a starport or carrier, in the Surface radar's place and on Now
+    // #1 (the author, 2026-10-15): nothing over the game while it locks the mouse
+    `<label class="mod"><input type="checkbox" data-ov="hide_mouse_lock"${o.hide_mouse_lock ? " checked" : ""}> Hide the overlay on foot and in the DSS ` +
+    `<span class="hint">overlays can break mouse lock in these situations on some systems</span></label>` +
+    `<label class="mod"><input type="checkbox" data-ov="pad_diagram"${o.pad_diagram !== false ? " checked" : ""}> Show the pad diagram while docking ` +
+    `<span class="hint">at a starport or carrier, under PAD 34 in the Surface radar's place and on Now (off: the number and where it is, in words)</span></label>` +
+    // one control row (the author, 2026-10-14): "All Panels: Theme [ ] Text Size [ ] Scale [100 %]", the two buttons on
+    // a line of their own under it, at its left (page.css .ovbtns)
+    `<div class="mod ovctl" data-find="overlay.theme overlay.text_size overlay.panel_scale text size all panels"><b>All Panels:</b> <label>Theme <select data-ov="theme">${opt(OV_THEMES, o.theme)}</select></label>` +
+    `<label title="every panel's text, unless its Text column says otherwise">Text Size <select data-ov="text_size">${opt(["small", "normal", "large"], o.text_size)}</select></label>` +
+    `<label title="all panels' size, in % (20 to 250), multiplied with each panel's own Size % (100 % here: each panel at its own size; 50 % here and 50 % on a panel: 25 %); Ctrl + wheel over a panel in Arrange mode">Scale <input type="number" data-ov="panel_scale" min="20" max="250" step="5" value="${o.panel_scale ?? 100}"> %</label>` +
+    `<span class="ovbtns"><button type="button" class="try" data-ovact="test">${o.test ? `test panels: ${o.test} s` : "▶ Show test panels"}</button>` +
+    `<button type="button" class="try" data-ovact="arrange">${o.arrange ? `✓ Done arranging (${Math.ceil(o.arrange / 60)} min left)` : "✥ Arrange panels"}</button></span></div>` +
     `<div class="ovwrap" data-find-block="panels"><table class="ovlay"><thead>${OV_HEADS}</thead><tbody>${rows}</tbody></table></div>` +
+    (heldBy.length ? `<div class="hint ovheld">${esc(heldBy.join(", "))}: held at ${floor} px: your screen is too small to go lower</div>` : "") +
     `<div class="hint" id="overlayMsg">${esc(overlayNote)}</div>`;
 }
 // A popup while Outrider installs PyQt6 for the overlay window (the author, 2026-10-10), then its outcome for a few
@@ -10807,16 +11762,22 @@ async function overlayPost(path, body) {
 }
 document.getElementById("overlayBox").addEventListener("change", e => {
   const t = e.target;
-  if (t.dataset.ov && t.type === "checkbox") overlayPost("api/overlay", {[t.dataset.ov]: t.checked});   // enabled, show_inactive
+  if (t.dataset.ov && t.type === "checkbox") overlayPost("api/overlay", {[t.dataset.ov]: t.checked});   // enabled, show_inactive, pad_diagram, hide_mouse_lock
   // a select keeps the focus, which holds renderOverlay off: let go, so the server's answer (its note) is drawn
+  else if (t.dataset.ov === "panel_scale") {   // all panels' size, a number (the server clamps it)
+    const v = Number(t.value);
+    if (t.value === "" || !isFinite(v)) return;
+    t.blur(); overlayPost("api/overlay", {panel_scale: v});
+  }
   else if (t.dataset.ov) { t.blur(); overlayPost("api/overlay", {[t.dataset.ov]: t.value}); }
   else if (t.dataset.ovpanel) overlayPost("api/overlay", {panels: {[t.dataset.ovpanel]: t.checked}});
   // analysis only: the whole list, as the boxes now say
   else if (t.dataset.ovanalysis) overlayPost("api/overlay", {analysis_only: [...e.currentTarget.querySelectorAll("[data-ovanalysis]:checked")].map(x => x.dataset.ovanalysis)});
+  else if (t.dataset.ovfoot) overlayPost("api/overlay", {hide_on_foot: [...e.currentTarget.querySelectorAll("[data-ovfoot]:checked")].map(x => x.dataset.ovfoot)});
   else if (t.dataset.ovdocked) overlayPost("api/overlay", {hide_docked: [...e.currentTarget.querySelectorAll("[data-ovdocked]:checked")].map(x => x.dataset.ovdocked)});
   else if (t.dataset.ovlay) {
-    const k = t.dataset.k, v = k === "corner" ? t.value : Number(t.value) / 100;
-    if (k !== "corner" && !isFinite(v)) return;
+    const k = t.dataset.k, word = k === "corner" || k === "text", v = word ? t.value : Number(t.value) / 100;
+    if (!word && !isFinite(v)) return;
     t.blur();
     overlayPost("api/overlay/layout", {[t.dataset.ovlay]: {[k]: v}});
   }
@@ -11012,10 +11973,7 @@ function drawSettingsServer() {
 drawSettingsServer();
 document.getElementById("settingsExport").onclick = () => {
   const blob = new Blob([JSON.stringify(settingsDoc(), null, 1)], {type: "application/json"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = `outrider-settings-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  saveBlob(blob, `outrider-settings-${new Date().toISOString().slice(0, 10)}.json`);
 };
 const settingsFile = document.getElementById("settingsFile");
 document.getElementById("settingsImport").onclick = () => settingsFile.click();
@@ -11030,6 +11988,35 @@ settingsFile.onchange = async () => {
   toast(`imported ${r.applied} settings${r.skipped.length ? ` (${r.skipped.length} unknown left out)` : ""}; reloading`);
   setTimeout(() => location.reload(), 600);
 };
+// The Android app's WebView opens no file picker (and will not: the author's call, 2026-10-14), so in the app a control
+// that would open one ([data-picker]: Bookmarks' Import…, Import settings…) is hidden and its .nopicker note says where
+// to do it instead. Any browser, a tablet's included, keeps the control.
+function drawFilePickers() {
+  const app = typeof window !== "undefined" && !!window.OutriderApp;
+  document.querySelectorAll("[data-picker]").forEach(b => { b.hidden = app; });
+  document.querySelectorAll(".nopicker").forEach(n => { n.hidden = !app; });
+}
+drawFilePickers();
+// Nor can the app's WebView save a file the page makes itself (a blob: or data: URL; its DownloadListener takes only
+// http(s) links, so every api/export link works there): a control that saves one ([data-blobsave]: Export settings,
+// the voice lab's Save WAV) is hidden in the app and its .nosave note says where to do it instead. Every such save goes
+// through saveBlob, which refuses in the app as well (the smoke test counts its callers against [data-blobsave]).
+const inApp = () => typeof window !== "undefined" && !!window.OutriderApp;
+function drawBlobSaves() {
+  const app = inApp();
+  document.querySelectorAll("[data-blobsave]").forEach(b => { b.hidden = app; });
+  document.querySelectorAll(".nosave").forEach(n => { n.hidden = !app; });
+}
+drawBlobSaves();
+// the browser saves `blob` as a file called `name`; false in the app (nothing saved)
+function saveBlob(blob, name) {
+  if (inApp()) { toast("The app cannot save files: do it from a browser on the PC"); return false; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  return true;
+}
 async function saveServerSettings(body) {
   try {
     const r = await apiJson("api/defaults", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
@@ -11073,7 +12060,7 @@ function drawAlertsBtn() { document.getElementById("alertsBtn").classList.toggle
 // Settings (the dialog the 🔔 used to open): collapsible sections, each remembered open or closed on this device
 // (store "settingsOpen"; Alerts is open the first time), with chips that open one and scroll to it (review S43)
 const alertChips = document.getElementById("alertChips");
-const SF = {active: false, q: "", opened: null, folds: null, srvLoaded: false, timer: 0};   // Find a setting (S39, below)
+const SF = {active: false, q: "", opened: null, folds: null, srvLoaded: false, vcLoaded: false, timer: 0};   // Find a setting (S39, below)
 const setSecs = [...alertDialog.querySelectorAll("details.setsec")];
 function setSecsRestore() {
   const open = store.get("settingsOpen", null);
@@ -11214,6 +12201,7 @@ function sfSet(q) {
   }
   SF.q = q;
   if (!SF.srvLoaded) { SF.srvLoaded = true; loadServerSettings(); }   // its keys, without opening its section
+  if (!SF.vcLoaded) { SF.vcLoaded = true; drawVoiceCmds(document.getElementById("voiceCmdList")); }   // "nearest vista" finds it too
   return sfApply();
 }
 function sfClear() {
@@ -11959,8 +12947,8 @@ document.addEventListener("click", async e => {
 // the page nav (three groups of four pages), the main column (the header's strips, Now and the views, moved into it),
 // the game-button rail (the control rail) and the footer with the PC's voice controls. A theme stylesheet
 // (static/themes/<name>.css, data-theme on <html>, chosen per device) dresses them. An alert is a banner here; the tablet
-// speaks and plays sounds only with Play alerts here ticked (tabletSpeaks). The one page switch it makes by itself: to Now when the surface map shows, and
-// back to the page you were on when it hides. A tap on a table row opens a sheet with all its facts (no hover here).
+// speaks and plays sounds only with Play alerts here ticked (tabletSpeaks). The one page switch it makes by itself: to Now when the surface map shows or a pad is granted, and
+// back to the page you were on when that is over. A tap on a table row opens a sheet with all its facts (no hover here).
 const tabGroupOf = v => Object.keys(TB.groups).find(g => TB.groups[g].includes(v)) || "explore";
 // a sheet opened and closed (the open attribute where a browser has no modal dialogs: the smoke test's jsdom)
 const tabShow = d => { if (!d.open) { if (d.showModal) d.showModal(); else d.setAttribute("open", ""); } };
@@ -11999,6 +12987,7 @@ function tabSetup() {
   document.getElementById("tabAlertsBtn").onclick = tabOpenAlerts;
   document.getElementById("tabAlertList").addEventListener("change", tabAlertToggle);
   document.getElementById("tabAlertsCopy").onclick = tabCopyPcAlerts;
+  document.getElementById("tabCmdsBtn").onclick = tabOpenCmds;
   document.getElementById("tabSignOut").onclick = tabSignOut;
   document.getElementById("tabSheetActs").addEventListener("click", e => {
     const b = e.target.closest("[data-act]"); if (!b) return;
@@ -12021,7 +13010,7 @@ function tabSetup() {
   // before the page's own handlers (a name's click copies it, which means nothing on a tablet)
   document.addEventListener("click", tabRowTap, true);
   const hint = document.querySelector("#mapView .hint");   // the galaxy map by touch
-  if (hint) hint.textContent = "One finger rotates · two fingers move · pinch to zoom · tap a system for its card (🎯 Target when auto-target works here, Copy name). " +
+  if (hint) hint.textContent = "One finger rotates · two fingers move · pinch to zoom · tap a system for its card (Target when auto-target works here, Copy name). " +
     "The grid is the galactic plane through your position; stalks drop each system onto it.";
   tabDrawNav(); tabDrawCaption(); tabDrawAsk();
 }
@@ -12046,10 +13035,12 @@ function tabTheme(name) {
   if (app && typeof app.setTheme === "function") { try { app.setTheme(t); } catch {} }
 }
 function tabDim(on) { document.documentElement.classList.toggle("tb-dim", !!on); document.getElementById("tabDim").checked = !!on; }
-// the surface map's switch: to Now when it shows, back to where you were when it hides (only if you are still on Now
-// and chose no page meanwhile). A pinned system belongs to the page it was pinned in: Now shows where you are.
+// the switch to Now and back: when the surface map shows or a station has given you a pad (the author, 2026-10-15:
+// Kurbo26's idea; PAD 34 and its diagram are on Now), back to where you were once both are over (docked, cancelled,
+// the map hidden), only if you are still on Now and chose no page meanwhile. A pinned system belongs to the page it was
+// pinned in: Now shows where you are.
 function tabAutoView() {
-  const shown = surfaceShows(data.surface);
+  const shown = surfaceShows(data.surface) || !!(data.docking && data.docking.pad != null);
   if (shown && !TB.mapWas) {
     TB.beforeMap = view !== "now" ? view : null;
     if (view !== "now") { pinnedSystem = null; view = "now"; saveView(); }
@@ -12161,7 +13152,7 @@ function tabOpenRow(table, tr) {
     (id ? `<button type="button" class="tb-btn" data-act="here" data-id="${esc(id)}">Show in Here</button>` : "") +
     (bm ? `<button type="button" class="tb-btn" data-act="bm" data-id="${esc(bm.dataset.bm)}" data-name="${esc(bm.dataset.name || name)}">Bookmark…</button>` : "") +
     (aim && data && data.game_pc !== false ? `<button type="button" class="tb-btn" data-act="aim" data-route="${esc(aim.dataset.route)}"` +
-      ["index", "aimid"].filter(k => aim.dataset[k] != null).map(k => ` data-${k}="${esc(aim.dataset[k])}"`).join("") + `>🎯 Target</button>` : "");
+      ["index", "aimid"].filter(k => aim.dataset[k] != null).map(k => ` data-${k}="${esc(aim.dataset[k])}"`).join("") + `>${mk("destination")}Target</button>` : "");
   tabShow(document.getElementById("tabSheet"));
 }
 // ---- the settings sheet: the theme, dim, this screen's size (CSS px), the app's version, sign out, and the app's own
@@ -12192,6 +13183,7 @@ function tabSetAudio(on) {
 // Settings table (alertSpeak / alertSound, in this tablet's own storage; until changed here they come from the PC's
 // saved defaults, then Outrider's), as big toggles with a short name per alert
 const TAB_ALERT_NAMES = {discovery: "Targeting a system", arrival: "Arriving somewhere new", game: "Game start and quit",
+  docking: "Docking pad and refusals",
   exo: "Exomastery route", riches: "Road to Riches, worlds, sweeps", trade: "Trade route",
   jump: "FSD charging", honk: "Auto honk", brief: "Arrival briefing", fss: "FSS finished", mapped: "Planet mapped",
   leaving: "Leaving work behind", fuel: "Fuel", scoop: "Tank full", scoopstop: "Scooping stopped early",
@@ -12213,6 +13205,12 @@ function tabOpenAlerts() {
   tabClose(document.getElementById("tabSettings"));
   tabDrawAlerts();
   tabShow(document.getElementById("tabAlerts"));
+}
+// the voice commands (the same list as Settings → Voice's), in a big sheet of their own
+function tabOpenCmds() {
+  tabClose(document.getElementById("tabSettings"));
+  tabShow(document.getElementById("tabCmds"));
+  return drawVoiceCmds(document.getElementById("tabCmdList"));
 }
 function tabAlertToggle(e) {
   const el = e.target, k = el.dataset.tspeak || el.dataset.tsound;

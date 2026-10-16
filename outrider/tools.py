@@ -10,6 +10,7 @@ lookup may fill Spansh's cache, as the page's own reads do), never a POST route 
 auto honk, auto-target, Highway plot, bookmark or hush): `guarded()` refuses anything else before it is asked.
 Answers are trimmed to what answers the question, lists capped at max_rows with how many were left out.
 """
+import math
 import re
 import urllib.parse
 
@@ -137,6 +138,18 @@ def _sys_brief(x):
     return {k: v for k, v in out.items() if v is not None}
 
 
+def _from_you(p):
+    """Nearby's rows with `distance` from the commander, and the system the list is around when it is not them (the
+    page's Around, near_around: its rows' own distance is from there); rows with no position are left out then."""
+    xs, a, pos = p.get("systems") or [], p.get("near_around") or {}, p.get("position") or {}
+    if a.get("around", "here") == "here" or a.get("why") or a.get("x") is None:
+        return xs, None
+    if pos.get("x") is None:
+        return [], a.get("name")
+    here = (pos["x"], pos["y"], pos["z"])
+    return [dict(x, distance=round(math.dist(x["xyz"], here), 2)) for x in xs if x.get("xyz")], a.get("name")
+
+
 @tool("nearby_systems", "Systems known around the commander within the page's radius, nearest first (or by value), "
       "with distance, main star and whether it can be scooped, bodies known, value and biology potential.",
       {"sort": {"type": "string", "enum": ["distance", "value"], "description": "nearest first (default) or most valuable first"},
@@ -144,11 +157,15 @@ def _sys_brief(x):
 async def nearby_systems(get, args, rows):
     p = await get("/api/nearby")
     here = (p.get("position") or {}).get("id")
-    xs = [x for x in p.get("systems") or [] if x.get("id") != here and x.get("source") != "route"]
+    xs, around = _from_you(p)
+    xs = [x for x in xs if x.get("id") != here and x.get("source") != "route"]
     if args.get("unvisited_only"):
         xs = [x for x in xs if not x.get("visited")]
     xs.sort(key=(lambda x: -(x.get("value_max") or 0)) if args.get("sort") == "value" else (lambda x: x.get("distance") or 0))
-    return {"radius_ly": p.get("radius"), "complete_to_ly": p.get("sphere_cut"), **capped(map(_sys_brief, xs), rows, "systems")}
+    # the page's Nearby set around another system: its sphere is there, the distances are still from the commander
+    where = {"list_around": around, "distance_from": "the commander"} if around else {}
+    return {"radius_ly": p.get("radius"), "complete_to_ly": p.get("sphere_cut"), **where,
+            **capped(map(_sys_brief, xs), rows, "systems")}
 
 
 @tool("nearest_unvisited", "The nearest system Spansh or EDSM know that the commander has never visited (any unvisited "
@@ -156,7 +173,11 @@ async def nearby_systems(get, args, rows):
 async def nearest_unvisited(get, args, rows):
     p = await get("/api/nearby")
     here = (p.get("position") or {}).get("id")
-    xs = sorted((x for x in p.get("systems") or [] if x.get("id") != here and not x.get("visited") and x.get("source") != "route"),
+    xs, around = _from_you(p)
+    if around:   # the list is around another system: it says nothing of the stars around the commander
+        return {"nearest": None, "note": f"Nearby is set around {around}, not around you: set its Around back to you "
+                                         "to find the nearest unvisited system."}
+    xs = sorted((x for x in xs if x.get("id") != here and not x.get("visited") and x.get("source") != "route"),
                 key=lambda x: x.get("distance") or 0)
     cut = p.get("sphere_cut")
     if not xs or (cut is not None and xs[0].get("distance", 0) > cut):

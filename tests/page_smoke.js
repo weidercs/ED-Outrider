@@ -72,6 +72,57 @@ const releasePayloads = async () => {
       data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: []});`);
     return () => dom.window.eval(`(() => { const k = __aimKeep.pop(); data.game_pc = k.pc; data.autotarget = k.at; })()`);
   };
+  // The game's galaxy-map markers (#13: page.js mk(), empty spans page.css draws) read into an element's text as
+  // [symbol], so a check comparing a line's words sees each marker where it stands (and that no 🎯 is left); the
+  // page's window has it too, for checks inside w.eval
+  const markText = el => { const c = el.cloneNode(true);
+    c.querySelectorAll(".mk").forEach(m => m.replaceWith(`[${[...m.classList].find(k => k.startsWith("mk-")).slice(3)}]`));
+    return c.textContent; };
+  dom.window.markText = markText;
+  // The CMDR tab's Earnings (GET api/commander/earnings, outrider/earnings.py's shape), made up: five months of all
+  // time (one empty), a carto sale, a mining one (20 t mined of 30 sold), a bio one at a carrier with no ship known; the
+  // period's own label per answer; and a database with no sale at all. Used by the desktop block and the tablet's.
+  const EARN = (() => {
+    const all = {period: {kind: "all", label: "All time", year: null, month: null},
+      totals: {carto: {base: 6000000, bonus: 1000000, total: 7000000, sales: 3, systems: 40}, bio: {base: 6000000, bonus: 4000000, total: 10000000, sales: 2, species: 6},
+               mining: {total: 1500000, tons: 60, sales: 2}, total: 18500000, sales: 7},
+      months: [{month: "2025-11", carto: 4000000, bio: 0, mining: 0}, {month: "2025-12", carto: 0, bio: 0, mining: 0},
+               {month: "2026-01", carto: 1000000, bio: 2000000, mining: 500000}, {month: "2026-02", carto: 0, bio: 8000000, mining: 0},
+               {month: "2026-03", carto: 2000000, bio: 0, mining: 1000000}],
+      years: [2025, 2026],
+      sales: [{ts: "2026-03-02T10:00:00Z", kind: "carto", station: "Sample Port", station_type: "Coriolis", market_id: 1,
+               ship: {id: 7, name: "Sample Ship", type: "krait_light", type_name: null}, what: {systems: 12}, base: 1500000, bonus: 500000, total: 2000000},
+              {ts: "2026-03-01T09:00:00Z", kind: "mining", station: "Sample Port", station_type: "Coriolis", market_id: 1,
+               ship: {id: 9, name: null, type: "type9", type_name: "Type-9 Heavy"}, what: {commodity: "Platinum", tons: 20, of: 30}, base: null, bonus: null, total: 1000000},
+              {ts: "2026-02-10T12:30:00Z", kind: "bio", station: "X1X-X1X", station_type: "FleetCarrier", market_id: 2, ship: null, what: {species: 4},
+               base: 4000000, bonus: 4000000, total: 8000000}],
+      more: 4,
+      species: [{name: "Stratum Tectonicas", count: 2, value: 3000000, bonus: 3000000, total: 6000000}],
+      stations: [{name: "X1X-X1X", type: "FleetCarrier", sales: 1, total: 8000000}, {name: "Sample Port", type: "Coriolis", sales: 2, total: 3000000}],
+      ships: [{id: 7, name: "Sample Ship", type: "krait_light", type_name: null, jumps: 120, ly: 5432.6, bodies: 300, species: 5, earnings: 9000000, days: 6}],
+      mining: {earned: 1500000, tons: 60, sales: 2, commodities: [{name: "Platinum", refined: 40, refined_srv: 5, sold: 60, earned: 1500000, per_ton: 25000}],
+               stations: [{name: "Sample Port", type: "Coriolis", sales: 2, tons: 60, earned: 1500000, per_ton: 25000}],
+               best: [{ts: "2026-03-01T09:00:00Z", commodity: "Platinum", tons: 20, earned: 1000000, per_ton: 50000, station: "Sample Port"}],
+               own_carrier: {sales: 1, tons: 10, total: 300000}},
+      common: {stars: [{class: "K", name: "K (Yellow-Orange) Star", count: 9}], bodies: [{type: "High metal content body", count: 12}],
+               species: [{name: "Bacterium Aurasus", count: 3}]},
+      estimates: {label: "estimate", top_systems: [{name: "Smoke Sys", id: 1, value: 25000000, bodies: 9, sold: "2026-03-02T10:00:00Z"}], systems: 40,
+                  lost: {deaths: 2, ships: 1, value: 12000000, carto: 9000000, bio: 3000000}},
+      notes: ["Exact: what each sale paid, as the journal says.", "Months are UTC, as the journal's times."]};
+    const at = period => Object.assign({}, all, {period});
+    const none = {sales: 0, tons: 0, total: 0};
+    // 2026: a hired NPC crew member took 630k of the cartography (TotalEarnings under BaseValue + Bonus)
+    const year = Object.assign(at({kind: "year", label: "2026", year: 2026, month: null}), {totals: Object.assign({}, all.totals,
+      {carto: Object.assign({}, all.totals.carto, {crew: 630000, total: 6370000})})});
+    return {all, year, month: at({kind: "month", label: "February 2026", year: 2026, month: 2}),
+      y2025: at({kind: "year", label: "2025", year: 2025, month: null}),
+      empty: {period: all.period, totals: {carto: {base: 0, bonus: 0, total: 0, sales: 0, systems: 0}, bio: {base: 0, bonus: 0, total: 0, sales: 0, species: 0},
+                                           mining: {total: 0, tons: 0, sales: 0}, total: 0, sales: 0},
+              months: [], years: [], sales: [], more: 0, species: [], stations: [], ships: [],
+              mining: {earned: 0, tons: 0, sales: 0, commodities: [], stations: [], best: [], own_carrier: none},
+              common: {stars: [], bodies: [], species: []}, estimates: {label: "estimate", top_systems: [], systems: 0, lost: {deaths: 0, ships: 0, value: 0, carto: 0, bio: 0}},
+              notes: ["Exact: what each sale paid, as the journal says."]}};
+  })();
   for (let i = 0; i < 60 && !d.querySelector("#sub") ; i++) await sleep(500);
   await settle(3000);
   const ok = errors.length === 0 && /known within/.test(d.querySelector("#sub").textContent);
@@ -1396,6 +1447,8 @@ const releasePayloads = async () => {
     got.marks = [...d.querySelectorAll("#richRows td.richmark")].map(e => e.textContent).join("|");
     // 🎯 beside every route system but the one you are in (row 1 here)
     got.aims = [...d.querySelectorAll("#richRows [data-aim]")].map(b => b.dataset.route + ":" + b.dataset.index).join();
+    // #13: each the game's destination marker, no words and no 🎯, named by its aria-label ("target Rich A")
+    got.aimLook = [...d.querySelectorAll("#richRows [data-aim]")].map(b => markText(b) + "|" + b.getAttribute("aria-label")).join();
     got.head = d.getElementById("hwyHead").textContent.replace(/\s+/g, " ");
     got.formFolded = !d.getElementById("hwyPlot").open;
     // the plotter switch: Road to Riches' options, the neutron-only and exact-only ones hidden, To optional
@@ -1462,7 +1515,7 @@ const releasePayloads = async () => {
       elwForm: ["true,true", "true,true,true,false,false,true,true", "optional: where to end", "radius,max_results,max_distance,avoid_thargoids,loop"],
       awAsking: "Asking Spansh for an ammonia world route from Rich B…",
       exoRows: "✓ Frutexa Flammasis 10.3M · Tubus Rosarium 2.6M ✦", exoHead: true,
-      aims: "survey:0,survey:2", formFolded: true, form: ["true,true", "false,false", "false", "false", "optional: where to end"],
+      aims: "survey:0,survey:2", aimLook: "[destination]|target Rich A,[destination]|target Rich C", formFolded: true, form: ["true,true", "false,false", "false", "false", "optional: where to end"],
       plotBody: {to: "Far Away", range: 61.5, radius: 25, max_results: 25, max_distance: 50000, min_value: 100000,
                  use_mapping_value: true, avoid_thargoids: true, loop: false, kind: "riches"},
       both: ["hwy,rich*", true], picked: ["hwy*,rich", true, true, '"hwy"'], clearFirst: [0, "Click again to clear"],
@@ -1535,7 +1588,7 @@ const releasePayloads = async () => {
   {
     const aimBack = aimReady();   // its 🎯 need auto-target to work (canAim)
     const w = dom.window, d = w.document, before = errors.length, got = {};
-    const line = () => d.getElementById("hwyLine").textContent.replace(/\s+/g, " ").trim();
+    const line = () => markText(d.getElementById("hwyLine")).replace(/\s+/g, " ").trim();
     const keep = w.eval("[data.highway, data.survey, view]");
     w.localStorage.removeItem("hwyShow");
     w.eval(`view = "near"; data.highway = null; data.survey = {kind: "riches", id: "s1", created_ts: "2026-10-07T10:00:00Z", destination: "Rich Z",
@@ -1550,12 +1603,15 @@ const releasePayloads = async () => {
     got.both = line().slice(0, 2);   // the survey route: plotted after the Highway's
     w.localStorage.setItem("hwyShow", JSON.stringify("hwy")); w.eval("renderHwyLine()");
     got.picked = line().slice(0, 2);
-    w.eval(`data.survey.complete = true; data.highway = null; renderHwyLine()`);
+    // every view shows it, Plot Route's included: the header is the header (the author, 2026-10-15)
+    got.views = ["hist", "hwy", "mat", "cmdr", "log", "search"].map(v => { w.eval(`view = "${v}"; renderHwyLine()`); return line().slice(0, 2); }).join("");
+    w.eval(`view = "near"; data.survey.complete = true; data.highway = null; renderHwyLine()`);
     got.done = line();
     w.localStorage.removeItem("hwyShow");
     w.__keep = keep; w.eval("[data.highway, data.survey, view] = window.__keep; renderHwyLine()");
-    const want = {riches: "💰 Next: Rich C 🎯 target · 12.3 ly · 2 of 5 · 2 bodies to do here", exo: "🧬 Next: Rich C 🎯 target · 12.3 ly · 2 of 5 · 3 species to sample here",
-      both: "🧬", picked: "🛣", done: "🧬 Exomastery complete", aim: "survey:2"};
+    // the next stop after the game's waypoint marker, its target button the destination marker (#13)
+    const want = {riches: "💰 [waypoint]Next: Rich C [destination]target · 12.3 ly · 2 of 5 · 2 bodies to do here", exo: "🧬 [waypoint]Next: Rich C [destination]target · 12.3 ly · 2 of 5 · 3 species to sample here",
+      both: "🧬", picked: "🛣", views: "🛣🛣🛣🛣🛣🛣", done: "🧬 Exomastery complete", aim: "survey:2"};
     const bad = Object.keys(want).filter(k => !String(got[k]).startsWith(want[k]));
     const goodRL = !bad.length && errors.length === before;
     allOk = allOk && goodRL;
@@ -1576,6 +1632,60 @@ const releasePayloads = async () => {
     allOk = allOk && goodIG;
     console.log(goodIG ? "OK" : "FAIL", "| in-game route |", goodIG ? 'the game\'s route is "In-Game Route:"' : got, errors.slice(before));
   }
+  // a hop's chip claims "not reported to Spansh" (✦) only when Spansh was asked and has no record (known false): one
+  // never asked (null) claims nothing (Kurbo26, GitHub discussion #3: Sol said "not reported to Spansh"); the arrival
+  // briefing and a Nearby stand-in Spansh's answer did not cover read the same way
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => { const saved = data.route, el = document.getElementById("routeStrip");
+      data.route = {hops: [{name: "Sol", star_class: "G", scoopable: true, ly: 8.6, known: null},
+                           {name: "Drojo OP-V d3-36", star_class: "K", scoopable: true, ly: 70.2, known: false},
+                           {name: "Colonia", star_class: "F", scoopable: true, ly: 60.0, known: true}], ly: 138.8, next_scoop: 1, longest_dry: 0};
+      renderRoute(); const hops = [...el.querySelectorAll(".hop")].map(h => [h.textContent, h.title]);
+      data.route = saved; renderRoute();
+      const pill = document.createElement("div");
+      pill.innerHTML = statusPill({status: "unasked"});
+      return JSON.stringify({hops, brief: [arrivalBriefText({undiscovered: false, visits: 1, in_spansh: null}),
+                                           arrivalBriefText({undiscovered: false, visits: 1, in_spansh: false})],
+                             pill: [pill.textContent, /not known/.test(pill.innerHTML)]}); })()`));
+    const want = {hops: [["G", "Sol · G (scoopable) · 8.6 ly"], ["K✦", "Drojo OP-V d3-36 · K (scoopable) · 70.2 ly · not reported to Spansh"],
+                         ["F", "Colonia · F (scoopable) · 60 ly"]],
+                  brief: ["Known.", "Known, not in Spansh."], pill: ["not looked up…", true]};   // the long form and its short mark
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| route chips and Spansh |", good ? "✦ only for a hop Spansh was asked about, no claim for one never asked" : JSON.stringify(got), errors.slice(before));
+  }
+  // the In-Game Route's chips copy their system's name; ⛽ after the last hop the tank makes without scooping (the
+  // server's fuel_reach), ⛽✓ at the end when it makes them all, "⛽ N" past the chips shown, nothing without a figure
+  // (Kurbo26, GitHub discussion #3)
+  {
+    const w = dom.window, before = errors.length, copied = [], realCopy = w.copyText;
+    w.copyText = t => copied.push(t);
+    const got = JSON.parse(w.eval(`(() => { const saved = data.route, el = document.getElementById("routeStrip"), o = {};
+      const hops = k => Array.from({length: k}, (_, i) => ({name: "Hop " + i, star_class: "K", scoopable: true, ly: 50, known: true}));
+      const mark = () => { const f = el.querySelector(".freach"); if (!f) return null;
+        const nx = f.nextElementSibling; return [f.className, f.textContent, nx ? nx.dataset.name : null]; };
+      const show = (k, fr) => { data.route = {hops: hops(k), ly: 50 * k, next_scoop: 1, longest_dry: 0, fuel_reach: fr}; renderRoute(); return mark(); };
+      o.mid = show(3, {hops: 1, whole: false, spare: 9.2, reserve: 8}); el.querySelectorAll(".hop")[2].click();
+      o.midTip = el.querySelector(".freach").title;
+      o.none = show(3, {hops: 0, whole: false, spare: 6, reserve: 8}); o.whole = show(3, {hops: 3, whole: true, spare: 31.4, reserve: 8});
+      o.wholeTip = el.querySelector(".freach").title; o.unknown = show(3, null);
+      o.past = show(30, {hops: 26, whole: false, spare: 8.3, reserve: 8}); o.wholeLong = show(30, {hops: 30, whole: true, spare: 12, reserve: 8});
+      // the fuel model still learning this ship: said, not silent (Kurbo26)
+      o.learn = show(3, {learning: 3}); o.learnTip = el.querySelector(".freach").title;
+      data.route = saved; renderRoute(); return JSON.stringify(o); })()`));
+    w.copyText = realCopy;
+    got.copied = copied;
+    const want = {mid: ["freach", "⛽", "Hop 1"],
+                  midTip: "the fuel in your tank makes 1 jump of this route without scooping, keeping 8.0 t in reserve: scoop or refuel by here",
+                  none: ["freach", "⛽", "Hop 0"], whole: ["freach whole", "⛽✓", null],
+                  wholeTip: "the fuel in your tank makes the whole route without scooping, with 31.4 t to spare", unknown: null,
+                  past: ["freach past", "⛽ 26", null], wholeLong: ["freach whole", "⛽✓", null], learn: ["freach past unk", "⛽ ?", null],
+                  learnTip: "how far your fuel goes shows once Outrider has learned this ship's fuel use: 3 more jumps in it", copied: ["Hop 2"]};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| route chips copy, fuel reach |", good ? "a chip copies its name; ⛽ where the tank runs out, ⛽✓ when it makes the route" : JSON.stringify(got), errors.slice(before));
+  }
   // the game logged a plot but wrote no NavRoute.json (2026-10-14): the payload's minimal form, said in words, no chips
   {
     const w = dom.window, before = errors.length;
@@ -1589,6 +1699,160 @@ const releasePayloads = async () => {
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| in-game route, not written |", good ? "jumps left and the end in words, no stars" : JSON.stringify(got), errors.slice(before));
+  }
+  // #5: 📋 beside each system or station name field, shown only when GET api/clipboard says this device can; a tap
+  // fills the field from the game PC's clipboard as typing would: Plot Route's To only fills (no plot), Nearby's
+  // Focus/Lock name acts on it; a refusal is said and leaves the field alone
+  {
+    const w = dom.window, d = w.document, realFetch = w.fetch, before = errors.length, asked = [];
+    let can = false, answer = {text: "Smojooe GW-W c1-4"};
+    const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
+    w.fetch = (u, o) => {
+      const s = String(u), m = (o && o.method) || "GET";
+      if (s.startsWith("api/clipboard") || s.startsWith("api/find") || s.startsWith("api/nearby/around") || /plot/.test(s)) asked.push(m + " " + s.split("?")[0]);
+      if (s === "api/clipboard") return json({can, why: can ? null : "no"});
+      if (s === "api/clipboard/paste") return json(answer, answer.error ? 409 : 200);
+      if (s.startsWith("api/find")) return json({id: "2869708727553", name: "Smojooe GW-W c1-4"});
+      if (s === "api/nearby/around") return json({near_around: {around: "here"}});
+      return realFetch(u, o);
+    };
+    const tick = () => new Promise(r => setTimeout(r, 60)), o = {};
+    const na0 = w.eval("data.near_around"), to0 = d.getElementById("hwyTo").value, cp0 = d.body.classList.contains("canpaste");
+    await w.eval("checkPaste()"); o.off = d.body.classList.contains("canpaste");
+    can = true; await w.eval("checkPaste()"); o.on = d.body.classList.contains("canpaste");
+    o.fields = [...d.querySelectorAll(".pastebtn")].map(b => b.previousElementSibling.id || b.previousElementSibling.dataset.nf).join(" ");
+    o.types = [...d.querySelectorAll(".pastebtn")].every(b => b.type === "button");
+    d.getElementById("hwyTo").value = ""; asked.length = 0;
+    d.querySelector("#hwyTo + .pastebtn").click(); await tick();
+    o.to = [d.getElementById("hwyTo").value, asked.join(" | ")];
+    const nm = d.getElementById("nearAroundName"); nm.hidden = false; nm.value = ""; asked.length = 0;
+    d.querySelector("#nearAroundName + .pastebtn").click(); await tick(); await tick();
+    o.around = asked.join(" | ");
+    answer = {error: "the clipboard doesn't hold a system name (one short line)", code: "not_a_name"};
+    d.getElementById("hwyTo").value = "Colonia";
+    d.querySelector("#hwyTo + .pastebtn").click(); await tick();
+    o.refused = [d.getElementById("hwyTo").value, d.getElementById("toast").textContent];
+    w.fetch = realFetch; nm.value = ""; d.getElementById("hwyTo").value = to0;
+    w.eval(`data.near_around = ${JSON.stringify(na0 ?? null)}; NA.typing = false; render();`);
+    d.body.classList.toggle("canpaste", cp0);
+    const want = {off: false, on: true, fields: "nearAroundName hwyFrom hwyTo tradeStation findName sAroundName aroundName", types: true,
+                  to: ["Smojooe GW-W c1-4", "POST api/clipboard/paste"],
+                  around: "POST api/clipboard/paste | GET api/find | POST api/nearby/around",
+                  refused: ["Colonia", "the clipboard doesn't hold a system name (one short line)"]};
+    const good = JSON.stringify(o) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| paste buttons |", good ? "📋 only where this device can; fills To without plotting, Focus/Lock acts on it, a refusal said" : JSON.stringify(o), errors.slice(before));
+  }
+  // #3 docking: the pad in large letters on Now, said every time on its own row (Comms; notify off), a refusal's words
+  // said and shown; nothing for a "clear"
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, said = [], told = [], d0 = JSON.stringify({docking: data.docking ?? null}), m0 = data.moments, lib = speechLib;
+      const realSpeak = speak, realNotify = notify, flags = [speechOn, isSpeaker, alertSpeak.docking, lastMomentSeq];
+      data.docking = {pad: 34, station: "Jameson Memorial", type: "Orbis", ts: new Date().toISOString()}; renderNow();
+      const pad = document.querySelector("#nowBody .now-pad"); o.now = pad ? markText(pad) : null;
+      data.docking = {denied: "NoSpace", words: "no pad free for your ship: try again shortly", station: "Jameson Memorial", ts: new Date().toISOString()};
+      renderNow(); o.denied = (document.querySelector("#nowBody .now-card.alert") || {}).textContent || null;
+      data.docking = null; renderNow(); o.gone = !document.querySelector("#nowBody .now-pad");
+      // #12: where it is and the diagram (a starport from the slot, a carrier from above), your pad filled in
+      const sp = {kind: "starport", pad: 34, pads: Array.from({length: 45}, (_, i) => [Math.floor(i / 4) % 12, i % 3, 1, 1])};
+      data.docking = {pad: 34, station: "Jameson Memorial", where: "at the back · up on your right", map: sp, ts: new Date().toISOString()}; renderNow();
+      const svg = document.querySelector("#nowBody .now-pad svg.now-padmap");
+      o.map = [(document.querySelector("#nowBody .now-where") || {}).textContent || null, !!svg && svg.querySelectorAll("circle.pm-pad").length,
+               !!svg && svg.querySelectorAll("circle.pm-me").length, !!svg && !!svg.querySelector(".pm-green") && !!svg.querySelector(".pm-red")];
+      data.docking = {pad: 7, station: "G0X-85Z", where: "port side, toward the bow", layout: "fleet", map: {kind: "fleet", pad: 7,
+        pads: Array.from({length: 16}, (_, i) => [i, i, 10, 16]), outline: [[-26, 40], [-26, -34], [0, -46], [26, -34], [26, 40]]},
+        ts: new Date().toISOString()}; renderNow();
+      // the deck's outline as the server sends it (Kurbo26, 2026-10-15: pads 7 and 8 poked out of the old one), the bow's
+      // peak inside the picture
+      const deck = document.querySelector("#nowBody svg.now-padmap polygon.pm-out");
+      o.carrier = [[...document.querySelectorAll("#nowBody svg.now-padmap rect")].map(r => r.getAttribute("class")).filter(c => c === "pm-me").length,
+                   deck ? deck.getAttribute("points").split(" ").length : 0, deck ? Number(deck.getAttribute("points").split(" ")[2].split(",")[1]) : null];
+      // sized by its height, never its width (Kurbo26: a carrier overflowed a 1920x1200 tablet's Now)
+      o.size = (st => [st.height, st.width])(getComputedStyle(document.querySelector("#nowBody svg.now-padmap")));
+      // #13: a carrier's marker before its name, by the layout's kind (a squadron carrier's own)
+      const station = () => markText(document.querySelector("#nowBody .now-pad > span"));
+      o.marker = [station()];
+      data.docking = Object.assign({}, data.docking, {station: "ABCD", layout: "squadron", map: null}); renderNow(); o.marker.push(station());
+      data.docking = {pad: 2, station: "Outpost", where: null, map: null, ts: new Date().toISOString()}; renderNow();
+      o.plain = !document.querySelector("#nowBody svg.now-padmap") && !document.querySelector("#nowBody .now-where");
+      o.setting = (() => { const box = document.createElement("div");
+        box.innerHTML = overlayHtml(Object.assign({}, data.overlay || {}, {enabled: true, pad_diagram: false, panels: {}, layout: {}}));
+        const cb = box.querySelector('[data-ov="pad_diagram"]'); return !!cb && !cb.checked; })();
+      speechLib = {styles: {business: "B"}, lines: {docking_granted: {business: ["Pad {pad}."]}, docking_denied: {business: ["Denied: {reason}."]}}};
+      speak = (t, opt) => said.push([opt && opt.log && opt.log.key, t]); notify = (kind, title, body) => { told.push([kind, title, body]); return true; };
+      speechOn = true; isSpeaker = true; alertSpeak.docking = true;
+      const now = new Date().toISOString();
+      data.moments = [{seq: lastMomentSeq + 1, ts: now, kind: "docking", what: "granted", pad: 7, station: "G0X-85Z", station_type: "FleetCarrier",
+                       where: "port side, toward the bow", say_where: "Port side, toward the bow."},
+                      {seq: lastMomentSeq + 2, ts: now, kind: "docking", what: "denied", reason: "TooLarge", words: "your ship is too big for this station's pads", station: "Outpost"},
+                      {seq: lastMomentSeq + 3, ts: now, kind: "docking", what: "clear"}];
+      onData();
+      o.said = said.map(x => x[1]);
+      o.row = ALERTS.some(a => a[0] === "docking") && alertCfgBase().docking === false && alertSpeakBase().docking === true &&
+        !!ALERT_SHORT.docking && !!TAB_ALERT_NAMES.docking && SPEECH_SYS_BOUND.has("docking") && speechPrio("docking") === 1 &&
+        !!document.querySelector('#alertOpts [data-aspeak="docking"]') && !!LINE_SAMPLES.docking_granted && !!LINE_SAMPLES.docking_denied &&
+        JSON.stringify(ROW_KEYS.docking) === JSON.stringify(["docking_granted", "docking_denied"]);
+      speak = realSpeak; notify = realNotify; speechLib = lib;
+      [speechOn, isSpeaker, alertSpeak.docking] = flags; lastMomentSeq = flags[3];
+      data.docking = JSON.parse(d0).docking; data.moments = m0; renderNow();
+      return JSON.stringify(o); })()`));
+    const want = {now: "PAD 34Jameson Memorial", denied: "🛬 Docking denied at Jameson Memorial: no pad free for your ship: try again shortly",
+                  gone: true, map: ["at the back · up on your right", 44, 1, true], carrier: [1, 5, 2.6], size: ["245.76px", "auto"], marker: ["[fleet-carrier]G0X-85Z", "[squadron-carrier]ABCD"],
+                  plain: true, setting: true,
+                  said: ["Pad 7. Port side, toward the bow.", "Denied: your ship is too big for this station's pads."], row: true};
+    const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| docking |", good ? "PAD 34 on Now, the pad and a refusal said on their own row, a clear quiet" : JSON.stringify(got), errors.slice(before));
+  }
+  // 🛣 beside the carrier's 🎯 (the author, 2026-10-14): an exact route there at once, from 250 ly away only; a Highway
+  // route you follow is replaced only after Replace; the tile says it is plotting; a failed plot's reason is a toast
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, realFetch = w.fetch, before = errors.length, posted = [];
+    let plotting = {state: "running", plotter: "exact", to: "Smojooe AR-E b25-8"};
+    const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), {status, headers: {"Content-Type": "application/json"}}));
+    w.fetch = (u, o) => {
+      const s = String(u);
+      if (s === "api/highway/plot") { posted.push(JSON.parse(o.body)); return json({ok: true, plotting}, 202); }
+      if (s === "api/highway") return json({route: null, plotting, fleet: [], defaults: {}});
+      return realFetch(u, o);
+    };
+    const tick = () => new Promise(r => setTimeout(r, 60)), o = {};
+    const c0 = w.eval("JSON.stringify({c: data.carrier ?? null, h: data.highway ?? null})"), line = d.getElementById("carrierLine");
+    const show = (dist, hw) => w.eval(`data.carrier = Object.assign({}, data.carrier || {name: "OUT OF THE BLUE", callsign: "G0X-85Z"},
+      {system: "Smojooe AR-E b25-8", distance: ${dist}, here: false, aboard: false, decommission: null}); data.highway = ${JSON.stringify(hw)};
+      CP.ask = false; CP.to = null; H.data = null; renderCarrier();`);
+    show(200, null); o.near = !!line.querySelector(".cpbtn");
+    show(2111.4, null); o.far = !!line.querySelector(".cpbtn");
+    line.querySelector(".cpbtn").click(); await tick(); await tick();
+    o.sent = posted.map(b => b.plotter + " " + b.to).join("|");
+    o.wait = !!line.querySelector(".cpwait") && !line.querySelector(".cpbtn");
+    plotting = {state: "failed", plotter: "exact", to: "Smojooe AR-E b25-8", error: "Spansh did not answer"};
+    await w.eval("loadHwy(true)"); await tick();
+    o.failed = d.getElementById("toast").textContent;
+    o.back = !!line.querySelector(".cpbtn");
+    posted.length = 0;
+    show(2111.4, {destination: "Colonia", complete: false});
+    line.querySelector(".cpbtn").click(); await tick();
+    o.ask = (line.querySelector(".cpask") || {}).textContent || null;
+    line.querySelector('[data-carrierplot="no"]').click(); await tick();
+    o.kept = [posted.length, !!line.querySelector(".cpbtn")];
+    line.querySelector(".cpbtn").click(); await tick();
+    plotting = {state: "running", plotter: "exact", to: "Smojooe AR-E b25-8"};
+    line.querySelector('[data-carrierplot="yes"]').click(); await tick(); await tick();
+    o.replaced = posted.length;
+    w.fetch = realFetch;
+    w.eval(`clearTimeout(H.poll); H.poll = null; H.data = null; CP.ask = false; CP.to = null;
+      { const x = JSON.parse(${JSON.stringify(c0)}); data.carrier = x.c; data.highway = x.h; } renderCarrier();`);
+    await releasePayloads();
+    const want = {near: false, far: true, sent: "exact Smojooe AR-E b25-8", wait: true,
+                  failed: "No route to Smojooe AR-E b25-8: Spansh did not answer", back: true,
+                  ask: "replace your route to Colonia? Replace Keep", kept: [0, true], replaced: 1};
+    const good = JSON.stringify(o) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| carrier route |", good ? "🛣 from 250 ly, an exact plot, ask before replacing, plotting shown, a failure said" : JSON.stringify(o), errors.slice(before));
   }
   // Settings links to the project on GitHub, with the version running (desktop at the top; the tablet's sheet too)
   {
@@ -1623,6 +1887,11 @@ const releasePayloads = async () => {
       const pc0 = data.game_pc, inside = aim();
       data.carrier = Object.assign({}, data.carrier, {aboard: false, here: false, system: "Far Away", distance: 120.5});
       data.game_pc = true; renderCarrier(); const away = aim();
+      // #13: the fleet carrier's marker before its name (the tile and the folded tiles' line), the target button the
+      // game's destination marker, named by its aria-label (no words beside it)
+      const ab = document.querySelector('#carrierLine button[data-route="carrier"]');
+      o.look = [markText(document.querySelector("#carrierLine .val")), !!ab && !!ab.querySelector(".mk.mk-destination"), ab && ab.getAttribute("aria-label"),
+                ab && ab.textContent, markText(Object.assign(document.createElement("div"), {innerHTML: tilesLineHtml()})).includes("[fleet-carrier]carrier ")];
       data.game_pc = false; renderCarrier(); const noPc = aim();
       data.game_pc = pc0;
       o.aim = [inside, away, noPc];
@@ -1663,6 +1932,7 @@ const releasePayloads = async () => {
     if (!/UC ✓ · Vista ✓ · 668 t tritium/.test(got.without) || !got.tritGone) bad.push("tile without");
     if (JSON.stringify(got.noTile) !== "[true,true]" || !got.tileBack) bad.push("no carrier tile");
     if (JSON.stringify(got.aim) !== "[0,1,0]") bad.push("carrier 🎯 " + JSON.stringify(got.aim));
+    if (JSON.stringify(got.look) !== JSON.stringify(["[fleet-carrier]Out Of The Blue", true, "target Far Away", "", true])) bad.push("carrier markers " + JSON.stringify(got.look));
     if (!/Decommissioning: scrapped (Oct 9|9 Oct) · 4\.85B cr back/.test(got.pending[0]) || !/aboard/.test(got.pending[0]) || !got.pending[1] || !got.pending[2]) bad.push("decommissioning");
     if (!/Out Of The Blue.*Decommissioned (Oct 9|9 Oct)/.test(got.gone[0]) || /aboard/.test(got.gone[0]) || !got.gone[1]) bad.push("decommissioned");
     if (JSON.stringify(got.noCarrier) !== "[false,false]") bad.push("no carrier cargo");
@@ -1699,7 +1969,7 @@ const releasePayloads = async () => {
         finance: Object.assign({}, data.carrier.finance, {balance: 40000000, weeks: 2.9, warn: true, ts: "2026-09-27T12:00:00Z"})});
       renderCarrier();
       o.amber = [...line().querySelectorAll(".warnc")].map(x => x.textContent).filter(t => /depot|balance/.test(t));   // not the tank's
-      o.asOf = line().textContent;
+      o.asOf = [line().textContent, (line().querySelector("#carrierFin") || {}).title || ""];
       // more than one top-up gives (the depot holds 1,000 t): covered only by topping up again on the way
       data.carrier = Object.assign({}, data.carrier, {trip: Object.assign({}, data.carrier.trip, {top_up: "on_the_way"})});
       renderCarrier();
@@ -1717,9 +1987,10 @@ const releasePayloads = async () => {
     if (!/\(432 ly jump ≈ 96 t; depot after ≈ 572 t\)/.test(got.trip)) bad.push("booked jump");
     if (JSON.stringify(got.red) !== JSON.stringify(["depot 668 t: 632 t short", "UC ✗ (hover: suspended)", "Redemption office ✗ (hover: suspended)"])) bad.push("red " + JSON.stringify(got.red));
     if (!/Vista ✓/.test(got.trip)) bad.push("vista");
-    if (got.fin[0] !== "balance 1.33B · ~96 weeks of upkeep" || got.fin[1] !== "" || !got.fin[2] || /as of/.test(got.trip)) bad.push("finance " + JSON.stringify(got.fin));
-    if (JSON.stringify(got.amber) !== JSON.stringify(["depot 668 t: 632 t short, enough after topping up", "balance 40.0M · ~2.9 weeks of upkeep"])) bad.push("amber " + JSON.stringify(got.amber));
-    if (!/\(as of (Sep 27|27 Sep)\)/.test(got.asOf)) bad.push("as of");
+    if (got.fin[0] !== "balance 1.33B · ~96 wks upkeep" || got.fin[1] !== "" || !got.fin[2] || /as of/.test(got.trip)) bad.push("finance " + JSON.stringify(got.fin));
+    if (JSON.stringify(got.amber) !== JSON.stringify(["depot 668 t: 632 t short, enough after topping up", "balance 40.0M · ~2.9 wks upkeep"])) bad.push("amber " + JSON.stringify(got.amber));
+    // "~N wks upkeep" only on the line (the author, 2026-10-14); how old the stats are only in its hover
+    if (/as of/.test(got.asOf[0]) || !/as of (Sep 27|27 Sep)/.test(got.asOf[1])) bad.push("as of " + JSON.stringify(got.asOf));
     if (JSON.stringify(got.onTheWay) !== JSON.stringify([["depot 668 t: 632 t short, enough if topped up on the way", true]])) bad.push("on the way " + JSON.stringify(got.onTheWay));
     if (!/G0X-85Z \(your carrier\) · Home · 1,200 ly.* · ≈ 3 carrier jumps to you/.test(got.sell)) bad.push("seller");
     const goodCT = !bad.length && errors.length === before;
@@ -1889,7 +2160,8 @@ const releasePayloads = async () => {
         firsts: 1, bodies_first: 2, mapped: 1, footfalls: 0, samples: 2, codex_new: 0, sold, died: deaths.length, lost: 0, deaths, systems: []});
       histData = {sessions: [sess("2026-10-02T14:00:00Z", [{ts: "2026-10-02T14:32:00Z", option: "rebuy", ship: true},
                                                           {ts: "2026-10-02T15:10:00Z", option: "recover", ship: false}], 52300000),
-                             sess("2026-10-01T14:00:00Z", [], 0)],
+                             Object.assign(sess("2026-10-01T14:00:00Z", [], 0), {systems: [{name: "Cj Sys", kind: "CarrierJump", ts: "2026-10-01T15:00:00Z"},
+                                                                                         {name: "Fsd Sys", kind: "FSDJump", ts: "2026-10-01T15:10:00Z"}]})],
                   all_time: {jumps: 6, ly: 80, max_sol: 100, sessions: 2, since: "2026-10-01T14:00:00Z", firsts: 2, bodies_first: 4, mapped: 2,
                              footfalls: 0, samples: 4, codex_new: 0, sold: 52300000, died: 2, lost: 1}, ledger: {trips: [], losses: []}};
       openSessions.clear(); openSessions.add("2026-10-01T14:00:00Z"); renderHistory();
@@ -1897,6 +2169,9 @@ const releasePayloads = async () => {
       o.heads = [...document.querySelectorAll("#histTable thead th")].map(t => t.textContent);
       o.cells = rows.map(r => r.cells.length);
       o.colspan = rows[2].cells[0].colSpan;
+      // #13: a carrier jump's system after the game's fleet carrier marker, which says what it is (role img)
+      const cj = rows[2].querySelector(".mk");
+      o.carrierJump = [markText(rows[2].cells[0]).replace(/\\s+/g, " "), cj && cj.getAttribute("role"), cj && cj.getAttribute("aria-label")];
       o.x = (rows[0].querySelector(".lost") || {}).title || null;
       o.xText = (rows[0].querySelector(".lost") || {}).textContent || null;
       o.none = !rows[1].querySelector(".lost");
@@ -1910,6 +2185,7 @@ const releasePayloads = async () => {
     if (JSON.stringify(got.cells) !== "[11,11,1]" || got.colspan !== 11) bad.push("cells");
     if (got.x !== "died 14:32: ship lost (rebuy)\ndied 15:10: the ship survived (recover)" || got.xText !== "✗2" || !got.none) bad.push("✗");
     if (JSON.stringify(got.sold) !== '["52.3M",""]') bad.push("sold");
+    if (JSON.stringify(got.carrierJump) !== JSON.stringify(["Cj Sys [fleet-carrier] 15:00Fsd Sys 15:10", "img", "a carrier jump"])) bad.push("carrier jump " + JSON.stringify(got.carrierJump));
     if (got.all[0] !== 11 || got.all[1] !== "52.3M" || got.all[2] !== "2 deaths, 1 ship lost") bad.push("all time");
     const goodS63 = !bad.length && errors.length === before;
     allOk = allOk && goodS63;
@@ -1943,7 +2219,12 @@ const releasePayloads = async () => {
     got.open = dlg.open;
     got.rows = [...d.querySelectorAll("#nearRows tr")].map(t => t.textContent.replace(/\s+/g, " ").trim());
     got.badge = !!d.querySelector("#nearRows .dssabadge");
+    // #13: each carrier row's name after the game's fleet carrier marker
+    got.marks = [...d.querySelectorAll("#nearRows tr")].map(t => markText(t.cells[0]).slice(0, 17));
     got.foot = d.getElementById("nearFoot").textContent;
+    // the Must have labels spaced apart ("shipyard" and "material trader" ran together)
+    const nn = w.getComputedStyle(d.getElementById("nearNeeds"));
+    if (nn.display !== "flex" || nn.gap !== "8px") throw new Error(`Nearest: Must have labels not spaced: ${nn.display} ${nn.gap}`);
     const uc = dlg.querySelector('[data-nneed="UC"]'); uc.checked = true; uc.dispatchEvent(new w.Event("change", {bubbles: true})); await sleep(60);
     got.stored = w.localStorage.getItem("nearest");
     d.querySelector('#nearRows [data-nplot="Smojooe CX-A c27-15"]').click(); await sleep(80);
@@ -1956,6 +2237,7 @@ const releasePayloads = async () => {
     if (!got.open || got.rows.length !== 3 || !/yours/.test(got.rows[0]) || !/aboard/.test(got.rows[0])) bad.push("rows");
     if (!/⚠ docking not reported/.test(got.rows[1]) || !/≈ 10 jumps/.test(got.rows[1]) || !got.badge || !/stationed until September 1, 2032/.test(got.rows[2])) bad.push("row details");
     if (!/Hidden: 6 reported more than 30 days ago/.test(got.foot) || !/101 carriers/.test(got.foot)) bad.push("foot");
+    if (JSON.stringify(got.marks) !== JSON.stringify(["[fleet-carrier]OU", "[fleet-carrier]JB", "[fleet-carrier][I"])) bad.push("carrier markers");
     const q = got.asked.filter(u => u.startsWith("api/nearest")).map(u => new URLSearchParams(u.split("?")[1]));
     if (q.length !== 2 || q[1].get("need") !== "UC" || !/"need":\["UC"\]/.test(got.stored || "")) bad.push("filter");
     if (got.to !== "Smojooe CX-A c27-15" || !got.closed || !got.asked.some(u => u.startsWith("api/highway/plot") && /Smojooe CX-A c27-15/.test(u))) bad.push("plot");
@@ -2762,7 +3044,7 @@ const releasePayloads = async () => {
   }
   // Overview's surface map: the same map and legend in the lower half of the system pane while the map is shown (the
   // strip's copy stands down there), sized to the box; an open body panel takes the spot and the map comes back when
-  // it is closed; hidden with the map off, the pane collapsed, or another system pinned into it
+  // it is closed; hidden with the map off or another system pinned into it
   {
     const w = dom.window, before = errors.length;
     const got = JSON.parse(w.eval(`(() => {
@@ -2772,7 +3054,7 @@ const releasePayloads = async () => {
       data.surface = {body: "ABC 1", system: "5", body_id: 3, lat: 0, lon: 0, heading: 0, alt: 0, radius: 1000000, show: true, down: true,
         alt_avg: false, rhino: false, ship: {lat: 0.01, lon: 0.01}, rigs: [], sites: [], locations: [], bio: []};
       store.set("surfaceCfg", {strip: true});
-      Object.assign(ovState, {layout: "side", collapsed: false}); view = "overview";
+      Object.assign(ovState, {layout: "side"}); view = "overview";
       const box = document.getElementById("ovMap"), hv = document.getElementById("hereView"), cv = document.getElementById("ovMapCanvas");
       const size = (wd, ht) => { Object.defineProperty(box, "clientWidth", {value: wd, configurable: true});
                                  Object.defineProperty(box, "clientHeight", {value: ht, configurable: true}); };
@@ -2802,7 +3084,6 @@ const releasePayloads = async () => {
       size(640, 380);
       selectedBody = "ABC 1"; render(); o.body = state();
       closeBody(); o.closed = state();
-      ovState.collapsed = true; render(); o.collapsed = state(); ovState.collapsed = false;
       data.surface = {...data.surface, show: false, down: undefined}; render(); o.off = state();
       data.surface = null; render(); o.none = state();
       view = "here"; data.surface = {body: "ABC 1", lat: 0, lon: 0, heading: 0, radius: 1000000, show: true, down: true, alt: 0, rigs: [], bio: []}; render(); o.hereView = state();
@@ -2819,7 +3100,7 @@ const releasePayloads = async () => {
       on: got.on.shown && got.on.mapon && got.on.inHere && !got.on.leaving && got.closed.leaving === false && got.body.leaving && !got.on.stack && got.on.S >= 160 && got.on.S <= 380 && got.on.legend && !got.on.strip,
       narrow: got.narrow.shown && got.narrow.stack && got.narrow.S <= 300 && got.narrow.S > 0,
       body: !got.body.shown && !got.body.mapon && got.body.strip, closed: got.closed.shown && got.closed.mapon,
-      off: !got.collapsed.shown && !got.off.shown && !got.off.mapon && !got.none.shown && !got.none.mapon,
+      off: !got.off.shown && !got.off.mapon && !got.none.shown && !got.none.mapon,
       hereView: !got.hereView.shown && !got.hereView.mapon && got.hereView.strip,
       reveal: got.revealOnce.length === 1 && got.revealOnce[0] === "ABC 1 start hereMain" && got.revealAgain === 2 &&
         // a short list: nothing on the plain page; in app mode the row's pane scrolls (never the window: no box given)
@@ -3383,7 +3664,7 @@ const releasePayloads = async () => {
       // Overview: the map in the system pane under the body table, Nearby its own pane, no inline window height
       data.surface = {body: "ABC 1", system: "5", body_id: 3, lat: 0, lon: 0, heading: 0, alt: 0, radius: 1000000, show: true, down: true,
         alt_avg: false, rhino: false, ship: null, rigs: [], sites: [], locations: [], bio: []};
-      Object.assign(ovState, {layout: "side", collapsed: false}); view = "overview"; render();
+      Object.assign(ovState, {layout: "side"}); view = "overview"; render();
       const hv = document.getElementById("hereView"), map = document.getElementById("ovMap"), near = document.getElementById("nearPane");
       o.ov = {map: !map.hidden && document.getElementById("ovHere").contains(map) && !near.contains(map), inline: hv.style.height,
               nearPane: document.getElementById("ovNear").contains(near) && cs(near).overflow, here: cs(document.getElementById("hereMain")).overflow};
@@ -3455,9 +3736,10 @@ const releasePayloads = async () => {
     await w.eval(`(async () => { pinnedSystem = null; hereKey = null; await loadHere(); })()`);
     const got = JSON.parse(w.eval(`(() => {
       const o = {};
-      o.pure = [compactLevel([500], 600, 0), compactLevel([700, 550], 600, 0), compactLevel([700, 650, 620], 600, 0),
+      o.pure = [compactLevel([500], 600, 0), compactLevel([700, 550], 600, 0), compactLevel([700, 650, 620, 610], 600, 0),
                 compactLevel([590, 500], 600, 1), compactLevel([570], 600, 1), compactLevel([700, 590, 400], 600, 2),
-                compactLevel([700, 570], 600, 2), compactLevel([700], 600, 0)];
+                compactLevel([700, 570], 600, 2), compactLevel([700], 600, 0), compactLevel([700, 650, 620], 600, 0),
+                compactLevel([700, 650, 590, 400], 600, 0)];
       const S = {planet: ["High metal content world", "Rocky Ice world", "Rocky ice body", "Metal-rich body", "Earth-like world", "Water world",
                           "Ammonia world", "Icy body", "Rocky body", "Class III gas giant", "Helium-rich gas giant", "Gas giant with water-based life"],
                  star: ["G (White-Yellow) Star", "M (Red dwarf) Star", "K (Yellow-Orange giant) Star", "A (Blue-White super giant) Star",
@@ -3483,12 +3765,12 @@ const releasePayloads = async () => {
       const p = nt.parentElement; let avail = 600;
       p.style.padding = "0px";
       Object.defineProperty(p, "clientWidth", {get: () => avail, configurable: true});
-      const natural = () => nt.classList.contains("compact2") ? 500 : nt.classList.contains("compact") ? 700 : 900;
+      const natural = () => nt.classList.contains("compact3") ? 400 : nt.classList.contains("compact2") ? 500 : nt.classList.contains("compact") ? 700 : 900;
       const wide = () => nt.style.width === "min-content" ? natural() : Math.max(avail, natural());
       Object.defineProperty(nt, "offsetWidth", {get: wide, configurable: true});
       Object.defineProperty(nt, "scrollWidth", {get: wide, configurable: true});
       nt.getClientRects = () => [1];
-      const lvl = () => nt.classList.contains("compact2") ? 2 : nt.classList.contains("compact") ? 1 : 0;
+      const lvl = () => nt.classList.contains("compact3") ? 3 : nt.classList.contains("compact2") ? 2 : nt.classList.contains("compact") ? 1 : 0;
       const step = a => { avail = a; fitTable(nt); return lvl(); };
       o.fit = [step(600), step(800), step(1000), step(910), step(890), step(910), step(990)];
       o.inline = nt.style.width;
@@ -3497,6 +3779,12 @@ const releasePayloads = async () => {
       const cell = nt.querySelector("tbody .lf"), disp = e => getComputedStyle(e).display;
       o.cssCompact = cell ? [disp(cell), disp(cell.nextElementSibling)] : null;
       o.c2 = disp(nt.querySelector("thead th.c2hide"));
+      // the author, 2026-10-15: Nearby drops Jumps and Known first (compact2), its status and notable columns still
+      // their own; only when that is not enough (compact3) do they go under the name and the bodies, on every row
+      const th = t => [...nt.querySelectorAll("thead th")].find(e => e.textContent.trim().startsWith(t));
+      const merged = () => [...nt.querySelectorAll("tbody td.name .sf3")].map(disp);
+      o.c3 = [step(550), disp(th("Status")), disp(th("Notable")), disp(th("Known")), merged().every(d => d === "none")];
+      o.c3.push(step(450), disp(th("Status")), disp(th("Notable")), merged().length > 0 && merged().every(d => d !== "none"));
       step(1000);
       o.cssFull = cell ? [disp(cell), disp(cell.nextElementSibling)] : null;
       delete p.clientWidth; delete nt.offsetWidth; delete nt.scrollWidth; delete nt.getClientRects; p.style.padding = "";
@@ -3506,7 +3794,7 @@ const releasePayloads = async () => {
       render();
       return JSON.stringify(o);
     })()`));
-    const want = {pure: [0, 1, 2, 1, 0, 2, 1, -1],
+    const want = {pure: [0, 1, 3, 1, 0, 2, 1, -1, -1, 2],
       short: {planet: ["HMC", "Rocky ice", "Rocky ice", "Metal-rich", "ELW", "WW", "AW", "Icy", "Rocky", "GG III", "He-rich GG", "GG water life"],
               star: ["G star", "M star", "K giant", "A supergiant", "WD DA", "Neutron", "BH", "T Tauri", "L star", "WNC"],
               atmosphere: ["CO₂", "Thin CO₂", "Hot thin SO₂", "Neon-rich", "none", "thin ammonia"],
@@ -3514,7 +3802,8 @@ const releasePayloads = async () => {
       heads: ["Unsold", "ls", "Star"], same: "Dist", nearSf: true,
       pill: `<span class="badge s-explored" title=""><span class="lf">fully scanned</span><span class="sf" title="fully scanned">✓</span></span>`,
       here: ["High metal content world", "High metal content world"], headSf: ["Tag", "Seen", "FSS", "DSS", "Lost", "Unsold"],
-      fit: [2, 1, 0, 0, 1, 1, 0], inline: "", cssCompact: ["none", "inline"], c2: "none", cssFull: ["inline", "none"], hidden: ""};
+      fit: [2, 1, 0, 0, 1, 1, 0], inline: "", cssCompact: ["none", "inline"], c2: "none",
+      c3: [2, "table-cell", "table-cell", "none", true, 3, "none", "none", true], cssFull: ["inline", "none"], hidden: ""};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodCT = !bad.length && errors.length === before;
     allOk = allOk && goodCT;
@@ -3668,14 +3957,14 @@ const releasePayloads = async () => {
     w.copyText = t => copied.push(t);
     const line = () => d.getElementById("hwyLine");
     w.eval(`data.highway = ${JSON.stringify(fx.summary)}; view = "overview"; render()`);
-    got.lineNext = line().textContent.replace(/\s+/g, " ").trim();
+    got.lineNext = markText(line()).replace(/\s+/g, " ").trim();
     line().querySelector(".copy").click();
     w.eval(`view = "map"; render()`);
-    got.lineOnMap = line().innerHTML;
+    got.lineOnMap = markText(line()).replace(/\s+/g, " ").trim();   // every tab now (the author, 2026-10-15)
     w.eval(`data.highway = ${JSON.stringify(hwyFixture({off: true}).summary)}; view = "near"; render()`);
-    got.lineOff = line().textContent.replace(/\s+/g, " ").trim();
+    got.lineOff = markText(line()).replace(/\s+/g, " ").trim();
     w.eval(`data.highway = ${JSON.stringify(hwyFixture({complete: true}).summary)}; view = "here"; render()`);
-    got.lineDone = line().textContent.replace(/\s+/g, " ").trim();
+    got.lineDone = markText(line()).replace(/\s+/g, " ").trim();
     line().click(); await sleep(300);
     got.opened = w.eval("view");
     w.eval(`data.highway = null; view = "overview"; render()`);
@@ -3688,8 +3977,8 @@ const releasePayloads = async () => {
       suggest: "Colonia|Col 285 Sector AA-A c1", suggestFrom: ["hwyFromNames", "Sol|Solati", "Colonia|Col 285 Sector AA-A c1"],
       clearFirst: [0, "Click again to clear"],
       cleared: ["api/highway/clear POST,api/highway GET", "No route yet.", true],
-      lineNext: "🛣 Next: Hwy Stop 38 🎯 target · 4.2 ly · 38 of 399 · refuel in 3 jumps", lineOnMap: "",
-      lineOff: "🛣 Off Route: Detour · nearest Hwy Stop 39 12.0 ly 🎯 target", lineDone: "🛣 Highway complete", opened: "hwy", lineGone: "",
+      lineNext: "🛣 [waypoint]Next: Hwy Stop 38 [destination]target · 4.2 ly · 38 of 399 · refuel in 3 jumps", lineOnMap: "🛣 [waypoint]Next: Hwy Stop 38 [destination]target · 4.2 ly · 38 of 399 · refuel in 3 jumps",
+      lineOff: "🛣 Off Route: Detour · nearest Hwy Stop 39 12.0 ly [destination]target", lineDone: "🛣 Highway complete", opened: "hwy", lineGone: "",
       copied: ["Hwy Stop 38"], exactRefuel: [true, true, false], neutronRefuel: [false, false, true],
       doneTo: [30, 35, 99, -1]};
     got.doneTo = JSON.parse(w.eval(`JSON.stringify([hwyDoneTo({at: 30, furthest: 35}, {complete: false}, 100),
@@ -4175,9 +4464,9 @@ const releasePayloads = async () => {
     w.eval(`hwyRun = null; data.autotarget = ${JSON.stringify(at)}; data.highway = ${JSON.stringify(fx.summary)}; view = "overview"; render()`);
     const aim = () => d.querySelector("#hwyLine [data-aim]");
     aim().click(); await sleep(150);
-    got.lineRun = [calls.join(), w.eval("view"), copied.length, aim().textContent, aim().disabled];
+    got.lineRun = [calls.join(), w.eval("view"), copied.length, markText(aim()), aim().disabled];
     w.eval(`data.autotarget = Object.assign({}, data.autotarget, {test: {seq: 7, kind: "next", state: "done", system: "Hwy Stop 38", why: null}}); render()`);
-    got.lineDone = [aim().textContent, aim().disabled];
+    got.lineDone = [markText(aim()), aim().disabled];
     // the box's button, refused in its words
     answer = () => json({error: "you are at the end of the route"}, 400);
     d.querySelector('[data-view="hwy"]').click(); await sleep(700);
@@ -4204,7 +4493,7 @@ const releasePayloads = async () => {
     got.welcome = w.eval(`welcomeText("3 days", false)`);
     w.fetch = realFetch; w.copyText = realCopy;
     w.eval(`hwyRun = null; data.autotarget = null; data.highway = null`);
-    const want = {lineRun: ["POST", "overview", 0, "🎯 in 5 s", true], lineDone: ["🎯 target", false],
+    const want = {lineRun: ["POST", "overview", 0, "[destination]in 5 s", true], lineDone: ["[destination]target", false],
       boxRefused: "cannot target: you are at the end of the route", retryRows: ["38"],
       retried: ["POST", 0, "click into the game: targeting Hwy Stop 38 in 5 s"], noRetry: [[], [], [], []],
       spoken: ["Highway: then Hwy Stop 38, 4.2 light-years, refuel in 3 jumps",
@@ -4517,7 +4806,7 @@ const releasePayloads = async () => {
     };
     const txt = id => d.getElementById(id).textContent.replace(/\s+/g, " ").trim();
     w.eval(`data.highway = ${JSON.stringify(fx.summary)}; view = "overview"; render()`);
-    got.strip = txt("hwyLine");
+    got.strip = markText(d.getElementById("hwyLine")).replace(/\s+/g, " ").trim();
     d.querySelector('[data-view="hwy"]').click(); await sleep(700);
     got.head = txt("hwyHead");
     const cons = d.getElementById("hwyCons"), ly = d.getElementById("hwyConsLy"), sel = d.getElementById("hwyShip");
@@ -4541,7 +4830,7 @@ const releasePayloads = async () => {
     got.plain = [cons.checked, ly.value, ly.disabled];
     w.fetch = realFetch;
     w.eval(`localStorage.removeItem("highway"); data.highway = null; H.shipSel = null; view = "overview"; render()`);
-    const want = {strip: "🛣 Next: Hwy Stop 38 🎯 target · 4.2 ly · 38 of 399 · refuel in 3 jumps · ⚠ too much fuel for the next jump: ≤ 36 t, you have 140 t",
+    const want = {strip: "🛣 [waypoint]Next: Hwy Stop 38 [destination]target · 4.2 ly · 38 of 399 · refuel in 3 jumps · ⚠ too much fuel for the next jump: ≤ 36 t, you have 140 t",
       off: [false, "5", true, ""], noteX4: "≈ 4 ly shorter jumps, about 16 ly on a ×4 neutron jump",
       noteX6: "≈ 4 ly shorter jumps, about 24 ly on a ×6 neutron jump",
       body: {plotter: "exact", to: "Colonia", ship_id: 3, cargo: 0, injections: true, exclude_secondary: false, supercharged: false, no_neutrons: false,
@@ -4749,6 +5038,13 @@ const releasePayloads = async () => {
       document.querySelector('#tabNav [data-view="hwy"]').click();
       on(); o.push([view, tag()]); off(); o.push([view, tag()]);
       on(); document.querySelector('#tabNav [data-view="bm"]').click(); off(); o.push([view, tag()]);
+      // a pad granted: to Now, back once docked (the author, 2026-10-15); a refusal does not switch
+      const dk0 = data.docking ?? null;
+      document.querySelector('#tabNav [data-view="hist"]').click();
+      data.docking = {denied: "NoSpace", words: "no pad free", station: "X", ts: new Date().toISOString()}; render(); o.push([view]);
+      data.docking = {pad: 7, station: "G0X-85Z", ts: new Date().toISOString()}; render(); o.push([view]);
+      data.docking = null; render(); o.push([view]);
+      data.docking = dk0; render();
       return JSON.stringify(o); })()`));
     // the link in words (linkState's states), and the pill drawn with them
     got.link = tw.eval(`(() => { const fr0 = data.freshness, d0 = disconnected, h0 = lastHeard; data.freshness = Object.assign({}, fr0, {live: true});
@@ -4779,6 +5075,19 @@ const releasePayloads = async () => {
       sh.querySelector('[data-act="here"]').click(); await settle(1500);
       got.sheetHere = [sh.hasAttribute("open"), tw.eval("view")];
     } else got.sheet = "no Nearby row";
+    // Nearby's Around (2026-10-14) on the tablet: the strip above the list, a row's sheet with From you (the server's
+    // rows carry their xyz)
+    got.tabAround = JSON.parse(tw.eval(`(() => {
+      const keep = {na: data.near_around, v: view}, p = data.position, o = [];
+      view = "near"; data.near_around = {around: "lock", name: "Smojooe GW-W c1-4", id: "9001", x: p.x + 30, y: p.y, z: p.z, from_you: 30, why: null};
+      render();
+      const strip = document.getElementById("nearStrip");
+      o.push(!strip.hidden && strip.textContent.includes("Around Smojooe GW-W c1-4 (locked)"));
+      tabOpenRow(document.getElementById("nearTable"), document.querySelector("#rows tr[data-id]"));
+      o.push([...document.querySelectorAll("#tabSheet dt")].map(x => x.textContent).includes("From you"));
+      tabClose(document.getElementById("tabSheet"));
+      data.near_around = keep.na; view = keep.v; render();
+      return JSON.stringify(o); })()`));
     // a search result (a ☆ and a name, no other link): its sheet still opens the system in Here (author, on the tablet)
     got.searchSheet = JSON.parse(tw.eval(`(() => {
       document.getElementById("sRows").innerHTML = '<tr><td class="bmcell"><span class="bm" data-bm="123456" data-name="Smoke Sys">☆</span></td>' +
@@ -4991,9 +5300,56 @@ const releasePayloads = async () => {
       tw.eval('tabClose(document.getElementById("tabSettings"))');
       got.tabletAudio = ta;
     }
+    // Voice commands… (in Settings, beside Play alerts here, shown with it off too): a big sheet of every command the
+    // server lists, grouped, each with its phrases; it scrolls
+    {
+      const api = await (await fetch(base + "api/ask/commands")).json();
+      td.getElementById("tabSetBtn").click(); await settle(300);
+      const vc = [!td.getElementById("tabCmdsBtn").closest("[hidden]")];
+      td.getElementById("tabCmdsBtn").click(); await settle(1500);
+      const sheet = td.getElementById("tabCmds"), list = td.getElementById("tabCmdList");
+      vc.push(sheet.hasAttribute("open"), td.getElementById("tabSettings").hasAttribute("open"),
+        list.querySelectorAll(".vcrow").length === api.groups.reduce((n, g) => n + g.commands.length, 0),
+        [...list.querySelectorAll(".vcgroup")].map(h => h.textContent).join("|") === api.groups.map(g => g.name).join("|"),
+        list.querySelector('[data-vc="hush"] .vcphr').textContent.includes("“be quiet”"),
+        list.querySelector('[data-vc="hush"] .vcnarrow').textContent.includes("“until the next jump”"),
+        tw.getComputedStyle(list).overflowY);
+      tw.eval('tabClose(document.getElementById("tabCmds"))');
+      got.voiceCmds = vc;
+    }
+    // the CMDR tab's Earnings on the tablet (batch C): the same sub-tab from the Records group, its picker above the pane,
+    // the chart and the tables drawn, the sub-tabs finger-sized (tablet.css)
+    got.tabEarn = await (async () => {
+      tw.__emAnswer = JSON.stringify(EARN.all);
+      tw.eval(`window.__emKeep = apiJson; apiJson = async (u, o) => String(u).startsWith("api/commander/earnings") ? JSON.parse(__emAnswer) : __emKeep(u, o);`);
+      td.querySelector('#tabNav [data-group="records"]').click();
+      td.querySelector('#tabNav [data-view="cmdr"]').click(); await settle(1500);
+      td.querySelector('[name=cmdrTab][value="earnings"]').click(); await settle(800);
+      const o = [tw.eval("view"), td.getElementById("cmEarnCtl").hidden, td.querySelectorAll("#cmdrBody g.embar").length, !!td.getElementById("cmEarnSales"),
+                 td.querySelectorAll("#cmdrBody .emfigs .cmfig").length, tw.getComputedStyle(td.querySelector("#cmdrTabs .seg label")).paddingTop];
+      tw.eval(`apiJson = __emKeep; CM.data = {}; CM.key = {}; setCmdrTab("profile");`);
+      return o;
+    })();
+    // Inventory's ship pictures on the tablet (2026-10-15): no hover here; a tap on the ship's name opens its card, a tap
+    // on it again closes it, a tap anywhere else closes it; the name shows it can be tapped
+    got.tabShip = await (async () => {
+      tw.eval(`window.__scKeep = apiJson; apiJson = async (u, o) => String(u) !== "api/commander/inventory" ? __scKeep(u, o) : {ships: {ts: "2026-10-12T09:01:00Z", ships: [
+        {id: 7, type: "mediumtransport01", name: "Long Haul", current: true, value: 1}, {id: 9, type: "new_hull_x", name: "Prototype", system: "Sol", value: 1}]},
+        modules: {modules: []}, locker: {kinds: []}, suits: []}; CM.data = {}; CM.key = {};`);
+      td.querySelector('[name=cmdrTab][value="inventory"]').click(); await settle(800);
+      const card = td.getElementById("shipCard"), name = td.querySelector("#cmdrBody tr[data-shipimg] .cmshipname");
+      const o = [td.querySelectorAll("#cmdrBody tr[data-shipimg]").length, tw.getComputedStyle(name).cursor];
+      name.click();
+      o.push(card.hidden ? null : [card.querySelector("img").getAttribute("src"), card.querySelector("img").alt, tw.getComputedStyle(card).pointerEvents]);
+      name.click(); o.push(card.hidden);
+      name.click(); td.getElementById("cmdrBody").querySelector("h3").click(); o.push(card.hidden);
+      [...td.querySelectorAll("#cmdrBody tr")].find(r => /Prototype/.test(r.textContent)).cells[0].querySelector("b").click(); o.push(card.hidden);
+      tw.eval(`apiJson = __scKeep; shipCardHide(); CM.data = {}; CM.key = {}; setCmdrTab("profile");`);
+      return o;
+    })();
     const want = {desk: [true, true, true, true], shell: [true, true, true, true, true], moved: [true, true, true], theme: "lcars", start: "now",
       quiet: [false, false, "never", false], status: [true, true], pages: [],
-      mapSwitch: [["now", true], ["hwy", false], ["bm", false]],
+      mapSwitch: [["now", true], ["hwy", false], ["bm", false], ["hist"], ["now"], ["hist"]],
       themes: [["elite", "babylon5", "lcars", "lcars"], ["elite", "babylon5", "lcars", "lcars"], ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark"]],
       bodies: [true, true, ["gas", "elw", "water", "ammonia", "ice", "ice", "metal", "metal", "rock", "gas"], true, null, null, "star", true, true, true, 2, true, true, true],
       schemArt: [true, true, 2, true, false, true, true, false],
@@ -5002,18 +5358,20 @@ const releasePayloads = async () => {
              "tb-rb nolink|no rail: docked|0", "tb-rb na|true|in supercruise|N/A"],
       serverRail: ["none", true],
       reload: [true, true, false, false, 0, false, 0, true, true, 1], hint: [true, false], searchSheet: "123456", popKeeps: true, link: ["linked", "unlinked · retrying", "unlinked · retrying"], pill: [true, "tb-link linked"],
-      banner: [true, true, true, 0], sheet: [true, true, true, true, true, true, true], sheetHere: [false, "here"],
+      banner: [true, true, true, 0], sheet: [true, true, true, true, true, true, true], sheetHere: [false, "here"], tabAround: [true, true],
       target: '{"countdown":0}', railEnter: ["Wheels", true, false], pinch: '{"dx":10,"dy":5,"scale":2,"x":15,"y":5}',
       settings: [true, true, "a browser (no app)", true], signOut: [true, false], emblem: [false, true, true, true, "false", false],
       railShown: [true, false, true, "false", true, false, false, "true"],
       appScreens: [true, false, [false, false, true], "ED Outrider for Android 1.2.0", ["voice"], false],
       tabletAudio: ["[false,false]", false, '[true,true,"always","true"]', false, [true, true, true, true, true], "[false,false]", ["A line here."], "🔇 Tap anywhere to let Outrider speak here",
-                    '[false,false,"false"]'], prefs: ["lcars", true, "true", null, "here"]};
+                    '[false,false,"false"]'], prefs: ["lcars", true, "true", null, "here"],
+      voiceCmds: [true, true, false, true, true, true, true, "auto"], tabEarn: ["cmdr", false, 5, true, 5, "8px"],
+      tabShip: [1, "pointer", ["static/ships/mediumtransport01.webp", "Lynx Highliner", "auto"], true, true, true]};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodT = !bad.length && !terr.length;
     allOk = allOk && goodT;
     console.log(goodT ? "OK" : "FAIL", "| tablet layout |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
-      : "shell shown, every page from its nav, silent, map switch to Now and back, link in words, banner, row sheet, no countdown, Enter saves the rail, pinch, settings, the app's screens, Play alerts here", terr);
+      : "shell shown, every page from its nav, silent, map switch to Now and back, link in words, banner, row sheet, no countdown, Enter saves the rail, pinch, settings, the app's screens, Play alerts here, Voice commands…", terr);
     tw.close();
     await releasePayloads();
   }
@@ -5107,10 +5465,19 @@ const releasePayloads = async () => {
       const pt = poiText([{kind: "titan", name: "Titan Cocijo"}, {kind: "tourist", name: "A"}, {kind: "tourist", name: "B"}, {kind: "listening_post", name: "Listening Post"}]);
       return JSON.stringify([s.textContent, s.title, head.length === 1 && /^Discoveries/.test(head[0]), rows,
                              st.textContent, nb.firstChild.textContent, nb.firstChild.title, pt]); })()`));
+    // #13: a Titan has the game's Titan marker in place of 📍 (Here's and Nearby's tag, Now's line); the other signals
+    // keep 📍; the tag still says what it holds in its title
+    got.titan = JSON.parse(await w.eval(`(() => {
+      const tag = list => { const d = document.createElement("div"); d.innerHTML = poiTag(list); return [markText(d.firstChild), d.firstChild.title]; };
+      const line = list => { const d = document.createElement("div"); d.innerHTML = poiLineHtml(list); return markText(d); };
+      const ti = {kind: "titan", name: "Titan Cocijo"}, lp = {kind: "listening_post", name: "Listening Post"};
+      return JSON.stringify([tag([ti]), tag([ti, lp]), tag([lp]), line([ti, lp, {kind: "tourist", name: "A"}]), line([lp]), line([ti])]); })()`));
     const want = {what: ["three notable stellar phenomena, all in rings", "a notable stellar phenomenon, in a cloud",
                          "three notable stellar phenomena: two in rings and one in a cloud", ""], tag: "🌀 3", now: true, nowOne: true, allDone: true, said: true,
                   rare: ["⭐ 2", "rare: a black hole (main star), a Wolf-Rayet star at B", true, true,
-                         "🏛❔", "🏛👾", "🏛👾 Guardian sites, Thargoid sites on 10 b", "Titan Cocijo · a listening post · 2 tourist beacons"]};
+                         "🏛❔", "🏛👾", "🏛👾 Guardian sites, Thargoid sites on 10 b", "Titan Cocijo · a listening post · 2 tourist beacons"],
+                  titan: [["[titan]", "Titan Cocijo"], ["[titan]📍 2", "Titan Cocijo · a listening post"], ["📍", "a listening post"],
+                          "[titan]Titan Cocijo · 📍 a listening post · a tourist beacon", "📍 A listening post", "[titan]Titan Cocijo"]};
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && ok;
     console.log(ok ? "OK" : "FAIL", "| stellar phenomena |", ok ? "counted, in Now and the 🌀, said from its lines" : JSON.stringify(got), errors.slice(before));
@@ -5127,12 +5494,35 @@ const releasePayloads = async () => {
          json(/layout$/.test(String(u)) ? {layout: w.eval("data.overlay.layout")}
               : Object.assign({}, w.eval("data.overlay"), JSON.parse(o.body), ovNote ? {note: ovNote} : {}))) : real(u, o);
     const saved = w.eval("JSON.stringify(data.overlay || null)");
-    w.eval(`data.overlay = {enabled: true, theme: "elite", text_size: "normal", panels: {system: true, body: false, radar: true},
-      analysis_only: ["bio"], hide_docked: ["system", "body", "now", "bio"], window: false, test: 0, arrange: 0, runner: {state: "no_qt", why: null}, layout: {system: {corner: "nw", x: 0.02, y: 0.16, scale: 1, bg: 0.65, alpha: 1},
-      body: {corner: "ne", x: 0.02, y: 0.16, scale: 1.2, bg: 0.5, alpha: 0.8}, radar: {corner: "se", x: 0.02, y: 0.1, scale: 1, bg: 0.5, alpha: 1}}};
+    // the 4K TV report (2026-10-14): all panels' size, each panel's text size, and the text figures from the game
+    // window's height (text_px: the radar has none here, as with no figure)
+    w.eval(`data.overlay = {enabled: true, theme: "elite", text_size: "normal", panel_scale: 60, panels: {system: true, body: false, radar: true},
+      analysis_only: ["bio"], hide_docked: ["system", "body", "now", "bio"], window: false, test: 0, arrange: 0, runner: {state: "no_qt", why: null}, layout: {system: {corner: "nw", x: 0.02, y: 0.16, scale: 1, bg: 0.65, alpha: 1, text: "large"},
+      body: {corner: "ne", x: 0.02, y: 0.16, scale: 0.2, bg: 0.5, alpha: 0.8, text: ""}, radar: {corner: "se", x: 0.02, y: 0.1, scale: 1, bg: 0.5, alpha: 1}},
+      win_h: 2160, min_text_px: 9, text_px: {system: {px: 26, held: false}, body: {px: 9, held: true}}};
       overlayDrawn = ""; renderOverlay();`);
     const d = w.document, box = d.getElementById("overlayBox");
+    const cell = id => box.querySelector(`[data-ovlay="${id}"][data-k="scale"]`).closest("td");
+    const ctl = box.querySelector(".ovctl");
     const got = {rows: box.querySelectorAll("table.ovlay tbody tr").length, body: box.querySelector('[data-ovlay="body"][data-k="scale"]').value,
+                 // each Size % cell: what its text comes to, held at the floor said; none without a figure; down to 20 %
+                 figures: ["system", "body", "radar"].map(id => cell(id).querySelector(".ovpx") ? cell(id).querySelector(".ovpx").textContent : "").join("|"),
+                 heldTip: /your screen is too small to go lower/.test(cell("body").querySelector(".ovpx").title),
+                 heldLine: (box.querySelector(".ovheld") || {}).textContent || "",
+                 sizeMin: box.querySelector('[data-ovlay="radar"][data-k="scale"]').min,
+                 // 3b: the Text column, each panel's own size or as all panels
+                 text: ["system", "body", "radar"].map(id => { const t = box.querySelector(`[data-ovlay="${id}"][data-k="text"]`);
+                   return t.value + ":" + t.selectedOptions[0].textContent; }).join(" "),
+                 // 3c: one control row: Theme, Text Size, Scale; the two buttons on a line of their own under it, at its
+                 // left; the Scale box wide enough for "100" beside its spinner
+                 row: !!ctl && ["[data-ov=theme]", "[data-ov=text_size]", "[data-ov=panel_scale]", ".ovbtns [data-ovact=test]", ".ovbtns [data-ovact=arrange]"]
+                   .every(q => ctl.querySelector(q)) && (b => !!b && /^All Panels:$/.test(b.textContent))(ctl.querySelector("b")) &&
+                   /Theme/.test(ctl.textContent) && /Text Size/.test(ctl.textContent) && /Scale/.test(ctl.textContent) &&
+                   ctl.querySelector("[data-ov=panel_scale]").value === "60" && !box.querySelector(".mod:not(.ovctl) [data-ovact]"),
+                 rowCss: (s => s.flexBasis + " " + s.marginLeft)(w.getComputedStyle(ctl.querySelector(".ovbtns"))) + " " +
+                   w.getComputedStyle(ctl.querySelector("[data-ov=panel_scale]")).width,
+                 rowFind: ctl ? ctl.dataset.find : "",
+                 ctrlWheel: /Ctrl \+ wheel for all panels/.test(d.querySelector("ul.ovhelp").textContent),
                  off: !box.querySelector('[data-ovpanel="body"]').checked, theme: box.querySelector('[data-ov="theme"]').value,
                  // PyQt6 missing: said, no button (Outrider installs it while the overlay is on: the author, 2026-10-10)
                  nowin: /needs PyQt6: Outrider installs it in its own venv/.test(box.textContent) && !box.querySelector("button[data-ovinstall]"),
@@ -5174,6 +5564,16 @@ const releasePayloads = async () => {
     dk.checked = false; dk.dispatchEvent(new w.Event("change", {bubbles: true}));
     await sleep(50);
     got.dockedAfter = [...box.querySelectorAll("[data-ovdocked]:checked")].map(x => x.dataset.ovdocked).join(" ");
+    // the author, 2026-10-15: a Foot box on every panel's row (none ticked by default), and nothing at all on foot or
+    // in the DSS, said why
+    const ft = box.querySelector('[data-ovfoot="now"]');
+    got.foot = [box.querySelectorAll("[data-ovfoot]").length, box.querySelectorAll("[data-ovfoot]:checked").length, ft.dataset.find];
+    ft.checked = true; ft.dispatchEvent(new w.Event("change", {bubbles: true}));
+    await sleep(50);
+    const ml = box.querySelector('[data-ov="hide_mouse_lock"]');
+    got.mouseLock = [!ml.checked, /overlays can break mouse lock in these situations on some systems/i.test(ml.closest("label").textContent)];
+    ml.checked = true; ml.dispatchEvent(new w.Event("change", {bubbles: true}));
+    await sleep(50);
     box.querySelector('[data-ovact="test"]').click();
     await sleep(100);
     got.note = /cannot run yet/.test(w.eval("overlayNote"));   // nothing can draw yet: the button says why
@@ -5184,6 +5584,14 @@ const releasePayloads = async () => {
     th.focus(); th.value = "default"; th.dispatchEvent(new w.Event("change", {bubbles: true}));
     await sleep(100);
     got.themeNote = /could not keep it/.test(box.textContent) && box.querySelector('[data-ov="theme"]').value === "default";
+    const tx = box.querySelector('[data-ovlay="body"][data-k="text"]');
+    tx.value = "small"; tx.dispatchEvent(new w.Event("change", {bubbles: true}));
+    await sleep(50);
+    const all = box.querySelector('[data-ov="panel_scale"]');
+    all.value = "40"; all.dispatchEvent(new w.Event("change", {bubbles: true}));
+    await sleep(50);
+    all.value = ""; all.dispatchEvent(new w.Event("change", {bubbles: true}));   // emptied: nothing sent
+    await sleep(50);
     got.posted = posted;
     w.fetch = real;
     // the PyQt6 install's popup: shown while installing, then the outcome, then gone (a state it never had: hidden)
@@ -5194,15 +5602,20 @@ const releasePayloads = async () => {
     got.popup = [step("off"), step("installing"), step("starting"), step("installing"), step("install_failed"), step("off")]
       .map(t => t.replace(/ .*/, "") + (/installed/.test(t) ? " installed" : /failed/.test(t) ? " failed" : ""));
     w.eval(`data.overlay = JSON.parse(${JSON.stringify(saved)}); overlayNote = ""; overlayDrawn = ""; renderOverlay();`);
-    const want = {rows: 8, body: "120", off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true, route: "true,false,true,true",
+    const want = {rows: 8, body: "20", figures: "≈ 26 px text|held at 9 px|", heldTip: true,
+                  heldLine: "Target: held at 9 px: your screen is too small to go lower", sizeMin: "20",
+                  text: "large:large :as all panels :as all panels", row: true, rowCss: "100% 0 60px",
+                  rowFind: "overlay.theme overlay.text_size overlay.panel_scale text size all panels", ctrlWheel: true,
+                  off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true, route: "true,false,true,true",
                   target: true, analysis: "system body radar strip now bio✓ alerts route",
                   docked: "system✓ body✓ –radar strip now✓ bio✓ alerts route",
-                  heads: "Panel|Hide when mode|Corner|X %|Y %|Size %|BG %|Opac. %||Combat|Docked", headTips: true,
+                  heads: "Panel|Hide in mode|Corner|X %|Y %|Size %|Text|BG %|Opac. %||Combat|Docked|Foot", headTips: true,
                   finds: "overlay.analysis_only overlay.hide_docked",
-                  dimmed: true, wrapped: true, help: true, alerts: true, analysisAfter: "system bio", dockedAfter: "system body now", note: true, themeNote: true,
+                  dimmed: true, wrapped: true, help: true, alerts: true, analysisAfter: "system bio", dockedAfter: "system body now", foot: [8, 0, "overlay.hide_on_foot"], mouseLock: [true, true], note: true, themeNote: true,
                   posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {analysis_only: ["system", "bio"]}],
-                           ["overlay", {hide_docked: ["system", "body", "now"]}], ["overlay", {test: true}],
-                           ["overlay", {theme: "default"}]],
+                           ["overlay", {hide_docked: ["system", "body", "now"]}], ["overlay", {hide_on_foot: ["now"]}],
+                           ["overlay", {hide_mouse_lock: true}], ["overlay", {test: true}],
+                           ["overlay", {theme: "default"}], ["overlay/layout", {body: {text: "small"}}], ["overlay", {panel_scale: 40}]],
                   venv: true, popup: ["", "⟳Installing", "✓ installed", "⟳Installing", "Installing failed", ""]};
     const ok = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && ok;
@@ -5874,12 +6287,18 @@ const releasePayloads = async () => {
       o.shown = [!pane.hidden, document.getElementById("nearPane").hidden, document.getElementById("nearWrap").classList.contains("boxel")];
       o.warning = pane.textContent.includes("Outrider cannot know how many systems a boxel holds")
         && !!pane.querySelector(".bxhead .hint .bxwarn");   // on the "you have visited" line (the author, 2026-10-11)
-      // the switch sits on the Overview's bar, left of "This system", and back in Nearby's options on the Nearby tab
+      // the switch and Around (labelled Focus/Lock) beside it sit on the Overview's bar (no ▾ This system: 2026-10-14), and on Nearby's own top
+      // bar on the Nearby tab, the checkboxes' row under it: Mass first, no scan data and ⧉ Copy visible after the rest
       const v0 = view; view = "overview"; render();
-      const bar = document.querySelector("#overView .ovbar");
-      o.place = [bar.firstElementChild.classList.contains("nearmode"), bar.querySelector(".nearmode + #ovCollapse") !== null];
+      const bar = document.querySelector("#overView .ovbar"), nh = bar.firstElementChild;
+      o.place = [nh.classList.contains("nearhead") && !!nh.querySelector(".nearmode + .nearAround #nearAround") &&
+                   nh.querySelector(".nearAround .lbl").textContent === "Focus/Lock",
+                 !document.getElementById("ovCollapse"), document.getElementById("nearHead").hidden,
+                 getComputedStyle(nh.querySelector(".nearAround")).display === "none"];   // Boxel: Focus/Lock hidden there too
       view = "near"; render();
-      o.place.push(document.getElementById("nearOpts").firstElementChild.classList.contains("nearmode"));
+      const head = document.getElementById("nearHead"), opts = document.getElementById("nearOpts");
+      o.place.push(!head.hidden && head.firstElementChild.classList.contains("nearhead"));
+      o.opts = [...opts.children].map(e => e.id || e.textContent.trim().replace(/^Mass.*/, "Mass")).join("|");
       view = v0; render(); await tick();
       o.rows = [...pane.querySelectorAll("#boxelTable tbody tr")].map(r => r.className);
       o.next = !!pane.querySelector('.bxacts button[data-aim="next"][data-route="boxel"]:not([data-index])');
@@ -5907,7 +6326,7 @@ const releasePayloads = async () => {
       o.back = !document.getElementById("nearPane").hidden;
       return o; })()`);
     w.fetch = realFetch;
-    const want = {shown: [true, true, true], warning: true, place: [true, true, true], rows: ["visited", "next", "try"], next: true, aims: "1,2", near: [true, true, true, true, true], doneBtn: true,
+    const want = {shown: [true, true, true], warning: true, place: [true, true, true, true, true], opts: "Mass|visited|fully explored|1 jump|no scan data|nearCopy|click a column heading to sort", rows: ["visited", "next", "try"], next: true, aims: "1,2", near: [true, true, true, true, true], doneBtn: true,
                   known: ["known · 3 of 14 bodies", "known · all 9 bodies", "known · honked only", "known · nothing reported"],
                   grid: [1024, "bxc v you", "2", "bxc k", "bxc c", "bxc", "layer 32 of 32 (yours)"],
                   gridTitle: "Drojau TF-H c13 · you visited 2 · tap to explore this boxel",
@@ -6158,7 +6577,8 @@ const releasePayloads = async () => {
     const got = JSON.parse(w.eval(`(() => {
       const o = {}, said = [], told = [], realSpeak = speak, realNotify = notify, m0 = data.moments, d0 = JSON.stringify(data);
       const flags = [speechOn, isSpeaker, alertSpeak.wrongtarget, lastMomentSeq], lib = speechLib;
-      const plain = h => h.replace(/<[^>]+>/g, "").replace(/\\s+/g, " ").trim();
+      // the game's markers (#13) as [symbol], the rest of the markup dropped
+      const plain = h => h.replace(/<span class="mk mk-([a-z-]+)[^>]*><\\/span>/g, "[$1]").replace(/<[^>]+>/g, "").replace(/\\s+/g, " ").trim();
       const hw = {id: "hw-s11", plotter: "exact", destination: "Colonia", total: 40, index: 5, at: 4, complete: false, off_route: false,
                   next: {name: "Neu A", id: "101", neutron: false, refuel: false, jumps: 1, distance: 50}};
       const tc = (ok, name, ahead) => ({ok, name, id: "9", next: "Neu A", ahead});
@@ -6193,12 +6613,12 @@ const releasePayloads = async () => {
       data = JSON.parse(d0); data.moments = m0;
       return JSON.stringify(o); })()`));
     const want = {
-      hw: ["🛣 Next: Neu A 🎯 target · ✓ targeted · 50.0 ly · 5 of 40",
-           "🛣 Next: Neu A 🎯 target · ↷ targeted Scoop C, 2 stops ahead · 50.0 ly · 5 of 40",
-           "🛣 Next: Neu A 🎯 target · ⚠ targeted Elsewhere, not the next stop Neu A · 50.0 ly · 5 of 40"],
-      hwTab: "Next: Neu A · ⚠ targeted Elsewhere, not the next stop Neu A · 50.0 ly · 5 of 40",
-      wrongCls: true, none: "🛣 Next: Neu A 🎯 target · 50.0 ly · 5 of 40",
-      sv: "💰 Next: Pru Aim XY-Z d1 🎯 target · ✓ targeted · 3 jumps · 6 of 22 · skipping 2 done",
+      hw: ["🛣 [waypoint]Next: Neu A [destination]target · ✓ targeted · 50.0 ly · 5 of 40",
+           "🛣 [waypoint]Next: Neu A [destination]target · ↷ targeted Scoop C, 2 stops ahead · 50.0 ly · 5 of 40",
+           "🛣 [waypoint]Next: Neu A [destination]target · ⚠ targeted Elsewhere, not the next stop Neu A · 50.0 ly · 5 of 40"],
+      hwTab: "[waypoint]Next: Neu A · ⚠ targeted Elsewhere, not the next stop Neu A · 50.0 ly · 5 of 40",
+      wrongCls: true, none: "🛣 [waypoint]Next: Neu A [destination]target · 50.0 ly · 5 of 40",
+      sv: "💰 [waypoint]Next: Pru Aim XY-Z d1 [destination]target · ✓ targeted · 3 jumps · 6 of 22 · skipping 2 done",
       svHover: "finished already, passed over: Done One, Done Two",
       svMore: "finished already, passed over: Done One, Done Two and 10 more",
       head: "Next: Pru Aim XY-Z d1 · ✓ targeted · skipping 2 done · 2 to do there", headOther: false,
@@ -6339,7 +6759,7 @@ const releasePayloads = async () => {
         await new Promise(r => setTimeout(r, 50));
         const side = document.getElementById("clSide");
         o.open = CL.open;
-        o.rows = [...side.querySelectorAll(".clfindt tr")].map(tr => [...tr.cells].map(c => c.textContent.trim()));
+        o.rows = [...side.querySelectorAll(".clfindt tr")].map(tr => [...tr.cells].map(c => markText(c).trim()));
         o.head = side.querySelector(".clfindh span").textContent;
         o.foot = (side.querySelector(".clfind > .unk") || {}).textContent;
         side.querySelector("[data-bm]").click(); o.bm = opened;
@@ -6359,7 +6779,7 @@ const releasePayloads = async () => {
       return JSON.stringify(o); })()`));
     const want = {here: "likeliest by value: Acies / Informem\nyours on bodies like this (Icy body, thin N2, 75–100 K, Inner Orion Spur): Informem 11 of 14, Acies 3 of 14",
                   grid: ["🔍", false], open: "ves",
-                  rows: [["Eol Prou LW-L c8-324", "4 b", "7.2 ly", "0.34 g", "Mulberry", "✓", "☆", "Copy 🎯"]],   // S29's 🎯 (S31)
+                  rows: [["Eol Prou LW-L c8-324", "4 b", "7.2 ly", "0.34 g", "Mulberry", "✓", "☆", "Copy [destination]"]],   // S29's target button (S31)
                   head: "Nearest reported: Bacterium Vesicula", foot: "143 more further away · reported to Spansh by commanders' uploads; distances from Colonia",
                   bm: ["89128321720906", "Eol Prou LW-L c8-324"], copied: "Eol Prou LW-L c8-324", colourBtn: "🔍 nearby",
                   asked: ["species=ves", "species=ves&colour=Mulberry"], head2: "Nearest reported: Bacterium Vesicula - Mulberry", closed: true};
@@ -6427,6 +6847,10 @@ const releasePayloads = async () => {
       tabOpenRow(document.getElementById("nearTable"), tr);
       const t = document.querySelector('#tabSheetActs [data-act="aim"]');
       o.sheet = t && [t.dataset.route, t.dataset.aimid === other.id];
+      // #13: the game's destination marker in place of 🎯, the row's button named by its aria-label (it has no words),
+      // the sheet's keeping its word
+      o.look = !!aim && [!!aim.querySelector(".mk.mk-destination[aria-hidden=true]"), aim.textContent, aim.getAttribute("aria-label") === "target " + other.name,
+                         !!t && markText(t), !/🎯/.test(document.getElementById("rows").textContent)];
       tabClose(document.getElementById("tabSheet"));
       aim.click();
       return JSON.stringify(o); })()`));
@@ -6442,11 +6866,124 @@ const releasePayloads = async () => {
     w.fetch = realFetch;
     got.sent = sent;
     const id = w.eval("window.__nearAimId");
-    const want = {aim: true, own: [false, ""], left: true, sheet: ["system", true], clicked: [null, null], unavailable: false, server: false,
+    const want = {aim: true, own: [false, ""], left: true, sheet: ["system", true], look: [true, "", true, "[destination]Target", true],
+                  clicked: [null, null], unavailable: false, server: false,
                   sent: [{route: "system", id}]};
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| nearby 🎯 |", good ? "🎯 by the row's id64, none on your own row or where auto-target cannot work; it targets without opening or copying, the tablet's sheet offers it" : JSON.stringify({got, want}), errors.slice(before));
+    await releasePayloads();
+  }
+  // Nearby's Around and filters (2026-10-14, the ideas of Rainmangames' PR #8): the Around select (saved on the server:
+  // its POSTs stubbed here), the strip naming the centre (its name copies; ↻ refresh, ✕ back to you), Dist from there with
+  // a From you column and Jumps from you, the Where tile's "around"; a centre that names nothing says why; Spansh's cut
+  // sphere said plainly; the mass code and "No scan data only" filters (per device) and ⧉ Copy visible; Boxel mode's hint
+  {
+    holdPayloads();
+    const w = dom.window, before = errors.length, realFetch = w.fetch, sent = [];
+    w.fetch = (u, o) => {
+      const url = String(u);
+      if (/api\/nearby\/(around|refresh)/.test(url)) {
+        sent.push([url.replace(/^.*api\//, ""), o && o.body ? JSON.parse(o.body) : null]);
+        const ans = /refresh/.test(url) ? {error: "Spansh was asked 5 s ago: again in 115 s"} : {near_around: {around: "here"}};
+        return Promise.resolve(new Response(JSON.stringify(ans), {status: ans.error ? 409 : 200, headers: {"Content-Type": "application/json"}}));
+      }
+      if (/api\/find\?/.test(url)) return Promise.resolve(new Response(JSON.stringify({id: "77", name: "Far Water"}), {headers: {"Content-Type": "application/json"}}));
+      return realFetch(u, o);
+    };
+    const got = JSON.parse(w.eval(`(() => {
+      const o = {}, keep = window.__na = {sys: data.systems, na: data.near_around, cut: data.sphere_cut, pos: data.position, view, copy: copyText,
+                                          range: data.jump_range, now: data.jump_range_now, boost: data.boost};
+      window.__naCopied = []; copyText = (t, what) => { window.__naCopied.push([t, what || null]); };
+      const p = data.position, at = (dx, extra) => Object.assign({}, data.systems[0] || {}, {x: undefined}, extra, {xyz: [p.x + dx, p.y, p.z]});
+      // three rows around a centre 30 ly from you (x + 30): its own row, one 2 ly beyond it, and yours
+      const C = p.x + 30;
+      data.systems = [at(30, {id: "9001", id64: 9001, name: "Smojooe GW-W c1-4", distance: 0, status: "no bodies", visited: false}),
+                      at(32, {id: "9002", id64: 9002, name: "Smojooe AB-C d2-5", distance: 2, status: "explored", visited: false}),
+                      at(0, {id: posId(), id64: Number(posId()), name: p.name, distance: 30, status: "unreported", visited: true})];
+      data.sphere_cut = null; data.jump_range = 10; data.jump_range_now = 10; data.boost = null;
+      view = "near";
+      data.near_around = {around: "here"}; render();
+      const sel = document.getElementById("nearAround");
+      o.options = [...sel.options].map(x => x.value);
+      o.lockName = sel.options[4].textContent === "lock this system (" + p.name + ")";
+      o.youRows = [...document.querySelectorAll("#rows tr[data-id]")].map(r => r.dataset.id).includes(posId());   // around you: not a row
+      o.youStrip = document.getElementById("nearStrip").hidden;
+      data.near_around = {around: "lock", name: "Smojooe GW-W c1-4", id: "9001", x: C, y: p.y, z: p.z, from_you: 30, why: null, refreshing: false, refresh_gap_s: 120};
+      render();
+      const strip = document.getElementById("nearStrip");
+      o.strip = [strip.hidden, strip.textContent.replace(/\\s+/g, " ").trim()];
+      o.select = sel.value;
+      o.around = document.getElementById("nearTable").classList.contains("around");
+      const cells = id => { const tr = document.querySelector('#rows tr[data-id="' + id + '"]'); return tr && [tr.querySelector("td.dist").textContent,
+        tr.querySelector("td.fromcol").textContent, tr.querySelector("td.fromcol").nextElementSibling.textContent.trim()]; };
+      o.rows = [cells("9001"), cells("9002"), cells(posId())];
+      o.sub = document.getElementById("subAround").textContent;
+      o.distTitle = document.getElementById("nearDistTh").title;
+      strip.querySelector(".nscentre").click();
+      oneJump.checked = true; render();
+      o.oneJump = [...document.querySelectorAll("#rows tr[data-id]")].map(r => r.dataset.id).length;   // only your own (0 ly from you)
+      oneJump.checked = false; render();
+      sortKeys.near = "from"; render();
+      o.fromSort = [...document.querySelectorAll("#rows tr[data-id]")].map(r => r.dataset.id === posId() ? "you" : r.dataset.id);
+      sortKeys.near = "distance";
+      // filters: mass code c, then the systems nobody reported a scan of; ⧉ Copy visible copies what is shown
+      const mass = document.getElementById("nearMass"), ns = document.getElementById("nearNoScan");
+      mass.value = "c"; mass.dispatchEvent(new Event("change"));
+      o.mass = [[...document.querySelectorAll("#rows tr[data-id]")].map(r => r.dataset.id), localStorage.getItem("nearMass")];
+      mass.value = ""; mass.dispatchEvent(new Event("change"));
+      ns.checked = true; ns.dispatchEvent(new Event("change"));
+      o.noScan = [[...document.querySelectorAll("#rows tr[data-id]")].map(r => r.dataset.name || r.querySelector("td.name").dataset.name), localStorage.getItem("nearNoScan")];
+      document.getElementById("nearCopy").click();
+      ns.checked = false; ns.dispatchEvent(new Event("change"));
+      // a centre that names nothing now: why, and the list around you
+      data.near_around = {around: "carrier", why: "you have no fleet carrier", refreshing: false};
+      render();
+      o.why = [strip.textContent.replace(/\\s+/g, " ").trim(), document.getElementById("nearTable").classList.contains("around"), document.getElementById("subAround").textContent];
+      // Spansh's cut sphere, said plainly in the strip (and the tile's hover)
+      data.near_around = {around: "here"}; data.sphere_cut = 11.5; render();
+      o.cut = [strip.hidden, strip.textContent.trim(), document.querySelector("#subCut .warn").title];
+      // Boxel mode: the Around select goes (stdonly), a hint says the Around is for Standard
+      data.near_around = {around: "lock", name: "Smojooe GW-W c1-4", id: "9001", x: C, y: p.y, z: p.z, from_you: 30, why: null};
+      store.set("nearMode", "boxel"); render();
+      const bx = document.getElementById("nearAroundBx");
+      o.boxel = [document.getElementById("nearWrap").classList.contains("boxel") && !!sel.closest(".stdonly"), bx.hidden, bx.textContent];
+      store.set("nearMode", "standard"); render();
+      return JSON.stringify(o); })()`));
+    // the select and the strip's buttons post; "a system…" finds the name first
+    w.eval(`(() => { const sel = document.getElementById("nearAround"); sel.value = "lock"; sel.dispatchEvent(new Event("change")); })()`);
+    await settle(800);
+    w.eval(`(() => { data.near_around = {around: "lock", name: "Smojooe GW-W c1-4", id: "9001", x: data.position.x + 30, y: data.position.y,
+      z: data.position.z, from_you: 30, why: null}; render(); document.querySelector("#nearStrip [data-nearrefresh]").click(); })()`);
+    await settle(800);
+    w.eval(`(() => { data.near_around = {around: "lock", name: "Smojooe GW-W c1-4", id: "9001", x: data.position.x + 30, y: data.position.y,
+      z: data.position.z, from_you: 30, why: null}; render(); document.querySelector("#nearStrip [data-nearback]").click(); })()`);
+    await settle(800);
+    got.typed = JSON.parse(w.eval(`(() => { const sel = document.getElementById("nearAround"), nm = document.getElementById("nearAroundName");
+      sel.value = "system"; sel.dispatchEvent(new Event("change")); const shown = !nm.hidden;
+      nm.value = "Far Water"; nm.dispatchEvent(new Event("change")); return JSON.stringify(shown); })()`));
+    await settle(800);
+    got.sent = sent;
+    got.copied = JSON.parse(w.eval("JSON.stringify(window.__naCopied)"));
+    got.toast = d.getElementById("toast").textContent;
+    w.eval(`(() => { const k = window.__na; Object.assign(data, {systems: k.sys, near_around: k.na, sphere_cut: k.cut, jump_range: k.range,
+      jump_range_now: k.now, boost: k.boost}); copyText = k.copy; view = k.view; NA.typing = false; render(); })()`);
+    w.fetch = realFetch;
+    const want = {options: ["here", "destination", "carrier", "next_stop", "lock", "system"], lockName: true, youRows: false, youStrip: true,
+      strip: [false, `⌖ Around Smojooe GW-W c1-4 (locked) · 30 ly from you · ${w.eval("data.radius")} ly sphere · ↻ refresh · ✕ back to you`], select: "lock", around: true,
+      rows: [["0.00", "30.00", "3"], ["2.00", "32.00", "4"], ["30.00", "0.00", "1"]], sub: " around Smojooe GW-W c1-4",
+      distTitle: "ly from Smojooe GW-W c1-4 (the system Nearby is around)", oneJump: 1, fromSort: ["you", "9001", "9002"],
+      mass: [["9001"], '"c"'], noScan: [["Smojooe GW-W c1-4", got.noScan && got.noScan[0][1]], "true"],
+      why: ["⌖ your carrier: you have no fleet carrier; Nearby is around you meanwhile · ✕ back to you", false, ""],
+      cut: [false, "Spansh returned its maximum: the list is complete only to 11.5 ly — a smaller radius shows them all",
+            "Spansh returned its maximum: the list is complete only to 11.5 ly — a smaller radius shows them all"],
+      boxel: [true, false, "Nearby's Focus/Lock (Smojooe GW-W c1-4, locked) is for Standard: a boxel has its own centre"],
+      typed: true,
+      sent: [["nearby/around", {around: "lock"}], ["nearby/refresh", null], ["nearby/around", {around: "here"}], ["nearby/around", {around: "77"}]],
+      copied: [["Smojooe GW-W c1-4", null], [got.noScan ? got.noScan[0].join("\n") : "", "2 system names"]], toast: "Spansh was asked 5 s ago: again in 115 s"};
+    const good = JSON.stringify(got) === JSON.stringify(want) && got.noScan[0][1] === w.eval("data.position.name") && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| nearby around |", good ? "Around saved on the server, the strip (copy, ↻, ✕), Dist from the centre with From you and Jumps from you, why, the cut sphere in words, mass and no-scan filters, Copy visible, Boxel's hint" : JSON.stringify({got, want}), errors.slice(before));
     await releasePayloads();
   }
   // One rule for every 🎯 (the author, 2026-10-14): on the game PC with auto-target available and no binding missing,
@@ -6465,10 +7002,14 @@ const releasePayloads = async () => {
       for (const [k, [pc, at]] of Object.entries(states)) {
         data.game_pc = pc; data.autotarget = Object.assign({}, keep.at || {}, at);
         out[k] = each();
+        // #13: every one the game's destination marker, never 🎯; Plot Route's Target next (page.html) too, with its words
+        if (k === "ready") out.look = [hwyAimBtn("A", "highway", 1, true), hwyAimBtn("B"), carrierAim(car), sysAimBtn("C", "555"), nearAimBtn(other),
+                                       document.getElementById("hwyAutoNext").outerHTML].map(h => /class="mk mk-destination/.test(h) && !/🎯/.test(h) ? 1 : 0).join("") +
+          " " + markText(document.getElementById("hwyAutoNext"));
       }
       data.game_pc = keep.pc; data.autotarget = keep.at; hwyRun = keep.run;
       return JSON.stringify(out); })()`));
-    const want = {ready: "111111", missing: "000000", unavailable: "000000", server: "000000"};   // the Map's: S72's block
+    const want = {ready: "111111", look: "111111 [destination]target next", missing: "000000", unavailable: "000000", server: "000000"};   // the Map's: S72's block
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
     console.log(good ? "OK" : "FAIL", "| one 🎯 rule |", good ? "every 🎯 only where auto-target can work" : JSON.stringify(got), errors.slice(before));
@@ -6651,6 +7192,14 @@ const releasePayloads = async () => {
       renderStrip(); o.failedSearch = [sl(), horizon(), emptyMessage([]).startsWith("Spansh unavailable — the list is incomplete")];
       data.status = "ok (3 Spansh body lookups failed, retrying in 60s)"; renderStrip(); o.partial = [sl(), /warn/.test(cls())];
       data.status = "ok"; renderStrip(); o.ok = [sl(), /warn/.test(cls())];
+      // issue #9: a certificate failure in its own words (once, not also "Spansh unavailable"), short on the folded line;
+      // an upload's Recent line in the same words
+      const ct = "couldn't verify spansh.co.uk's certificate (expired): check this PC's date and time; if they are right, update Outrider";
+      data.health = {down: [{source: "spansh", name: "Spansh", since: 1, kind: "certificate", user_fix: false, text: ct}], offline: false};
+      data.status = "Spansh unavailable"; renderStrip(); o.cert = [sl(), /warn/.test(cls()), dataBit];
+      const up = document.createElement("div");
+      up.innerHTML = uploadRecentLine({state: "fail", kind: "certificate", say: ct.replace("spansh.co.uk", "eddn.edcd.io"), error: "raw", at: 1, first: 1, rounds: 1}, false);
+      o.certUp = up.querySelector(".bad").textContent;
       data.health = keep.health; data.status = keep.status; data.sphere_cut = keep.sphere_cut; renderStrip();
       // the Check buttons
       window.__u1 = keep.uploads;
@@ -6676,7 +7225,11 @@ const releasePayloads = async () => {
     w.fetch = real;
     const want = {down: ["Spansh unavailable", true, "Spansh unavailable"], offline: "No internet connection",
                   failedSearch: ["Spansh unavailable", null, true], partial: ["ok (3 Spansh body lookups failed, retrying in 60s)", false],
-                  ok: ["Spansh ok", false], buttons: ["edsm:Check", "inara:Check"], busy: "checking…"};
+                  ok: ["Spansh ok", false],
+                  cert: ["Spansh: couldn't verify spansh.co.uk's certificate (expired): check this PC's date and time; if they are right, update Outrider",
+                         true, "Spansh: certificate not verified"],
+                  certUp: "✗ couldn't verify eddn.edcd.io's certificate (expired): check this PC's date and time; if they are right, update Outrider",
+                  buttons: ["edsm:Check", "inara:Check"], busy: "checking…"};
     const good = Object.keys(want).every(k => JSON.stringify(got[k]) === JSON.stringify(want[k])) &&
       /^✗ \d\d?:\d\d( [AP]M)? Couldn't reach EDSM: the connection was refused$/.test(got.edsm || "") &&
       /^✓ \d\d?:\d\d( [AP]M)? Inara: CMDR Sample Pilot · profile · on hold no more/.test(got.inara || "") && got.link === "https://inara.cz/elite/cmdr/1/" &&
@@ -6684,7 +7237,7 @@ const releasePayloads = async () => {
       JSON.stringify(got.posted) === JSON.stringify([["uploads/edsm/check", "Sample Pilot", "0123456789abcdef0123456789abcdef01234567", "Sample Pilot"],
                                                     ["uploads/inara/check", "Sample Pilot", "", null]]) && errors.length === before;
     allOk = allOk && good;
-    console.log(good ? "OK" : "FAIL", "| lookups down and key checks |", good ? "the Data tile says only \"Spansh unavailable\" / \"No internet connection\", the horizon waits, Check for EDSM and Inara keys" : JSON.stringify(got), errors.slice(before));
+    console.log(good ? "OK" : "FAIL", "| lookups down and key checks |", good ? "the Data tile says only \"Spansh unavailable\" / \"No internet connection\" (a certificate failure its words), the horizon waits, Check for EDSM and Inara keys" : JSON.stringify(got), errors.slice(before));
     await releasePayloads();
   }
   // S43 / S44 (2026-10-12): a first run with no journals (the Data tile says where to set the folder and opens Settings ->
@@ -7198,7 +7751,9 @@ const releasePayloads = async () => {
       const last = h => { const m = h.match(/<div class="sec unk">([^<]*)<\\/div>$/); return m && m[1]; };
       o.cardOn = [last(mapPopHtml(pt)), last(mapPopHtml(here))];
       const touch = mapPopHtml(pt, true);
-      o.touchOn = [/data-aim="next" data-route="system" data-aimid="9007199254740993"/.test(touch), /data-mapcopy="Far Out"/.test(touch)];
+      // its Target with the game's destination marker (#13) before the word, no 🎯
+      o.touchOn = [/data-aim="next" data-route="system" data-aimid="9007199254740993"/.test(touch), /data-mapcopy="Far Out"/.test(touch),
+                   /data-aimid="9007199254740993"><span class="mk mk-destination mkg" aria-hidden="true"><\\/span>Target<\\/button>/.test(touch) && !/🎯/.test(touch)];
       mapClick(pt); mapClick(here);
       hwyRun = {done: false}; mapClick(pt); hwyRun = null;   // a run under way: said, not started again
       data.autotarget = Object.assign({}, data.autotarget, {available: false});
@@ -7222,7 +7777,7 @@ const releasePayloads = async () => {
     const big = "9007199254740993";
     const want = {bmAim: big, bmPlot: true, nsAim: "4242", nsPlot: true, nearAim: [true, false, false], findAim: true, serverNoAim: true,
                   plotView: "hwy", plotTo: "Chosen", followTo: "Far Out", formOpen: true,
-                  cardOn: ["click to target it in game (5 s)", "click to copy its name"], touchOn: [true, true],
+                  cardOn: ["click to target it in game (5 s)", "click to copy its name"], touchOn: [true, true, true],
                   cardOff: "click to copy its name", touchOff: false, copied: ["Home", "Far Out"],
                   hintOn: "target it in game (5 s) (your own system: copy its name)", hintOff: "copy its name",
                   sent: [["highway/target", {route: "system", id: big}], ["highway/plot", "Chosen"], ["highway/target", {route: "system", id: big}]]};
@@ -7788,6 +8343,14 @@ const releasePayloads = async () => {
     got.kept = [keep.value, [...keep.options].map(o => o.value), txt("vmKeepOf"), txt("vmCost"), txt("vmMsg")];
     const pre = d.getElementById("vmPreload");
     pre.checked = true; pre.dispatchEvent(new w.Event("change")); await sleep(100);
+    // the landing pad's delay after a docking grant (Kurbo26, 2026-10-15): the server's value shown, a change posted
+    w.eval(`data.pad_delay = 7; drawPadDelay()`);
+    const pd = d.getElementById("padDelay");
+    got.padDelay = [pd.value];
+    pd.value = "13"; pd.dispatchEvent(new w.Event("change")); await sleep(100);
+    got.padDelay.push(txt("padDelayMsg"));
+    pd.value = "30"; pd.dispatchEvent(new w.Event("change")); await sleep(100);   // out of range: not sent
+    got.padDelay.push(txt("padDelayMsg"));
     got.posts = posted.splice(0);
     // the crew table
     const tr = role => d.querySelector(`#crewTable tr[data-crole="${role}"]`);
@@ -7858,7 +8421,8 @@ const releasePayloads = async () => {
       none: true,
       kept: ["2", ["1", "2", "3", "all"], "of the 3 voices in use · about 302 MB",
              "1 voice is set aside when not in use: its next line waits about a second while it loads again", "Saved in the config file ([speech] voices_loaded)"],
-      posts: [{speech: {voices_loaded: "2"}}, {speech: {voices_preload: true}}],
+      padDelay: ["7", "Saved in the config file ([speech] pad_delay)", "a whole number of seconds, 0 to 20"],
+      posts: [{speech: {voices_loaded: "2"}}, {speech: {voices_preload: true}}, {speech: {pad_delay: 13}}],
       rows: ["xo", "navigator", "science", "exobiologist", "engineer", "quartermaster", "comms", "tactical", "mining"],
       xo: [true, false, true, "Vance", "en_GB-cori-medium", false],
       nav: ["business", "en_GB-vctk-medium", false, "1", true],
@@ -8061,256 +8625,723 @@ const releasePayloads = async () => {
     console.log(good ? "OK" : "FAIL", "| S53 bookmarks import |", good ? "Import… picks a file, merged on the server (2 added, then 2 already there, a bad line said), the exact id64 with its tick and Plot route, an unreadable file in red" :
       `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
   }
-  // The Commander view: its tabs drawn from the server's answers (made up here),
-  // Last of the page's checks: a check added in the middle shifts the page's long poll into a later batch's window
-  // and Engineering's filter
+  // the Android app has no file picker: with window.OutriderApp, every control that opens one (one per file input) is
+  // hidden and its note shows; in a browser they show and the notes do not
   {
+    const w = dom.window, d = w.document, before = errors.length;
+    const state = () => [["bmImport", "settingsImport"].map(id => !d.getElementById(id).hidden),
+      [...d.querySelectorAll(".nopicker")].map(n => !n.hidden)];
+    const got = {counts: [d.querySelectorAll('input[type="file"]').length, d.querySelectorAll("[data-picker]").length,
+      d.querySelectorAll(".nopicker").length]};
+    got.browser = state();
+    w.eval("window.OutriderApp = {}; drawFilePickers()");
+    got.app = state();
+    got.note = d.querySelector("#bmTools .nopicker").textContent;
+    w.eval("delete window.OutriderApp; drawFilePickers()");
+    got.back = state();
+    const want = {counts: [2, 2, 2], browser: [[true, true], [false, false]], app: [[false, false], [true, true]],
+      note: "Import from a browser on the PC", back: [[true, true], [false, false]]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const good = !bad.length && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| no file picker in the app |", good ? "Import… and Import settings… hidden with OutriderApp, a note in their place; shown in a browser" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
+  // nor can the app save a file the page makes itself (a blob: or data: URL: its DownloadListener takes http(s) only, so
+  // the api/export links stay): with window.OutriderApp no control that saves one shows ([data-blobsave], each saved
+  // through saveBlob, the one place a page-made file is saved), their notes do, and saveBlob refuses; in a browser they
+  // show and Export settings saves a blob
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    const src = await (await fetch(base + "static/page.js")).text();
+    const count = re => (src.match(re) || []).length;
+    const laid = el => !el.closest("[hidden]");
+    const state = () => [[...d.querySelectorAll("[data-blobsave]")].map(el => el.id + ":" + laid(el)), [...d.querySelectorAll(".nosave")].map(laid)];
+    // every visible link that downloads: never a blob: or data: one in the app (the export links are api/export?...)
+    const pageMade = () => [...d.querySelectorAll("a[download]")].filter(a => laid(a) && /^(blob|data):/.test(a.getAttribute("href") || "")).length;
+    const got = {counts: [d.querySelectorAll("[data-blobsave]").length, d.querySelectorAll(".nosave").length,
+      count(/\bsaveBlob\(/g) - 1, count(/\.download\s*=/g), count(/createObjectURL\(/g)],
+      exports: [...d.querySelectorAll("a[download]")].every(a => /^api\/export\?/.test(a.getAttribute("href")))};
+    got.browser = state();
+    const cu = w.URL.createObjectURL, ru = w.URL.revokeObjectURL, click = w.HTMLAnchorElement.prototype.click, saved = [];
+    w.URL.createObjectURL = () => "blob:smoke"; w.URL.revokeObjectURL = () => {};
+    w.HTMLAnchorElement.prototype.click = function () { saved.push([this.getAttribute("href"), this.download.startsWith("outrider-settings-")]); };
+    d.getElementById("settingsExport").click();
+    w.eval("window.OutriderApp = {}; drawBlobSaves()");
+    got.app = state();
+    got.appLinks = pageMade();
+    got.note = d.querySelector("#settingsExport ~ .nosave").textContent;
+    got.refused = w.eval('saveBlob(new Blob(["x"]), "x.json")');
+    w.eval("delete window.OutriderApp; drawBlobSaves()");
+    got.back = state();
+    got.saved = saved;
+    w.URL.createObjectURL = cu; w.URL.revokeObjectURL = ru || (() => {}); w.HTMLAnchorElement.prototype.click = click;
+    const want = {counts: [2, 2, 2, 1, 2], exports: true, browser: [["settingsExport:true", "labSave:true"], [false, false]],
+      app: [["settingsExport:false", "labSave:false"], [true, true]], appLinks: 0, note: "Export settings from a browser on the PC",
+      refused: false, back: [["settingsExport:true", "labSave:true"], [false, false]], saved: [["blob:smoke", true]]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const good = !bad.length && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| no page-made saves in the app |", good ? "Export settings and Save WAV hidden with OutriderApp, a note in their place, saveBlob refuses; shown in a browser, Export settings saves a blob" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)}`, errors.slice(before));
+  }
+  // the voice commands (Settings → Voice's fold, GET api/ask/commands): every command of the server's list, grouped,
+  // with what it does, its phrases and the words that narrow it; the Settings filter finds it by "voice commands" and
+  // "phrases", and a phrase's word ("vista") finds it too
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    const api = await (await fetch(base + "api/ask/commands")).json();
+    if (!w.HTMLDialogElement.prototype.showModal) w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+    d.getElementById("alertsBtn").click(); await settle(1500);
+    const fold = d.getElementById("voiceCmds"), list = d.getElementById("voiceCmdList");
+    fold.open = true; fold.dispatchEvent(new w.Event("toggle")); await settle(1500);
+    const rows = [...list.querySelectorAll(".vcrow")];
+    const want = api.groups.flatMap(g => g.commands);
+    const got = {
+      groups: [...list.querySelectorAll(".vcgroup")].map(h => h.textContent),
+      rows: rows.map(r => r.dataset.vc),
+      // each row: its description, every phrase of the server's list quoted, every narrowing word
+      full: rows.every((r, i) => r.querySelector(".vcdesc").textContent === want[i].description &&
+        want[i].phrases.every(p => r.querySelector(".vcphr").textContent.includes(`“${p}”`)) &&
+        want[i].narrowing.every(n => n.words.every(x => r.querySelector(".vcnarrow").textContent.includes(`“${x}”`)))),
+      dock: (list.querySelector('[data-vc="nearest_dock"] .vcnarrow') || {}).textContent || "",
+      hush: [...list.querySelectorAll('[data-vc="hush"] .vcnarrow li')].length,
+      ai: list.querySelector(".vcnote").textContent.includes("the AI layer is off")};
+    got.dock = ["“vista”", "“repair”", "“raw”", "raw material trader", "“carrier”"].every(x => got.dock.includes(x));
+    fold.open = false;
+    const find = async q => {
+      w.eval(`(() => { const b = document.getElementById("setFind"); b.value = ${JSON.stringify(q)}; b.dispatchEvent(new Event("input")); })()`);
+      await settle(2500); await sleep(250);   // Server settings arriving, then the observer's pass
+      return !fold.closest(".sfhide") && fold.open;
+    };
+    got.find = [await find("voice commands"), await find("phrases"), await find("nearest vista"), await find("xyzzy nothing")];
+    w.eval("sfClear()");
+    got.after = fold.open;
+    w.eval(`document.getElementById("alertDialog").close ? document.getElementById("alertDialog").close() : document.getElementById("alertDialog").removeAttribute("open")`);
+    const wantGot = {groups: api.groups.map(g => g.name), rows: want.map(c => c.command), full: true, dock: true, hush: 3, ai: true,
+      find: [true, true, true, false], after: false};
+    const bad = Object.keys(wantGot).filter(k => JSON.stringify(got[k]) !== JSON.stringify(wantGot[k]));
+    const good = !bad.length && rows.length === 14 && errors.length === before;
+    allOk = allOk && good;
+    console.log(good ? "OK" : "FAIL", "| voice commands |", good ? "Settings → Voice lists every command with what it does, its phrases and narrowing words; the filter finds it" :
+      `failed ${bad.join(", ")}: ${JSON.stringify(got)} (${rows.length} rows)`, errors.slice(before));
+  }
+  // The Commander view (PR #5): its tabs drawn from the server's answers (made up here, the real profile once): the
+  // controls above the pane in the themed switch, green / red the theme's own colours, the credits and the carrier the
+  // tiles' (the payload's), a tab asked again only when the payload's commander_version moves (Engineering also on the
+  // materials' version), not on a timer; Engineering's filter; the missions' time left counted at each draw
+  {
+    holdPayloads();
     const w = dom.window, d = w.document, before = errors.length, got = {}, asked = [];
     w.__cmAsked = asked;
-    w.eval(`window.__cmApi = apiJson;
+    w.eval(`window.__cmKeep = {api: apiJson, cm: data.commander, car: data.carrier, ver: data.commander_version, mat: data.materials, view};
+      const soon = new Date(Date.now() + 1200e3 + 10e3).toISOString().slice(0, 19) + "Z";
+      data.commander = {name: "Tester", credits: 1300000000, credits_login: 1234567890, earned: 65432110, login_ts: "2026-10-12T08:00:00Z", loan: 0, ranks: {}};
+      data.carrier = {name: "SAMPLE CARRIER", callsign: "X1X-X1X", fuel: 800, decommission: null,
+                      finance: {balance: 250000000, reserve: 0, available: 250000000, weeks: 12.5, warn: false, ts: "2026-10-12T08:00:07Z"}};
+      data.commander_version = 7; data.materials = Object.assign({}, data.materials, {version: 3});
       apiJson = async (u, o) => {
         const s = String(u);
-        if (!s.startsWith("api/commander/")) return __cmApi(u, o);
+        if (!s.startsWith("api/commander/")) return __cmKeep.api(u, o);
         __cmAsked.push(s);
-        if (o && o.body) (window.__cmBodies = window.__cmBodies || []).push([s, JSON.parse(o.body)]);
         return {
-          profile: {profile: {commander: "Tester", ts: "2026-10-12T08:00:00Z", credits: 1234567890, loan: 0, squadron: "Sample Wing",
-            power: {name: "Aisling Duval", rank: 3, merits: 4500},
-            ranks: [{key: "Trade", title: "Trade", rank: 7, name: "Tycoon", progress: 50, next: "Elite", to_next: 330000000, earned_by: "trade profit"},
+          profile: {profile: {commander: "Tester", ts: "2026-10-12T08:00:00Z", squadron: "Sample Wing",
+            power: {name: "Aisling Duval", rank: "<b>3</b>", merits: 4500},
+            ranks: [{key: "Exobiologist", title: "Exobiology", rank: 7, name: "Geneticist", progress: 64, next: "Elite", to_next: 1594440000, uncertain: false, earned_by: "exobiology data sold"},
                     {key: "Combat", title: "Combat", rank: 4, name: "Expert", progress: 0, next: "Master", to_next: null, earned_by: null},
+                    {key: "Explore", title: "Exploration", rank: 11, name: "Elite III", progress: 10, next: "Elite IV", to_next: 4000000000, uncertain: true, earned_by: "x"},
                     {key: "Federation", title: "Federal Navy", rank: 14, name: "Admiral", progress: null, next: null, to_next: null, earned_by: null}],
-            reputation: {Federation: -40, Empire: 76.5}, assets: {wealth: 9000000000, ships: 2, fleet: 250000000, modules: 5139353, carrier: 250000000},
-            fleet: [{id: 7, type: "krait_light", name: "Sample Ship", current: true, value: 100000000},
+            reputation: {Federation: -40, Empire: 76.5}, assets: {wealth: 9000000000, ships: 2, fleet: 250000000, modules: 5139353},
+            fleet: [{id: 7, type: "krait_light", name: "Sample Ship", current: true, value: 100000000, hot: true,
+                     links: {edsy: "https://edsy.org/#/I=H4sIAAAAAAAC_6tW%3D%3D", coriolis: 'https://coriolis.io/import?data="><b>x</b>'}},
                     {id: 5, type: "anaconda", type_name: "Anaconda", name: null, current: false, system: "Colonia", station: null, value: 150000000}],
-            carrier: {name: "SAMPLE CARRIER", callsign: "X1X-X1X", balance: 250000000, fuel: 800},
             career: [{label: "Time played", value: 7200000, kind: "time"}, {label: "Distance jumped", value: 987654, kind: "ly"},
                      {label: "Spent on ships", value: 500000000, kind: "cr"}, {label: "Systems visited", value: 12345, kind: "n"}]}},
           inventory: {ships: {ts: "2026-10-12T09:01:00Z", here: {system: "Sol", station: "Old Port"}, ships: [
-              {id: 7, type: "krait_light", name: "Sample Ship", ident: "SP-01", current: true, value: 100000000, hot: false},
+              {id: 7, type: "krait_light", name: "Sample Ship", ident: "SP-01", current: true, value: 100000000, hot: true,
+               links: {edsy: "https://edsy.org/#/I=H4sIAAAAAAAC_6tW%3D%3D", coriolis: "https://coriolis.io/import?data=H4sIAAAAAAAC_6tW%3D%3D"}},
               {id: 5, type: "anaconda", type_name: "Anaconda", name: null, current: false, system: "Colonia", station: null, value: 150000000, hot: true,
                transfer_cost: 1234567, transfer_s: 7200, in_transit: false}]},
-            modules: {ts: "2026-10-12T09:02:00Z", modules: [{name: "Frame Shift Drive", size: 5, rating: "A", mount: null, system: "Sol", blueprint: "Long Range",
-              level: 5, value: 5103953, transfer_cost: 0, transfer_s: 0, in_transit: false, hot: false}]},
+            modules: {ts: "2026-10-12T09:02:00Z", changed: "2026-10-12T10:30:00Z", modules: [{name: "Frame Shift Drive", size: 5, rating: "A", mount: null, system: "Sol", blueprint: "Long Range",
+              level: "<i>5</i>", value: 5103953, transfer_cost: 0, transfer_s: 0, in_transit: false, hot: true}]},
             locker: {ts: "2026-10-12T09:03:00Z", kinds: [{name: "Goods", items: [{name: "Weapon <Schematic>", count: 3, mission: false}]}, {name: "Data", items: []}]},
             suits: [{loadout: "Bio", suit: "Artemis Suit", class: 3, mods: ["Increased sprint duration"], weapons: [{name: "TK Aphelion", class: 2, slot: "PrimaryWeapon1", mods: []}]}]},
-          engineer_distances: {from: "Sol", distances: {Deciat: 122.6, Khun: 1234.56}, missing: ["Einheriar"], error: null},
-          engineer_tour: {from: "Sol", total_ly: 1356.8, back_ly: 0, carrier: null, covers_tried: 2, uncovered: [{label: "Sensors (any grade)", why: "no engineer you can use (not met yet)"}],
-            stops: [{engineer: "Felicity Farseer", system: "Deciat", covers: ["Frame shift drive: Increased range G1"], leg_ly: 122.6, locked: null},
-                    {engineer: "Elvira Martuuk", system: "Khun", covers: ["High capacity G1 (missile racks)"], leg_ly: 1234.2, locked: "not unlocked yet"}]},
-          ship_parts: {ship: {name: "Sample", type: "krait_light"}, parts: ["Frame shift drive", "missile racks", "Thrusters"],
-            grades: ["fsd_longrange|5", "Weapon_HighCapacity|1", "Nowhere_X|2"],
-            modules: [{slot: "FrameShiftDrive", name: "Frame Shift Drive", parts: ["Frame shift drive"], blueprint_id: "FSD_LongRange", blueprint: "Long Range", level: 5,
-                       quality: 1, experimental: "Mass Manager"},
-                      {slot: "MediumHardpoint1", name: "Missile Rack", parts: ["missile racks"], blueprint_id: null, blueprint: null, level: null, quality: null, experimental: null}]},
-          engineering: {engineers: [{name: "Felicity Farseer", system: "Deciat", kind: "ship", region: "bubble", progress: "Unlocked", rank: 5},
-                                    {name: "Elvira Martuuk", system: "Khun", kind: "ship", region: "bubble", progress: "Known", rank: null},
-                                    {name: "Petra Olmanova", system: "Asura", kind: "ship", region: "Colonia", progress: null, rank: null},
-                                    {name: "Yi Shen", system: "Einheriar", kind: "suit & weapon", region: "Colonia", progress: null, rank: null},
-                                    {name: "New One", system: null, kind: null, region: null, progress: "Known", rank: null}],
+          engineering: {engineers: [{name: "Felicity Farseer", progress: "Unlocked", rank: 5}, {name: "Elvira Martuuk", progress: "Known", rank: null}],
             blueprints: [
               {id: "FSD_LongRange", module: "Frame shift drive", name: "Increased range", grades: [
                 {grade: 1, rolls: 7, materials: [{id: "a", name: "Atypical Disrupted Wake Echoes", need: 1, have: 7}], engineers: [{name: "Felicity Farseer", progress: "Unlocked", rank: 5, ready: true}]},
-                {grade: 5, rolls: 0, materials: [{id: "b", name: "Arsenic", need: 1, have: 0}, {id: "c", name: "Datamined Wake Exceptions", need: 2, have: 5}],
+                {grade: 5, rolls: 0, materials: [{id: "b", name: "Arsenic", need: 1, have: 0, category: "Raw"}, {id: "c", name: "Datamined Wake Exceptions", need: 2, have: 5, category: "Encoded"}],
                  engineers: [{name: "Elvira Martuuk", progress: "Known", rank: null, ready: false}]}]},
-              {id: "Weapon_HighCapacity", module: "Weapon", name: "High capacity", for: ["cannons", "missile racks"], grades: [
-                {grade: 1, rolls: 0, materials: [{id: "v", name: "Vanadium", need: 1, have: 0}],
-                 engineers: [{name: "Tod 'The Blaster' McQuinn", progress: null, rank: null, ready: false}, {name: "Elvira Martuuk", progress: "Known", rank: null, ready: false}],
-                 by_kind: {cannons: [{name: "Tod 'The Blaster' McQuinn"}], "missile racks": [{name: "Elvira Martuuk"}]}}]},
               {id: "Sensor_Light", module: "Sensors", name: "Lightweight", grades: [
                 {grade: 1, rolls: 0, materials: [{id: "p", name: "Phosphorus", need: 1, have: 0}], engineers: []}]}]},
           missions: {missions: [
             {id: 1, name: "Deliver 20 units of Gold", faction: "Sol Workers", system: "Alpha Centauri", station: "Hutton Orbital", target: null, commodity: "Gold",
-             count: 20, delivered: 8, reward: 2500000, expiry: "2026-10-12T12:20:00Z", expires_in: 1200, soon: true, expired: false, wing: false, passengers: false, redirected: false},
+             count: 20, delivered: 8, reward: 2500000, expiry: soon, expires_in: 99999, soon: false, expired: false, wing: false, passengers: false, redirected: false},
             {id: 2, name: "Massacre", faction: "Sol Workers", system: "Sol", station: "Old Port", target: "Bad Lot", commodity: null, count: 12, delivered: null,
-             reward: 9000000, expiry: null, expires_in: null, soon: false, expired: false, wing: true, passengers: false, redirected: true}]},
-          sessions: {days: 30, totals: {combat: {sessions: 1, kills: 3, bounties: 400000, bonds: 60000, deaths: 1}, mining: {sessions: 1, tons: 6, prospected: 2, sold: 1500000}},
+             reward: 9000000, expiry: null, expires_in: null, soon: false, expired: false, wing: true, passengers: false, redirected: true},
+            {id: 3, name: "Courier", faction: "Sol Workers", system: "Sol", station: null, target: null, commodity: null, count: null, delivered: null,
+             reward: 100000, expiry: "2026-01-01T00:00:00Z", expires_in: 5, soon: true, expired: false, wing: false, passengers: false, redirected: false}]},
+          sessions: {max: 40, days: 30, totals: {combat: {sessions: 1, kills: 3, bounties: 400000, bonds: 60000, deaths: 1}, mining: {sessions: 1, tons: 6, srv_tons: 3, prospected: 2, sold: 1500000}},
             sessions: [
               {start: "2026-10-12T11:00:00Z", end: "2026-10-12T11:51:00Z", ship: "Type-9 Heavy", combat: null, mining: {tons: 6, refined: {Platinum: 5, Osmium: 1},
+                srv_tons: 3, srv_refined: {Gold: 3}, srv_seconds: 600,
                 prospected: 2, content: {High: 1, Low: 1}, motherlodes: 1, cracked: 1, prospectors: 1, collectors: 1, sold: 1500000, seconds: 1800, per_hour: 12}},
               {start: "2026-10-12T08:00:00Z", end: "2026-10-12T09:00:00Z", ship: "Krait Mk II", mining: null, combat: {kills: 3, bounties: 400000, bonds: 60000,
-                deaths: 1, interdicted: 1, redeemed: 400000, by_ship: {Anaconda: 2}, seconds: 1800, per_hour: 6}}]},
+                deaths: 1, interdicted: 1, redeemed: 400000, by_ship: {Anaconda: 2}, seconds: 1800, per_hour: "<u>6</u>"}}]},
         }[s.slice("api/commander/".length)];
       };
-      CM.data = {}; CM.at = {}; CM.error = {}; CM.tab = "profile"; CM.q = ""; CM.craft = false;`);
+      CM.data = {}; CM.key = {}; CM.error = {}; CM.loading = {}; CM.tab = "profile"; CM.q = ""; CM.craft = false; CM.open = {};
+      document.getElementById("cmFilter").value = ""; document.getElementById("cmCraft").checked = false;`);
     const text = el => el ? el.textContent.replace(/\s+/g, " ").trim() : "", body = () => d.getElementById("cmdrBody");
-    const rows = () => [...body().querySelectorAll("table.cmtable tbody tr")].map(t => [...t.cells].map(text).join(" | "));
-    const tab = async name => { d.querySelector(`#cmdrTabs [data-cmtab="${name}"]`).click(); await sleep(120); };
+    // a cell's full form (a fitted table's cells hold both: .lf and the short .sf)
+    const full = el => { const c = el.cloneNode(true); c.querySelectorAll(".sf, .sf1, .sf2").forEach(x => x.remove()); return text(c); };
+    const rows = () => [...body().querySelectorAll("table.cmtable tbody tr")].map(t => [...t.cells].map(full).join(" | "));
+    // a class's colour as the theme gives it: jsdom leaves var() unresolved, so it is looked up on :root here
+    const colour = el => { const c = w.getComputedStyle(el).color, m = /^var\((--[\w-]+)\)$/.exec(c);
+      return m ? w.getComputedStyle(d.documentElement).getPropertyValue(m[1]).trim() : c; };
+    const root = name => w.getComputedStyle(d.documentElement).getPropertyValue(name).trim();
+    const tab = async name => { d.querySelector(`[name=cmdrTab][value="${name}"]`).click(); await settle(400); };
     try {
       d.querySelector('[data-view="cmdr"]').click();
-      await sleep(150);
-      got.shown = [d.getElementById("cmdrView").hidden, [...d.querySelectorAll("#cmdrTabs .cmtab")].map(b => b.textContent + (b.classList.contains("on") ? "*" : ""))];
+      await settle(400);
+      const pane = d.getElementById("cmdrPane");
+      // the sub-tabs' words, Engineering's and Missions' after the game's engineer and mission markers (#13, aria-hidden)
+      got.shown = [d.getElementById("cmdrView").hidden, [...d.querySelectorAll("#cmdrTabs .seg label")].map(l => markText(l).trim() + (l.querySelector("input").checked ? "*" : "") +
+                     (l.querySelector(".mk") ? l.querySelector(".mk").getAttribute("aria-hidden") : "")),
+                   // the controls above the pane, not in it
+                   ["cmFilter", "cmCraft", "cmRefresh", "cmdrStatus"].every(id => !pane.contains(d.getElementById(id))) &&
+                     !pane.querySelector(".seg") && !!(d.getElementById("cmdrTabs").compareDocumentPosition(pane) & w.Node.DOCUMENT_POSITION_FOLLOWING),
+                   d.getElementById("cmEngCtl").hidden];
       got.profile = [text(body().querySelector(".hwyttl")), rows(), [...body().querySelectorAll(".cmfig")].map(text), [...body().querySelectorAll(".cmrep")].map(text),
-                     [...body().querySelectorAll(".cmbar > span")].map(x => x.style.width)];
+                     [...body().querySelectorAll(".cmbar > span")].map(x => x.style.width), !!body().querySelector(".hwyttl b")];
+      // the payload's credits move: the tab follows at the next draw without asking the server
+      w.eval(`data.commander = Object.assign({}, data.commander, {credits: 1400000000}); render();`);
+      got.liveCredits = text(body().querySelector(".cmfig b"));
+      // batch 4: the ship you fly marked hot (wanted): a red ⚖ (the theme's --bad) with its title, as a stored one
+      const hot = () => [...body().querySelectorAll(".cmhot")].map(x => [x.closest("tr").cells[0].querySelector("b").textContent, x.title,
+                                                                             colour(x) === root("--bad") && !!root("--bad")]);
+      got.hotProfile = hot();
+      // 2026-10-14: each ship's build in EDSY and Coriolis (the server's links), a new tab, escaped; none without a Loadout
+      const build = () => [...body().querySelectorAll("table.cmtable tbody tr")].filter(t => t.querySelector(".cmlinks")).map(t => {
+        const l = t.querySelector(".cmlinks");
+        return [t.cells[0].querySelector("b").textContent, [...l.querySelectorAll("a")].map(a => [a.textContent, a.getAttribute("href"), a.target, a.rel].join(" ")),
+                l.classList.contains("unk") ? l.title : ""]; });
+      got.buildProfile = [build(), !body().querySelector(".cmlinks b")];
       await tab("inventory");
       got.inventory = rows();
+      got.hotInventory = hot();
+      got.buildInventory = build();
       got.heads = [...body().querySelectorAll("h3.subhead")].map(text);
       got.locker = [...body().querySelectorAll(".cmitem")].map(text);
+      got.noTags = !body().querySelector("table i, table u");
       await tab("engineering");
-      got.engineering = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary")) + (x.open ? " open" : "")), text(body().querySelector(".cmfilter .unk"))];
-      // the engineers: where each works, how far, with Copy (the system to the clipboard) and Plot route (S31's button)
-      await sleep(60);
-      const engRows = [...body().querySelectorAll(".cmengtable tbody tr")];
-      got.engDist = engRows.map(t => text(t.cells[3]));
-      got.engineers = [body().querySelector("details.cmengs").open, engRows.map(t => [...t.cells].slice(0, 3).map(text).join(" | ")),
-                       engRows.map(t => t.querySelectorAll("[data-cmcopy]").length + t.querySelectorAll("[data-plotto]").length).join("")];
-      const cmCopied = [];
-      w.eval("window.__cmCopy = copyText"); w.__cmCopied = cmCopied;
-      w.eval("copyText = (t, what) => __cmCopied.push(t)");
-      engRows[0].querySelector("[data-cmcopy]").click();
-      w.eval("copyText = __cmCopy");
-      got.engCopy = [cmCopied, engRows[0].querySelector("[data-plotto]").dataset.plotto];
+      got.engineering = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary")) + (x.open ? " open" : "")), text(body().querySelector(".cmnote")),
+                         d.getElementById("cmEngCtl").hidden];
       const f = d.getElementById("cmFilter");
-      // the box is drawn anew with each search: each step types into the one on the page now
-      const search = v => { const el = d.getElementById("cmFilter"); el.focus(); el.value = v; el.dispatchEvent(new w.Event("input", {bubbles: true})); };
-      f.focus();
-      // the search: a weapon the blueprint is for ("missile": Weapon's "for" line), an engineer (the Engineers list too)
-      search("missile");
-      got.searchFor = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary"))), [...body().querySelectorAll(".cmfor")].map(text),
-                       [...body().querySelectorAll(".cmengtable tbody tr")].length, text(body().querySelector(".cmengs ~ .cmnote, .cmnote") || {textContent: ""})];
-      search("khun");
-      got.searchEng = [[...body().querySelectorAll(".cmengtable tbody tr")].map(t => text(t.cells[0])), body().querySelector("details.cmengs").open,
-                       [...body().querySelectorAll("details.cmmod")].length];
-      // the parts: picked ones narrow the blueprints and the Engineers list (any picked part), a grade's engineers to theirs
-      search("");
-      const partBtn = name => body().querySelector(`[data-cmpart="${name}"]`);
-      got.parts = [...body().querySelectorAll("[data-cmpart]")].map(text);
-      partBtn("missile racks").click();
-      const engNames = () => [...body().querySelectorAll(".cmengtable tbody tr")].map(t => text(t.cells[0]));
-      got.pickOpen = [...body().querySelectorAll("details.cmmod")].every(x => x.open);   // a pick opens what it found
-      got.pickOne = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary"))), engNames(),
-                     [...body().querySelectorAll("table.cmtable tbody tr")].map(t => text(t.cells[3])), !!body().querySelector("[data-cmpart-clear]")];
-      partBtn("Frame shift drive").click();
-      got.pickTwo = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary"))), engNames(),
-                     [...body().querySelectorAll(".cmpart.on")].map(text)];
-      body().querySelector("[data-cmpart-clear]").click();
-      // a grade picked (G5 of the blueprint): the Engineers list is those who do that grade, each naming it
-      partBtn("Frame shift drive").click();
-      body().querySelector('[data-cmgrade="FSD_LongRange|5"]').click();
-      got.grade5 = [engNames(), body().querySelectorAll(".cmgrade.on").length, !!body().querySelector("tr.cmgradeon")];
-      body().querySelector('[data-cmgrade="FSD_LongRange|1"]').click();
-      got.grade15 = engNames();
-      body().querySelector('[data-cmgrade="FSD_LongRange|5"]').click();
-      got.grade1 = engNames();
-      body().querySelector("[data-cmpart-clear]").click();
-      got.gradeCleared = [body().querySelectorAll(".cmgrade.on").length, body().querySelectorAll(".cmpart.on").length];
-      // Clear filters: the search, the craft box, the parts and the grades, at once; shown only while one is on
-      got.clearShown = [!!body().querySelector("#cmClearAll")];
-      search("vanadium"); d.getElementById("cmCraft").checked = true; d.getElementById("cmCraft").dispatchEvent(new w.Event("change", {bubbles: true}));
-      partBtn("missile racks").click();
-      got.clearShown.push(!!body().querySelector("#cmClearAll"));
-      body().querySelector("#cmClearAll").click();
-      got.clearAll = [d.getElementById("cmFilter").value, d.getElementById("cmCraft").checked, body().querySelectorAll(".cmpart.on").length,
-                      body().querySelectorAll("details.cmmod").length, !!body().querySelector("#cmClearAll")];
-      // Load my ship: its parts (those the table has) and each engineered module's grade picked, the modules listed
-      body().querySelector("#cmLoadShip").click();
-      await sleep(80);
-      got.loadShip = [[...body().querySelectorAll(".cmpart.on")].map(text), [...body().querySelectorAll(".cmgrade.on")].map(b => b.dataset.cmgrade),
-                      text(body().querySelector(".cmship")), engNames()];
-      body().querySelector("#cmClearAll").click();
-      got.loadShipCleared = [body().querySelectorAll(".cmpart.on").length, !!body().querySelector(".cmship")];
-      // Plan the trip: what the picks ask for is posted, the plan drawn in order, the next stop to plot, the itinerary
-      body().querySelector('[data-cmgrade="FSD_LongRange|1"]').click();   // before any part: a picked part hides the others
-      partBtn("Sensors").click();
-      partBtn("missile racks").click();
-      body().querySelector('[data-cmgrade="Weapon_HighCapacity|1"]').click();
-      d.getElementById("cmTripLocked").checked = true; d.getElementById("cmTripLocked").dispatchEvent(new w.Event("change", {bubbles: true}));
-      body().querySelector("#cmPlanTrip").click();
-      await sleep(80);
-      const tripBody = w.__cmBodies.find(b => b[0] === "api/commander/engineer_tour");
-      got.tripAsked = tripBody && [tripBody[1].requirements.map(r => `${r.label}|${r.grade}|${r.engineers.join("+")}`), tripBody[1].include_locked, tripBody[1].return_carrier];
-      const tripRows = () => [...body().querySelectorAll(".cmtriptable tbody tr")].map(t => [...t.cells].slice(0, 5).map(text).join(" | "));
-      got.trip = [text(body().querySelector(".cmtrip .hwyttl")), tripRows(), text(body().querySelector("[data-plotto].primary")),
-                  [...body().querySelectorAll(".cmtripshort")].map(text)];
-      const tripCopied = [];
-      w.eval("window.__cmCopy2 = copyText"); w.__tripCopied = tripCopied;
-      w.eval("copyText = (t, what) => __tripCopied.push(t)");
-      body().querySelector("#cmTripCopy").click();
-      w.eval("copyText = __cmCopy2");
-      got.tripCopy = tripCopied;
-      got.tripKept = w.eval(`JSON.parse(localStorage.getItem("cmTrip")).stops.length`);
-      // arriving in the first stop's system ticks it: the next one to plot moves on
-      w.eval(`data.position = Object.assign({}, data.position, {name: "Deciat"})`);
-      w.eval("cmdrDrawBody()");
-      got.tripTicked = [tripRows()[0].split(" | ")[0], text(body().querySelector("[data-plotto].primary")), text(body().querySelector(".cmtrip .hwyttl"))];
-      body().querySelector("#cmTripForget").click();
-      got.tripForgot = [!!body().querySelector(".cmtrip"), w.eval(`localStorage.getItem("cmTrip")`)];
-      body().querySelector("#cmClearAll").click();
-      got.cleared = [body().querySelectorAll(".cmpart.on").length, body().querySelectorAll("details.cmmod").length];
-      search("wake");
-
+      f.focus(); f.value = "wake"; f.dispatchEvent(new w.Event("input", {bubbles: true}));
       got.filtered = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary")) + (x.open ? " open" : "")), rows(),
-                      d.activeElement && d.activeElement.id, body().querySelectorAll(".cmmat.ok").length, body().querySelectorAll(".cmmat.noscoop").length];
-      d.getElementById("cmCraft").checked = true; d.getElementById("cmCraft").dispatchEvent(new w.Event("change", {bubbles: true}));
+                      d.activeElement && d.activeElement.id, body().querySelectorAll(".cmmat.ok").length, body().querySelectorAll(".cmmat.short").length];
+      // green and red are the theme's own (the Materials tab's): --good and --bad, resolved
+      got.colours = [colour(body().querySelector(".cmmat.ok")) === root("--good") && !!root("--good"),
+                     colour(body().querySelector(".cmmat.short")) === root("--bad") && !!root("--bad")];
+      d.getElementById("cmCraft").click();
       got.craft = rows().length;
+      // should 5: links go out of the tab: a short material to the Materials tab (filtered to it), its ⇄ to the nearest
+      // trader of its kind
+      d.getElementById("cmCraft").click();
+      w.eval(`window.__cmNearKeep = openNearest; openNearest = o => { window.__cmNear = o; };`);
+      body().querySelector('.cmshort [data-trader]').click();
+      got.trader = w.eval(`JSON.stringify(window.__cmNear)`);
+      w.eval(`openNearest = __cmNearKeep;`);
+      // the Materials tab drawn once already (not fetched again on the switch): the link still filters its grid
+      d.querySelector('[data-view="mat"]').click(); await settle(400);
+      d.querySelector('[data-view="cmdr"]').click(); await settle(400);
+      body().querySelector('[data-cmmat="Arsenic"]').click(); await settle(400);
+      got.toMat = [w.eval("view"), d.getElementById("mFilter").value, [...d.querySelectorAll("#matGrid .mrow > span:first-child")].map(text)];
+      d.getElementById("mFilter").value = ""; d.getElementById("mFilter").dispatchEvent(new w.Event("input"));
+      d.querySelector('[data-view="cmdr"]').click(); await settle(400);
+      // should 8: a blueprint table that cannot be read says so
+      w.eval(`CM.data.engineering = {unreadable: true, blueprints: [], engineers: []}; cmdrDrawBody();`);
+      got.unreadable = text(body());
       await tab("missions");
       got.missions = [text(body().querySelector(".hwyttl")), rows(), body().querySelectorAll(".warnc").length];
+      // the tablet's compact tables: Missions fitted (FIT_TABLES), its headings and cells with short forms, the faction
+      // left out at the tightest level
+      const mt = d.getElementById("cmMissions");
+      w.eval(`setTableLevel(document.getElementById("cmMissions"), 2)`);
+      const shown = el => w.getComputedStyle(el).display !== "none";
+      got.fitMissions = [w.eval(`FIT_TABLES.includes("cmMissions")`), [...mt.querySelectorAll("th .sf")].map(text),
+                         text(mt.rows[1].cells[4].querySelector(".sf")), text(mt.rows[1].cells[2].querySelector(".sf")), shown(mt.rows[1].cells[1]),
+                         shown(mt.rows[1].cells[4].querySelector(".lf")), text(mt.rows[1].cells[5].querySelector(".sf"))];
       await tab("sessions");
-      got.sessions = [rows(), [...body().querySelectorAll(".cmfig")].map(text)];
-      await tab("missions");                                                   // fresh: not asked again
-      d.getElementById("cmRefresh").click();                                    // asked again when you say so
-      await sleep(120);
+      got.sessions = [rows(), [...body().querySelectorAll(".cmfig")].map(text), [...body().querySelectorAll("h3.subhead")].map(text)];
+      got.fitSessions = ["cmCombat", "cmMining"].map(id => { const t = d.getElementById(id); return [w.eval(`FIT_TABLES.includes("${id}")`), [...t.querySelectorAll("th .sf")].map(text),
+                                                                                                text(t.rows[1].cells[0].querySelector(".sf"))]; });
+      // asked again only when the payload says so: an unchanged one draws from what it has, a new version asks (the
+      // open tab only), the materials' version only for Engineering; Refresh asks now
+      const n0 = asked.length;
+      w.eval(`render(); render();`); await settle(400);
+      got.unchanged = asked.length - n0;
+      w.eval(`data.materials = Object.assign({}, data.materials, {version: 4}); render();`); await settle(400);
+      got.matOther = asked.length - n0;
+      w.eval(`data.commander_version = 8; render();`); await settle(400);
+      got.moved = asked.slice(n0);
+      await tab("missions");                                                   // read at version 7: asked again
+      await tab("missions");
+      d.getElementById("cmRefresh").click(); await settle(400);              // asked again when you say so
+      got.after = asked.slice(n0);
       got.pure = [w.eval(`cmSpan(7200)`), w.eval(`cmSpan(200000)`), w.eval(`cmSpan(540)`)];
-    } finally { w.eval(`apiJson = __cmApi; CM.data = {}; CM.at = {}; CM.q = ""; CM.craft = false;`); d.querySelector('[data-view="overview"]').click(); }
-    await sleep(60);
+      got.stored = w.eval(`store.get("cmdrTab")`);
+      // the career's link: History, its Career row brought into view at the next draw
+      await tab("profile");
+      body().querySelector('[data-cmgo="hist"]').click(); await settle(1500);
+      got.toHist = [w.eval("view"), w.eval("histReveal")];
+      d.querySelector('[data-view="cmdr"]').click(); await settle(400);
+      // the tab's label (2026-10-14): CMDR on the header, its ↗ window and the tablet's nav
+      got.label = [d.querySelector('.views [data-view="cmdr"]').dataset.name, text(d.querySelector('.tb-page[data-view="cmdr"]'))];
+      await tab("sessions");                                                   // so that the real profile below is a change of tab
+      // the real server's answer for the sample journals
+      w.eval(`apiJson = __cmKeep.api; CM.key = {}; CM.data = {};`);
+      await tab("profile"); await settle(3000);
+      got.real = [text(body().querySelector(".hwyttl")).replace(/ as of .*/, ""), !!body().querySelector(".cmranks"), text(d.getElementById("cmdrStatus"))];
+    } finally {
+      w.eval(`apiJson = __cmKeep.api; Object.assign(data, {commander: __cmKeep.cm, carrier: __cmKeep.car, commander_version: __cmKeep.ver, materials: __cmKeep.mat});
+        CM.data = {}; CM.key = {}; CM.q = ""; CM.craft = false; CM.tab = "profile"; store.set("cmdrTab", "profile");
+        document.getElementById("cmFilter").value = ""; document.getElementById("cmCraft").checked = false;`);
+      d.querySelector('[data-view="overview"]').click();
+      await releasePayloads();
+    }
     const want = {
-      shown: [false, ["CMDR*", "Inventory", "Engineering", "Missions", "Sessions"]],
-      profile: ["CMDR Tester · Sample Wing · pledged to Aisling Duval, rank 3, 4,500 merits as of 2026-10-12 08:00",
-                ["Trade | Tycoon | 50% | next: Elite in 330.0M cr", "Combat | Expert | 0% | next: Master", "Federal Navy | Admiral |  | the top",
-                 "Sample Ship Krait Phantom | you fly it | 100.0M cr", "Anaconda | Colonia | 150.0M cr"],
-                ["Credits1.23B cr", "Net worth9.00B cr", "Fleet250.0M cr · 2 ships", "Stored modules5.1M cr", "Carrier balance250.0M cr",
+      shown: [false, ["CMDR*", "Inventory", "[engineer]Engineeringtrue", "[mission]Missionstrue", "Sessions", "Earnings"], true, true],
+      profile: ["CMDR Tester · Sample Wing · pledged to Aisling Duval, rank NaN, 4,500 merits as of 2026-10-12 08:00",
+                ["Exobiology | Geneticist | 64% | next: Elite in about 1.59B cr", "Combat | Expert | 0% | next: Master",
+                 "Exploration | Elite III | 10% | next: Elite IV in about 4.00B cr (uncertain)", "Federal Navy | Admiral |  | the top",
+                 "Sample Ship Krait Phantom ⚖\uFE0E EDSY ↗ Coriolis ↗ | you fly it | 100.0M cr", "Anaconda no build | Colonia | 150.0M cr"],
+                ["Credits≈ 1.30B cr", "Net worth9.00B cr", "Fleet250.0M cr · 2 ships", "Stored modules5.1M cr", "Carrier balance250.0M cr",
                  "Time played2,000 h", "Distance jumped987,654 ly", "Spent on ships500.0M cr", "Systems visited12,345"],
-                ["Reputation: Federation -40% · Empire 77%", "Fleet carrier: SAMPLE CARRIER X1X-X1X · 250.0M cr · 800 t tritium"], ["50%", "0%"]],
-      inventory: ["Sample Ship Krait Phantom SP-01 | you fly it | 100.0M cr | ", "Anaconda hot | Colonia | 150.0M cr | 1.2M cr · 2 h 0 min",
-                  "5A Frame Shift Drive | Long Range G5 | Sol | 5.1M cr | ", "Bio | Artemis Suit G3Increased sprint duration | TK Aphelion G2"],
-      heads: ["Ships 2 as of 2026-10-12 09:01", "Stored modules 1 as of 2026-10-12 09:02", "Ship locker as of 2026-10-12 09:03", "Suit loadouts 1"],
+                ["Reputation: Federation -40% · Empire 77%", "Fleet carrier: SAMPLE CARRIER X1X-X1X · balance 250.0M · ~12 wks upkeep · 800 t tritium (the Carrier tile's figures)"],
+                ["64%", "0%", "10%"], false],
+      liveCredits: "≈ 1.40B cr",
+      inventory: ["Sample Ship Krait Phantom SP-01 ⚖\uFE0E EDSY ↗ Coriolis ↗ | you fly it | 100.0M cr | ", "Anaconda ⚖\uFE0E no build | Colonia | 150.0M cr | 1.2M cr · 2 h 0 min",
+                  "5A Frame Shift Drive ⚖\uFE0E | Long Range GNaN | Sol | 5.1M cr | ", "Bio | Artemis Suit G3Increased sprint duration | TK Aphelion G2"],
+      hotProfile: [["Sample Ship", "hot: this ship is wanted", true]],
+      buildProfile: [[["Sample Ship", ["EDSY ↗ https://edsy.org/#/I=H4sIAAAAAAAC_6tW%3D%3D _blank noopener",
+                                       'Coriolis ↗ https://coriolis.io/import?data="><b>x</b> _blank noopener'], ""],
+                      ["Anaconda", [], "no build on record for this ship yet: board it once to record its build"]], true],
+      buildInventory: [["Sample Ship", ["EDSY ↗ https://edsy.org/#/I=H4sIAAAAAAAC_6tW%3D%3D _blank noopener",
+                                        "Coriolis ↗ https://coriolis.io/import?data=H4sIAAAAAAAC_6tW%3D%3D _blank noopener"], ""],
+                       ["Anaconda", [], "no build on record for this ship yet: board it once to record its build"]],
+      hotInventory: [["Sample Ship", "hot: this ship is wanted", true], ["Anaconda", "hot: this ship is wanted", true],
+                     ["Frame Shift Drive", "hot: this module is wanted", true]],
+      heads: ["Ships 2 as of 2026-10-12 09:01", "Stored modules 1 as of 2026-10-12 10:30", "Ship locker as of 2026-10-12 09:03", "Suit loadouts 1"],
       locker: ["Weapon <Schematic>3"],
-      engineering: [["Frame shift drive 1 blueprint", "Weapon 1 blueprint", "Sensors 1 blueprint"], "1 of 3 engineers unlocked · ship modules only: no experimental effects, suits or weapons"],
-      engineers: [true, ["Felicity Farseer | unlocked, grade 5 | Deciat", "Elvira Martuuk | known | Khun", "Petra Olmanova | not met | Asura Colonia",
-                         "Yi Shen suit & weapon | not met | Einheriar Colonia", "New One | known | not known"], "22220"],
-      engCopy: [["Deciat"], "Deciat"],
-      searchFor: [["Weapon 1 blueprint"], ["for: cannons, missile racks"], 0, "No engineer matches."],
-      searchEng: [["Elvira Martuuk"], true, 0],
-      parts: ["cannons", "Frame shift drive", "missile racks", "Sensors"],
-      pickOne: [["Weapon 1 blueprint"], ["Elvira Martuuk · missile racks"], ["Elvira Martuuk"], true],
-      pickTwo: [["Frame shift drive 1 blueprint", "Weapon 1 blueprint"],
-                ["Felicity Farseer · Frame shift drive", "Elvira Martuuk · Frame shift drive, missile racks"], ["Frame shift drive", "missile racks"]],
-      cleared: [0, 3],
-      pickOpen: true,
-      grade5: [["Elvira Martuuk · Frame shift drive, Increased range G5"], 1, true],
-      grade15: ["Felicity Farseer · Frame shift drive, Increased range G1", "Elvira Martuuk · Frame shift drive, Increased range G5"],
-      grade1: ["Felicity Farseer · Frame shift drive, Increased range G1"],
-      gradeCleared: [0, 0],
-      clearShown: [false, true], clearAll: ["", false, 0, 3, false],
-      loadShip: [["Frame shift drive", "missile racks"], ["FSD_LongRange|5", "Weapon_HighCapacity|1"],
-                 "Sample 2 modules with blueprints, 1 engineered: their parts and grades picked (experimental effects are named, not picked)" +
-                 "Frame Shift Drive Long Range G5 · Mass ManagerMissile Rack stock",
-                 ["Elvira Martuuk · Frame shift drive, High capacity G1, Increased range G5, missile racks"]],
-      loadShipCleared: [0, false],
-      tripAsked: [["Frame shift drive: Increased range G1|1|Felicity Farseer", "High capacity G1 (missile racks)|1|Elvira Martuuk",
-                   "Sensors (any grade)|null|"], true, false],
-      trip: ["Trip from Sol: 2 stops, 1,356.8 ly",
-             ["1 | Felicity Farseer | Deciat | Frame shift drive: Increased range G1 | 122.6 ly",
-              "2 | Elvira Martuuk not unlocked yet | Khun | High capacity G1 (missile racks) | 1,234.2 ly"],
-             "Plot next stop: Deciat", ["Not covered: Sensors (any grade) (no engineer you can use (not met yet))", "Short for one roll: Vanadium 0/1 (High capacity G1)"]],
-      tripCopy: ["1. Felicity Farseer — Deciat (122.6 ly): Frame shift drive: Increased range G1\n2. Elvira Martuuk — Khun (1234.2 ly): High capacity G1 (missile racks) [not unlocked yet]\n1356.8 ly in all, from Sol"],
-      tripKept: 2, tripTicked: ["✓", "Plot next stop: Khun", "Trip from Sol: 2 stops, 1,356.8 ly · 1 done"], tripForgot: [false, "null"], engDist: ["122.6 ly", "1,234.6 ly", "?", "?", ""],
+      noTags: true,
+      engineering: [["Frame shift drive 1 blueprint", "Sensors 1 blueprint"], "1 of 2 engineers unlocked · ship modules only: no experimental effects, suits or weapons", false],
       filtered: [["Frame shift drive 1 blueprint open"], ["G1 | Atypical Disrupted Wake Echoes 7/1 | ×7 | Felicity Farseer",
-                 "G5 | Arsenic 0/1Datamined Wake Exceptions 5/2 | – | Elvira Martuuk"], "cmFilter", 2, 1],
+                 "G5 | Arsenic 0/1⇄Datamined Wake Exceptions 5/2 | – | Elvira Martuuk"], "cmFilter", 2, 1],
+      trader: JSON.stringify({need: ["Raw"]}),
+      toMat: ["mat", "Arsenic", ["Arsenic"]],
+      unreadable: "Blueprint table unreadable: resources/blueprints.json is missing or damaged (a fresh copy of Outrider brings it back).",
+      fitMissions: [true, ["Left"], "2.5M", "Alpha Centauri", false, false, "20m"],
+      fitSessions: [["cmCombat", [true, ["By ship", "Time"], "10-12 08:00"]], ["cmMining", [true, ["Prosp", "Time"], "10-12 11:00"]]].map(x => x[1]),
+      toHist: ["hist", false],
+      label: ["CMDR", "CMDR"],
+      colours: [true, true],
       craft: 1,
-      missions: ["2 missions · 1 expiring within half an hour", ["Deliver 20 units of Gold | Sol Workers | Alpha Centauri · Hutton Orbital | Gold 8/20 | 2.5M cr | 20 min",
-                 "Massacre wing redirected | Sol Workers | Sol · Old Port | Bad Lot 12 | 9.0M cr | no limit"], 2],
-      sessions: [["2026-10-12 08:00 | Krait Mk II | 3 | Anaconda 2 | 400k cr | 60k cr | 6 | 30 min | 1",
-                  "2026-10-12 11:00 | Type-9 Heavy | 6 t | Platinum 5, Osmium 1 | 12 | 2 High 1, Low 1 · 1 core | 1 / 1 | 30 min | 1.5M cr"],
-                 ["Sessions1", "Kills3", "Bounties400k cr", "Combat bonds60k cr", "Deaths1", "Sessions1", "Refined6 t", "Asteroids prospected2", "Sold1.5M cr"]],
+      missions: ["3 missions · 1 expiring within half an hour", ["Deliver 20 units of Gold | Sol Workers | Alpha Centauri · Hutton Orbital | Gold 8/20 | 2.5M cr | 20 min",
+                 "Massacre wing redirected | Sol Workers | Sol · Old Port | Bad Lot 12 | 9.0M cr | no limit",
+                 "Courier | Sol Workers | Sol |  | 100k cr | expired"], 2],
+      sessions: [["2026-10-12 08:00 | Krait Mk II | 3 | Anaconda 2 | 400k cr | 60k cr | NaN | 30 min | 1",
+                  "2026-10-12 11:00 | Type-9 Heavy | 6 t + 3 t SRV | Platinum 5, Osmium 1 · SRV: Gold 3 | 12 | 2 High 1, Low 1 · 1 core | 1 / 1 | 30 min | 1.5M cr"],
+                 ["Sessions1", "Kills3", "Bounties400k cr", "Combat bonds60k cr", "Deaths1", "Sessions1", "Refined6 t", "SRV refined3 t", "Asteroids prospected2", "Sold1.5M cr"],
+                 ["Combat your sessions of the last 30 days, 40 at most", "Mining your sessions of the last 30 days, 40 at most"]],
+      unchanged: 0, matOther: 0,
+      moved: ["api/commander/sessions"],
+      after: ["api/commander/sessions", "api/commander/missions", "api/commander/missions"],
       pure: ["2 h 0 min", "2 d 7 h", "9 min"],
+      stored: "missions",
+      real: ["CMDR Sample Pilot", true, "from your journals"],
     };
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    if (JSON.stringify(asked) !== JSON.stringify(["api/commander/profile", "api/commander/inventory", "api/commander/engineering", "api/commander/engineer_distances", "api/commander/ship_parts", "api/commander/engineer_tour", "api/commander/missions", "api/commander/sessions",
-                                                 "api/commander/missions"])) bad.push("asked");
+    if (JSON.stringify(asked.slice(0, 5)) !== JSON.stringify(["api/commander/profile", "api/commander/inventory", "api/commander/engineering", "api/commander/missions",
+                                                             "api/commander/sessions"])) bad.push("asked");
     const goodCM = !bad.length && errors.length === before;
     allOk = allOk && goodCM;
     console.log(goodCM ? "OK" : "FAIL", "| commander |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
-      : "the commander's ranks, money and fleet, inventory, engineering with its filter, missions, sessions; a fresh tab is not asked again", errors.slice(before));
+      : "controls above the pane, the theme's green and red, the hot ⚖, the tiles' credits and carrier, the SRV's refinery apart; asked again only on a new version or Refresh; the real profile", errors.slice(before));
+  }
+  // Inventory's ship pictures (2026-10-15): a mouse resting 2 s on a ship's row shows its type's picture in a card (none
+  // before), gone when it leaves; a touch's pointer does nothing (the tablet's tap, in the tablet block); a type with no
+  // picture (a hull newer than SHIP_NAMES) shows nothing; Escape closes; another tab of the CMDR view closes it
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, got = {};
+    w.eval(`window.__scKeep = {api: apiJson, ver: data.commander_version};
+      data.commander_version = 70;
+      apiJson = async (u, o) => String(u) !== "api/commander/inventory" ? __scKeep.api(u, o) : {ships: {ts: "2026-10-12T09:01:00Z", ships: [
+        {id: 7, type: "Explorer_NX", name: "Far Wanderer", current: true, value: 100000000},
+        {id: 8, type: "krait_light", name: null, system: "Sol", value: 90000000},
+        {id: 9, type: "new_hull_x", name: "Prototype", system: "Sol", value: 1}]}, modules: {modules: []}, locker: {kinds: []}, suits: []};
+      CM.data = {}; CM.key = {}; CM.error = {}; CM.loading = {};`);
+    const card = () => d.getElementById("shipCard"), body = () => d.getElementById("cmdrBody");
+    const row = name => [...body().querySelectorAll("table.cmtable tbody tr")].find(r => r.cells[0].querySelector("b").textContent === name);
+    const ptr = (el, type, pointerType = "mouse") => el.dispatchEvent(new w.PointerEvent(type, {bubbles: false, pointerType}));
+    const shown = () => card().hidden ? null : [card().querySelector("img").getAttribute("src"), card().querySelector("img").alt,
+      card().querySelector("img").getAttribute("loading"), card().querySelector("img").getAttribute("width"), card().querySelector("img").getAttribute("height"),
+      card().querySelector(".shipcardname").textContent, parseFloat(card().style.left) >= 8 && parseFloat(card().style.top) >= 8];
+    try {
+      d.querySelector('[data-view="cmdr"]').click(); await settle(400);
+      d.querySelector('[name=cmdrTab][value="inventory"]').click(); await settle(400);
+      got.marked = [...body().querySelectorAll("tr[data-shipimg]")].map(r => r.dataset.shipimg);
+      const cas = row("Far Wanderer");
+      ptr(cas, "pointerenter");
+      ptr(cas.cells[0], "pointerenter"); ptr(cas.cells[0], "pointerleave");   // moving over its cells: still the row's hover
+      await sleep(1500);
+      got.early = shown();
+      await sleep(800);
+      got.after = shown();
+      ptr(cas, "pointerleave");
+      got.left = card().hidden;
+      // a type with no picture: no card, however long
+      ptr(row("Prototype"), "pointerenter"); await sleep(2300);
+      got.unknown = card().hidden;
+      ptr(row("Prototype"), "pointerleave");
+      // a finger's pointer: nothing (the tablet's tap does it)
+      ptr(row("Krait Phantom"), "pointerenter", "touch"); await sleep(2300);
+      got.touch = card().hidden;
+      // Escape closes; another sub-tab closes it
+      ptr(row("Krait Phantom"), "pointerenter"); await sleep(2300);
+      got.krait = shown();
+      d.dispatchEvent(new w.KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
+      got.escape = card().hidden;
+      ptr(row("Krait Phantom"), "pointerleave");
+      ptr(row("Krait Phantom"), "pointerenter"); await sleep(2300);
+      d.querySelector('[name=cmdrTab][value="profile"]').click(); await settle(400);
+      got.otherTab = card().hidden;
+      got.pure = w.eval(`[shipPicture("Krait_Light"), shipPicture("new_hull_x"), shipPicture("constructor")]`);
+    } finally {
+      w.eval(`apiJson = __scKeep.api; data.commander_version = __scKeep.ver; shipCardHide();
+        CM.data = {}; CM.key = {}; CM.tab = "profile"; store.set("cmdrTab", "profile");`);
+      d.querySelector('[data-view="overview"]').click();
+      await releasePayloads();
+    }
+    const want = {
+      marked: ["explorer_nx", "krait_light"],
+      early: null,
+      after: ["static/ships/explorer_nx.webp", "Caspian Explorer", "lazy", "300", "200", "Far Wanderer Caspian Explorer", true],
+      left: true, unknown: true, touch: true,
+      krait: ["static/ships/krait_light.webp", "Krait Phantom", "lazy", "300", "200", "Krait Phantom", true],
+      escape: true, otherTab: true,
+      pure: ["static/ships/krait_light.webp", null, null],
+    };
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodSC = !bad.length && errors.length === before;
+    allOk = allOk && goodSC;
+    console.log(goodSC ? "OK" : "FAIL", "| ship pictures |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "a 2 s hover shows the type's picture, gone on leaving; nothing for a touch or an unknown hull; Escape and another tab close it", errors.slice(before));
+  }
+  // The CMDR tab's Earnings (NEXT-VERSION #7, batch C; made-up answers, EARN above): the 6th sub-tab; the figures row;
+  // the period picker above the pane (the years and that year's months from the answer) asking again with ?year= /
+  // &month= (per device), a slow older answer never drawn over a newer one; the monthly chart to one scale (3-4 ticks the
+  // axis reaches, a zero month with no bar, the period's months highlighted, a bar picks its month); each table; the CSV
+  // link (a server link: the Android app saves it); the estimates labelled; History's Trips; a database with no sale
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, got = {}, asked = [];
+    w.__emAsked = asked; w.__emAnswers = JSON.stringify(EARN);
+    w.eval(`window.__emKeep = {api: apiJson, period: localStorage.getItem("cmEarnPeriod")};
+      apiJson = async (u, o) => {
+        const s = String(u);
+        if (!s.startsWith("api/commander/earnings")) return __emKeep.api(u, o);
+        __emAsked.push(s);
+        const A = JSON.parse(__emAnswers), q = s.split("?")[1] || "";
+        if (window.__emEmpty) return A.empty;
+        if (q === "year=2025") await new Promise(r => setTimeout(r, 600));   // slow: overtaken by the next choice
+        return q === "year=2026&month=2" ? A.month : q === "year=2026" ? A.year : q === "year=2025" ? A.y2025 : A.all;
+      };
+      CM.data = {}; CM.key = {}; CM.error = {}; CM.loading = {}; CM.period = {year: "", month: ""}; localStorage.removeItem("cmEarnPeriod");`);
+    const text = el => el ? el.textContent.replace(/\s+/g, " ").trim() : "", body = () => d.getElementById("cmdrBody");
+    const full = el => { const c = el.cloneNode(true); c.querySelectorAll(".sf, .sf1, .sf2").forEach(x => x.remove()); return text(c); };
+    const rows = id => { const t = d.getElementById(id); return t ? [...t.tBodies[0].rows].map(r => [...r.cells].map(full).join(" | ")) : null; };
+    const heads = id => [...d.getElementById(id).tHead.rows[0].cells].map(full);
+    const pick = async (id, v) => { const x = d.getElementById(id); x.value = v; x.dispatchEvent(new w.Event("change", {bubbles: true})); await settle(400); };
+    // each bar: [month, total, the stacked parts' heights summed, parts, class]
+    const bars = () => [...body().querySelectorAll("g.embar")].map(g => [g.dataset.emmonth || null, +g.dataset.total,
+      +[...g.querySelectorAll("rect.emseg")].reduce((n, r) => n + +r.getAttribute("height"), 0).toFixed(2), g.querySelectorAll("rect.emseg").length,
+      g.getAttribute("class")]);
+    try {
+      d.querySelector('[data-view="cmdr"]').click(); await settle(400);
+      d.querySelector('[name=cmdrTab][value="earnings"]').click(); await settle(400);
+      const pane = d.getElementById("cmdrPane"), csv = d.getElementById("cmEarnCsv");
+      got.tab = [[...d.querySelectorAll("#cmdrTabs .seg label")].map(l => text(l) + (l.querySelector("input").checked ? "*" : "")).pop(),
+                 d.getElementById("cmEarnCtl").hidden, d.getElementById("cmEngCtl").hidden, w.eval(`store.get("cmdrTab")`), text(body().querySelector(".hwyttl"))];
+      got.csv = [csv.getAttribute("href"), csv.hasAttribute("download"), pane.contains(csv), !d.getElementById("cmEarnCtl").contains(csv) ? "outside" : "in the controls"];
+      got.figs = [...body().querySelectorAll(".emfigs .cmfig")].map(text);
+      got.legend = [...body().querySelectorAll(".emlegend > span:not(.unk)")].map(text);
+      // to scale: every part's height is its credits over the axis' top (8M: four 2M steps reaching the highest month) of
+      // the 150 px plot; the empty month draws no part
+      const b = bars();
+      got.bars = b.map(x => [x[0], x[3], x[4]]);
+      got.scale = b.every(x => Math.abs(x[2] - x[1] / 8e6 * 150) < 0.05) && b[3][2] === 150;
+      got.ticks = [...body().querySelectorAll("svg.emyax text")].map(text);
+      got.tickTop = +body().querySelector("svg.emyax text:last-child").getAttribute("y") - 4 === +body().querySelector('g.embar[data-emmonth="2026-02"] rect.emseg').getAttribute("y");
+      got.labels = [...body().querySelectorAll("text.emlbl")].map(text);
+      got.title = text(body().querySelector('g.embar[data-emmonth="2026-01"] > title'));
+      got.band = !!body().querySelector("rect.emband");
+      got.years = [[...d.querySelectorAll("#cmEarnYear option")].map(o => o.value + ":" + text(o)), d.getElementById("cmEarnMonth").hidden];
+      got.sales = [rows("cmEarnSales"), heads("cmEarnSales"), text(body().querySelector("#cmEarnSales + .cmnote"))];
+      got.salesShort = [...d.querySelectorAll("#cmEarnSales th .sf")].map(text).concat(text(d.querySelector("#cmEarnSales tbody tr:nth-child(1) td:nth-child(2) .sf")));
+      got.stations = rows("cmEarnStations");
+      got.species = rows("cmEarnSpecies");
+      got.ships = [rows("cmEarnShips"), [...d.querySelectorAll("#cmEarnShips th .sf")].map(text)];
+      got.mining = [rows("cmEarnOre"), rows("cmEarnOreAt"), rows("cmEarnOreBest"), [...body().querySelectorAll(".cmnote")].map(text).filter(x => /own carrier/.test(x))];
+      got.common = [rows("cmEarnStars"), rows("cmEarnBodies"), rows("cmEarnFound"), text(d.querySelector("#cmEarnStars tbody td .sf"))];
+      got.fit = ["cmEarnSales", "cmEarnStations", "cmEarnSpecies", "cmEarnShips", "cmEarnOre", "cmEarnOreAt", "cmEarnOreBest", "cmEarnStars", "cmEarnBodies", "cmEarnFound", "cmEarnEst"]
+        .every(id => w.eval(`FIT_TABLES.includes("${id}")`) && !!d.getElementById(id));
+      // the estimates: headed Estimates, the word on every value, the lost figure too
+      const subs = [...body().querySelectorAll("h3.subhead")].map(text);
+      got.subheads = subs;
+      got.estimates = [rows("cmEarnEst"), heads("cmEarnEst"), [...d.querySelectorAll("#cmEarnEst tbody td:nth-child(3) .lf")].every(x => /estimate/.test(text(x))),
+                       text([...body().querySelectorAll(".cmrep")].find(x => /lost to deaths/.test(text(x))))];
+      got.notes = [...body().querySelectorAll(".emnotes li")].map(text);
+      got.noNaN = !/NaN|undefined/.test(body().textContent);
+      // pure: the axis (3-4 steps of 1, 2, 2.5, 5 × 10^n reaching the top month), the month labels thinned to the width
+      // (30 months: every 2nd at 1200 px, Jan and Jul at 400, the even years at 200)
+      got.pure = JSON.parse(w.eval(`(() => {
+        const ms = []; for (let i = 0; i < 30; i++) ms.push({month: (2024 + Math.floor(i / 12)) + "-" + String(i % 12 + 1).padStart(2, "0"), carto: 1000, bio: 0, mining: 0});
+        const labels = width => { const x = document.createElement("div"); x.innerHTML = emChartHtml(ms, {year: "", month: ""}, width);
+          return [...x.querySelectorAll("text.emlbl")].map(t => t.textContent); };
+        return JSON.stringify([emAxis(4.1e6), emAxis(1e7), emAxis(10.1e6), emAxis(1), labels(1200).length, labels(400), labels(200)]); })()`));
+      // the picker: a year, then a month of it; each asks with its query and is kept for this device
+      await pick("cmEarnYear", "2026");
+      got.year = [asked[asked.length - 1], text(body().querySelector(".hwyttl")), [...d.querySelectorAll("#cmEarnMonth option")].map(o => text(o)),
+                  d.getElementById("cmEarnMonth").hidden, bars().map(x => x[4]), w.eval(`store.get("cmEarnPeriod")`),
+                  text(body().querySelectorAll(".emfigs .cmfig")[1])];
+      await pick("cmEarnMonth", "2");
+      got.month = [asked[asked.length - 1], text(body().querySelector(".hwyttl")), bars().filter(x => /\bon\b/.test(x[4])).map(x => x[0]),
+                   bars().filter(x => /\bdim\b/.test(x[4])).length, w.eval(`store.get("cmEarnPeriod")`), d.getElementById("cmEarnMonth").value];
+      // asked again only when the payload's history moves, the same period drawn from what it has
+      const n0 = asked.length;
+      w.eval(`render(); render();`); await settle(300);
+      got.unchanged = asked.length - n0;
+      w.eval(`data.history_version = (data.history_version || 0) + 1000; render();`); await settle(300);
+      got.moved = asked.slice(n0);
+      // a bar picks its month
+      body().querySelector('g.embar[data-emmonth="2026-03"] rect.emhit').dispatchEvent(new w.MouseEvent("click", {bubbles: true}));
+      await settle(300);
+      got.barClick = [asked[asked.length - 1], d.getElementById("cmEarnYear").value, d.getElementById("cmEarnMonth").value];
+      // a slow answer for 2025 overtaken by All time: the newer one stays drawn
+      await pick("cmEarnYear", "2025");
+      await pick("cmEarnYear", "");
+      await sleep(900); await settle(300);
+      got.overtaken = [asked.slice(-2), text(body().querySelector(".hwyttl")), d.getElementById("cmEarnYear").value, d.getElementById("cmEarnMonth").hidden,
+                       w.eval(`store.get("cmEarnPeriod")`), bars().every(x => x[4] === "embar")];
+      // the per-trip line: History's Trips (the Ledger)
+      body().querySelector('[data-cmgo="trips"]').click(); await settle(1500);
+      got.toTrips = [w.eval("view"), w.eval("histReveal")];
+      d.querySelector('[data-view="cmdr"]').click(); await settle(400);
+      // a database with no sale: said plainly, no chart, no figures, no NaN
+      w.eval(`window.__emEmpty = true;`);
+      d.getElementById("cmRefresh").click(); await settle(400);
+      got.empty = [text(body().querySelector(".hwyttl")), !!body().querySelector("svg"), !!body().querySelector(".cmfig, table"), /NaN|undefined/.test(body().textContent),
+                   [...d.querySelectorAll("#cmEarnYear option")].map(o => text(o))];
+    } finally {
+      w.eval(`apiJson = __emKeep.api; delete window.__emEmpty;
+        if (__emKeep.period == null) localStorage.removeItem("cmEarnPeriod"); else localStorage.setItem("cmEarnPeriod", __emKeep.period);
+        CM.data = {}; CM.key = {}; CM.error = {}; CM.loading = {}; CM.period = {year: "", month: ""}; CM.tab = "profile"; store.set("cmdrTab", "profile");`);
+      d.querySelector('[data-view="overview"]').click();
+      await releasePayloads();
+    }
+    const want = {
+      tab: ["Earnings*", false, true, "earnings", "All time"],
+      csv: ["api/export?what=earnings", true, false, "in the controls"],
+      figs: ["Total earned18.5M cr7 sales", "Cartography7.0M cr6.0M cr + 1.0M cr bonus", "Exobiology10.0M cr6.0M cr + 4.0M cr bonus",
+             "Mining1.5M cr60 t mined", "Lost (estimate)~12.0M cr2 deaths · estimate"],
+      legend: ["Cartography", "Exobiology", "Mining"],
+      bars: [["2025-11", 1, "embar"], [null, 0, "embar"], ["2026-01", 3, "embar"], ["2026-02", 1, "embar"], ["2026-03", 2, "embar"]],
+      scale: true, ticks: ["2.0M", "4.0M", "6.0M", "8.0M"], tickTop: true,
+      labels: ["Nov ’25", "Dec", "Jan ’26", "Feb", "Mar"],
+      title: "January 2026: cartography 1,000,000 cr, exobiology 2,000,000 cr, mining 500,000 cr; total 3,500,000 cr (click: this month)",
+      band: false,
+      years: [[":All time", "2026:2026", "2025:2025"], true],
+      sales: [["2026-03-02 10:00 | Cartography | Sample Port Coriolis | Sample Ship Krait Phantom | 12 systems | 1.5M cr | 500k cr | 2.0M cr",
+               "2026-03-01 09:00 | Mining | Sample Port Coriolis | Type-9 Heavy | 20 t Platinum of 30 t |  |  | 1.0M cr",
+               "2026-02-10 12:30 | Exobiology | X1X-X1X fleet carrier | ? | 4 species | 4.0M cr | 4.0M cr | 8.0M cr"],
+              ["When", "Kind", "Where", "Ship", "What", "Base", "Bonus", "Total"], "4 more sales not shown: the ⬇ CSV above has every one."],
+      salesShort: ["Carto"],
+      stations: ["X1X-X1X | fleet carrier | 1 | 8.0M cr", "Sample Port | Coriolis | 2 | 3.0M cr"],
+      species: ["Stratum Tectonicas | 2 | 3.0M cr | 3.0M cr | 6.0M cr"],
+      ships: [["Sample Ship Krait Phantom | 120 | 5,433 | 300 | 5 | 9.0M cr | 6"], ["Bodies", "Species", "Days"]],
+      mining: [["Platinum | 40 t | 5 t | 60 t | 1.5M cr | 25,000"], ["Sample Port Coriolis | 2 | 60 t | 1.5M cr | 25,000"],
+               ["2026-03-01 09:00 | Platinum | 20 t | 1.0M cr | 50,000 | Sample Port"],
+               ["Left out: 1 sale of mined ore to your own carrier (10 t, 300k cr): your own money."]],
+      common: [["K (Yellow-Orange) Star | 9"], ["High metal content body | 12"], ["Bacterium Aurasus | 3"], "K star"],
+      fit: true,
+      subheads: ["Sales 7", "Where you sold", "Species · what each paid, exact", "Ships · jumps, scans, samples and sales made flying each", "Mining",
+                 "Most common · in this period", "Estimates · Outrider's, not the game's"],
+      estimates: [["Smoke Sys | 9 | ~25.0M cr estimate | 2026-03-02"], ["System", "Bodies", "Value (estimate)", "Sold"], true,
+                  "Data lost to deaths: ~12.0M cr estimate (cartography ~9.0M cr, exobiology ~3.0M cr) · 2 deaths, 1 ship lost (History's Ledger)"],
+      notes: ["Exact: what each sale paid, as the journal says.", "Months are UTC, as the journal's times."],
+      noNaN: true,
+      pure: [[2000000, 6000000], [2500000, 10000000], [5000000, 15000000], [1, 3], 15, ["Jan ’24", "Jul", "Jan ’25", "Jul", "Jan ’26"], ["2024", "2026"]],
+      year: ["api/commander/earnings?year=2026", "2026", ["Whole year", "January", "February", "March"], false,
+             ["embar dim", "embar dim", "embar on", "embar on", "embar on"], "2026", "Cartography6.4M cr6.0M cr + 1.0M cr bonus − 630k cr crew"],
+      month: ["api/commander/earnings?year=2026&month=2", "February 2026", ["2026-02"], 4, "2026-02", "2"],
+      unchanged: 0, moved: ["api/commander/earnings?year=2026&month=2"],
+      barClick: ["api/commander/earnings?year=2026&month=3", "2026", "3"],
+      overtaken: [["api/commander/earnings?year=2025", "api/commander/earnings"], "All time", "", true, "", true],
+      toTrips: ["hist", false],
+      empty: ["No sales yet", false, false, false, ["All time"]],
+    };
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    if (asked[0] !== "api/commander/earnings") bad.push("asked");
+    const goodEM = !bad.length && errors.length === before;
+    allOk = allOk && goodEM;
+    console.log(goodEM ? "OK" : "FAIL", "| earnings |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
+      : "the 6th sub-tab: figures, the period picker asking again (an older answer never drawn over a newer one), bars to scale with the period highlighted, every table, the CSV link, estimates labelled, History's Trips, no sales said plainly", errors.slice(before));
+  }
+  // Which header tiles this device shows (the author, 2026-10-14): Settings → Display ticks them; an unticked one is
+  // left out (tile and one line), the wide grid has a column per tile shown, at least one stays, per device (not a
+  // shared setting), and the one-line / six-tile modes still work
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, got = {};
+    const box = d.getElementById("tilesShown"), cb = k => box.querySelector(`[data-tile="${k}"]`);
+    const tick = (k, on) => { cb(k).checked = on; cb(k).dispatchEvent(new w.Event("change", {bubbles: true})); };
+    const off = () => ["tWhere", "tCmdr", "tFuel", "tCarrier", "tUnsold", "tData"].filter(id => d.getElementById(id).hasAttribute("data-off"));
+    const cols = () => d.getElementById("tiles").style.getPropertyValue("--tile-cols");
+    w.eval(`window.__tlKeep = {hidden: localStorage.getItem("tilesHidden"), mode: localStorage.getItem("tilesMode"), fuel: data.fuel, cm: data.commander};
+      localStorage.removeItem("tilesHidden");
+      data.fuel = Object.assign({}, data.fuel, {live: true, main: 8, pct: 50}); data.commander = Object.assign({}, data.commander, {credits: 1300000000});
+      drawTileChoice(); render();`);
+    const car = !d.getElementById("tCarrier").hidden;   // the Carrier tile shows only with a carrier on record
+    const one = car ? " 1fr" : "";
+    try {
+      got.all = [off(), [...box.querySelectorAll("[data-tile]")].map(x => x.checked).every(Boolean), cols()];
+      tick("fuel", false); tick("cmdr", false);
+      got.two = [off(), cols(), w.eval(`JSON.stringify(store.get("tilesHidden"))`), w.eval(`/⛽|1\\.30B cr/.test(tilesLineHtml())`),
+                 w.eval(`/Talvik Reach/.test(tilesLineHtml())`)];
+      // not one of the shared settings: it stays on this device
+      got.perDevice = w.eval(`SETTINGS_KEYS.includes("tilesHidden")`);
+      for (const k of ["where", "carrier", "unsold"]) tick(k, false);
+      got.last = [cb("data").checked, cb("data").disabled, off().length];
+      tick("data", false);                                                     // refused: at least one stays
+      got.lastStays = [cb("data").checked, off().length];
+      w.eval(`localStorage.setItem("tilesHidden", JSON.stringify(["where", "cmdr", "fuel", "carrier", "unsold", "data"]));`);
+      got.neverAll = w.eval(`JSON.stringify(tilesHidden())`);
+      w.eval(`localStorage.setItem("tilesHidden", JSON.stringify(["cmdr", "fuel"])); drawTileChoice();`);
+      // the one-line and six-tile modes still work
+      w.eval(`localStorage.setItem("tilesMode", '"line"'); drawTilesFold(); render();`);
+      got.line = [w.eval("tilesFolded"), d.getElementById("tilesLine").hidden, /⛽/.test(d.getElementById("tilesLine").textContent)];
+      w.eval(`localStorage.setItem("tilesMode", '"six"'); drawTilesFold(); render();`);
+      got.six = [w.eval("tilesFolded"), d.getElementById("tiles").hidden, off()];
+      tick("cmdr", true); tick("fuel", true);
+      got.back = [off(), w.eval(`JSON.stringify(store.get("tilesHidden"))`)];
+    } finally {
+      w.eval(`const k = __tlKeep; Object.assign(data, {fuel: k.fuel, commander: k.cm});
+        for (const [key, v] of [["tilesHidden", k.hidden], ["tilesMode", k.mode]]) { if (v === null) localStorage.removeItem(key); else localStorage.setItem(key, v); }
+        drawTileChoice(); drawTilesFold(); drawTilesMode(); render();`);
+      await releasePayloads();
+    }
+    const want = {all: [[], true, `1.5fr 0.75fr 1fr${one} 1fr 1fr`],
+      two: [["tCmdr", "tFuel"], `1.5fr${one} 1fr 1fr`, JSON.stringify(["cmdr", "fuel"]), false, true],
+      perDevice: false, last: [true, true, 5], lastStays: [true, 5], neverAll: "[]",
+      line: [true, false, false], six: [false, false, ["tCmdr", "tFuel"]], back: [[], "[]"]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodTL = !bad.length && errors.length === before;
+    allOk = allOk && goodTL;
+    console.log(goodTL ? "OK" : "FAIL", "| header tiles shown |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "Settings → Display ticks the tiles this device shows: left out of the row and the one line, a column each, at least one stays, the fold modes kept", errors.slice(before));
+  }
+  // Commander → Engineering, the fork's way (static/fork.js, forkEngineeringHtml on upstream's rows): parts and grades
+  // picked narrow the blueprints and the Engineers list (each row naming what it does of the picks), Load my ship picks
+  // the ship's parts and grades, Plan the trip posts what the picks ask for and draws the stops, Clear filters resets it all
+  {
+    const w = dom.window, d = w.document, before = errors.length, got = {}, asked = [], bodies = [], copied = [];
+    w.__fxAsked = asked; w.__fxBodies = bodies; w.__fxCopied = copied;
+    w.eval(`window.__fxApi = apiJson; window.__fxCopy = copyText;
+      copyText = (t, what) => __fxCopied.push(t);
+      apiJson = async (u, o) => {
+        const s = String(u);
+        if (!s.startsWith("api/engineers") && !s.startsWith("api/commander/engineering")) return __fxApi(u, o);
+        __fxAsked.push(s); if (o && o.body) __fxBodies.push([s, JSON.parse(o.body)]);
+        if (s.startsWith("api/commander/engineering")) return {engineers: [{name: "Hera Tani", progress: "Unlocked", rank: 5}], unreadable: false, blueprints: [
+          {id: "PowerPlant_Boosted", kind: "pp", module: "Power plant", name: "Overcharged", grades: [
+            {grade: 4, rolls: 1, materials: [{id: "a", name: "Arsenic", need: 1, have: 3, category: "Raw"}],
+             engineers: [{name: "Hera Tani", progress: "Unlocked", rank: 5, ready: true}, {name: "Etienne Dorn"}, {name: "Marco Qwent", progress: "Unlocked", rank: 4, ready: true}]},
+            {grade: 5, rolls: 0, materials: [{id: "p", name: "Polonium", need: 1, have: 0, category: "Raw"}],
+             engineers: [{name: "Hera Tani", progress: "Unlocked", rank: 5, ready: true}, {name: "Etienne Dorn"}]}]},
+          {id: "Weapon_HighCapacity", kind: "mr", module: "Missile rack", name: "High capacity", grades: [
+            {grade: 1, rolls: 2, materials: [{id: "m", name: "Mechanical Scrap", need: 1, have: 2, category: "Manufactured"}], engineers: [{name: "Juri Ishmaak"}]}]}]};
+        if (s === "api/engineers") return {from: "Sol", error: null, missing: [], distances: {Kuwemaki: 108.4, Los: 22000, Sirius: 8.6, Giryak: 300.5},
+          engineers: [{name: "Hera Tani", system: "Kuwemaki", kind: "ship", region: "bubble", progress: "Unlocked", rank: 5},
+                      {name: "Etienne Dorn", system: "Los", kind: "ship", region: "Colonia", progress: null, rank: null},
+                      {name: "Marco Qwent", system: "Sirius", kind: "ship", region: "bubble", progress: "Unlocked", rank: 4},
+                      {name: "Juri Ishmaak", system: "Giryak", kind: "ship", region: "bubble", progress: null, rank: null}]};
+        if (s === "api/engineers/ship") return {ship: {name: "Sample", type: "krait_light"}, parts: ["Power plant", "Thrusters"], grades: ["power plant|powerplant_boosted|5"],
+          modules: [{name: "Power Plant", part: "Power plant", blueprint: "Boosted", level: 5, experimental: "Thermal Spread"}]};
+        if (s === "api/engineers/tour") return {from: "Sol", total_ly: 108.4, back_ly: null, carrier: null, uncovered: [], covers_tried: 1,
+          stops: [{engineer: "Hera Tani", system: "Kuwemaki", covers: ["Power plant: Overcharged G5"], leg_ly: 108.4, locked: null}]};
+      };
+      FX.parts.clear(); FX.grades.clear(); FX.ship = null; FX.trip = null; FX.eng = null; FX.engKey = null; CM.q = ""; CM.craft = false;
+      CM.data.engineering = null; CM.key.engineering = null;`);
+    const text = el => el ? el.textContent.replace(/\s+/g, " ").trim() : "", body = () => d.getElementById("cmdrBody");
+    const engNames = () => [...body().querySelectorAll(".cmengtable:not(.cmtriptable) tbody tr")].map(t => text(t.cells[0]));
+    try {
+      d.querySelector('[data-view="cmdr"]').click();
+      w.eval(`setCmdrTab("engineering")`);
+      await sleep(200);
+      got.drawn = [!!body().querySelector(".cmparts"), [...body().querySelectorAll("[data-fxpart]")].map(text), engNames(),
+                   [...body().querySelectorAll(".cmengtable tbody tr")].map(t => text(t.cells[3]))];
+      // G5 of Overcharged power plant: Hera Tani and Etienne Dorn; G4 too: Marco Qwent as well
+      body().querySelector('[data-fxgrade="Power plant|PowerPlant_Boosted|5"]').click();
+      got.g5 = engNames();
+      body().querySelector('[data-fxgrade="Power plant|PowerPlant_Boosted|4"]').click();
+      got.g45 = engNames();
+      body().querySelector("[data-fxclear]").click();
+      body().querySelector('[data-fxpart="Missile rack"]').click();
+      got.part = [engNames(), [...body().querySelectorAll("details.cmmod summary")].map(text)];
+      // Load my ship: its parts and grade picked (the case of the server's answer does not matter), its line drawn
+      body().querySelector("[data-fxship]").click();
+      await sleep(80);
+      got.ship = [[...body().querySelectorAll(".cmpart.on")].map(text), [...body().querySelectorAll(".cmgrade.on")].map(b => b.dataset.fxgrade), text(body().querySelector(".cmship"))];
+      // Plan the trip: what the picks ask for is posted, the stop drawn, Plot next stop
+      body().querySelector("[data-fxplan]").click();
+      await sleep(80);
+      const tb = bodies.find(b => b[0] === "api/engineers/tour");
+      got.asked = tb && tb[1].requirements.map(r => `${r.label}|${r.grade}|${r.engineers.join("+")}`);
+      got.trip = [text(body().querySelector(".cmtrip .hwyttl")), text(body().querySelector(".cmtrip [data-plotto].primary"))];
+      body().querySelector("[data-fxtripcopy]").click();
+      got.copied = copied.length === 1 && /^1\. Hera Tani — Kuwemaki \(108\.4 ly\): Power plant: Overcharged G5/.test(copied[0]);
+      body().querySelector("[data-fxcopy]").click();
+      got.copySystem = copied[1];
+      body().querySelector("[data-fxtripforget]").click();
+      d.getElementById("cmFilter").value = "x"; w.eval(`CM.q = "x"`);
+      body().querySelector("[data-fxclearall]").click();
+      got.cleared = [body().querySelectorAll(".cmpart.on, .cmgrade.on").length, !!body().querySelector(".cmship, .cmtrip"), d.getElementById("cmFilter").value,
+                     w.eval("CM.q"), !!body().querySelector("[data-fxclearall]")];
+    } finally {
+      w.eval(`apiJson = __fxApi; copyText = __fxCopy; FX.parts.clear(); FX.grades.clear(); FX.ship = null; FX.trip = null; CM.q = ""; CM.data.engineering = null; CM.key.engineering = null;
+        localStorage.removeItem("fxTrip")`);
+      d.querySelector('[data-view="overview"]').click();
+    }
+    await sleep(60);
+    const want = {
+      drawn: [true, ["Missile rack", "Power plant"], ["Hera Tani", "Etienne Dorn Colonia", "Marco Qwent", "Juri Ishmaak"].map(x => x.replace(" Colonia", "")),
+              ["108.4 ly", "22,000.0 ly", "8.6 ly", "300.5 ly"]],
+      g5: ["Hera Tani · Overcharged G5", "Etienne Dorn · Overcharged G5"],
+      g45: ["Hera Tani · Overcharged G4, Overcharged G5", "Etienne Dorn · Overcharged G4, Overcharged G5", "Marco Qwent · Overcharged G4"],
+      part: [["Juri Ishmaak · Missile rack"], ["Missile rack 1 blueprint"]],
+      ship: [["Power plant"], ["Power plant|PowerPlant_Boosted|5"], "Sample 1 module with blueprints, 1 engineered: their parts and grades picked (experimental effects are named, not picked)Power Plant Boosted G5 · Thermal Spread"],
+      asked: ["Power plant: Overcharged G5|5|Hera Tani+Etienne Dorn"],
+      trip: ["Trip from Sol: 1 stop, 108.4 ly", "Plot next stop: Kuwemaki"], copied: true, copySystem: "Kuwemaki",
+      cleared: [0, false, "", "", false],
+    };
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodFX = !bad.length && errors.length === before;
+    allOk = allOk && goodFX;
+    console.log(goodFX ? "OK" : "FAIL", "| fork engineering |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
+      : "parts and grades narrow the Engineers list, Load my ship, Plan the trip, Clear filters, on upstream's rows", errors.slice(before));
   }
   // The route lists' discoverer names (this fork, static/fork.js): after the Known mark, only where EDSM credits one
   {

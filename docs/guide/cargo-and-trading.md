@@ -40,7 +40,7 @@ The **Materials** tab starts with your **Cargo**.
   needed"). Tritium other players donate is not in your journal, so such a jump reads low; the median rides over it.
 - **Services and upkeep:** a service suspended in the carrier's management shows as its name and a red ✗ ("UC ✗",
   "Redemption office ✗"; "suspended" on hover), beside "Vista ✓" for one that is on, from its last stats or the newer of them and your last docking there. Under them,
-  "balance 1.33B · ~96 weeks of upkeep" (amber under 4 weeks; "as of" a date when the stats are over a day old). The
+  "balance 1.33B · ~96 wks upkeep" (amber under 4 weeks; the hover says how old the stats are). The
   journal has no upkeep figure: the week's upkeep is worked out from the services installed at the **published rates**
   (the core and each service, a suspended one at its lower rate), not yet checked against the game's Finance screen;
   hover for the figure. Opening the carrier's management refreshes the stats.
@@ -50,6 +50,10 @@ The **Materials** tab starts with your **Cargo**.
 - **🎯 beside your carrier's system** on the Carrier tile, when it is elsewhere: auto-target puts that system in the
   galaxy map, as 🎯 on a route's row does (see [the Neutron Highway](plot-route.md#-the-neutron-highway)). On the
   game PC only; none while you are aboard or in its system.
+- **🛣 beside it**, when your carrier is 250 ly or more away: plots an exact route to its system at once, with Plot
+  Route's exact options, without leaving the page you are on; the tile says "⏳ plotting a route there…" until it is in,
+  then the route line and its 🎯 take over. Following a Highway route already, it asks "replace your route to …?"
+  first (Replace / Keep).
 
 ## 💱 Trading
 

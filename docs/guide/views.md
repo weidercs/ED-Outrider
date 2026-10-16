@@ -13,14 +13,14 @@ classes such as water giants, helium giants, Sudarsky class V and green gas gian
 hide visited and fully scanned systems, or keep only those one jump away. A dashed <i>old data</i> mark flags Spansh
 records from before Odyssey (thin-atmosphere planets there may hold unsampled life). Click a row to see that system
 body by body beside the list (click it again to close it); its name copies it, ☆ bookmarks it, and where auto-target
-can work (the game PC, see [Plot Route](plot-route.md)) the 🎯 left of the name, in a column of its own, targets it in
+can work (the game PC, see [Plot Route](plot-route.md)) the target button (the galaxy map's destination marker) left of the name, in a column of its own, targets it in
 the galaxy map (not on your own system's row). ⛏ N counts planetary mining
 locations on ground worth a Rhino. 🌀 N counts the notable stellar phenomena your FSS found there (life in clouds or rings; hover
 for what they are), dimmed once you have been to them. ⭐ marks a rare star (a black hole, a Wolf-Rayet, a carbon,
 MS, S or O-type star, a Herbig Ae/Be star, a supergiant, a rare white dwarf, an exotic star), from Spansh's records
 too, so you see it before you go. 🏛 👾 ❔ mark Guardian sites, Thargoid sites and planetary anomalies on a system's bodies (your own scans: an anomaly shows once
 the FSS finds it, Guardian and Thargoid sites only once the DSS has mapped the body); Here tags the body itself. 📍
-counts FSS signals worth a detour: Titans, Guardian beacons, generation ships, listening posts, number stations, tourist
+counts FSS signals worth a detour (a Titan shows the galaxy map's Titan marker instead): Titans, Guardian beacons, generation ships, listening posts, number stations, tourist
 beacons and memorials (hover for which).
 <br><br><img src="../images/nearby.png" alt="Nearby systems">
 </td>
@@ -59,7 +59,7 @@ your first discoveries in gold, visited systems in blue (or colour them by star 
 pinch zooms); tick <i>boost stars</i> for neutron stars and white dwarfs. The route ahead is dashed: the one plotted in
 game, and the route Outrider follows (Plot Route's) from where you are, with ◎ on its next stop (else your next stop);
 hover a stop for which it is. A click on a system targets it in the galaxy
-map when auto-target can work on this PC, else copies its name (the card says which; a tap shows the card with 🎯 Target
+map when auto-target can work on this PC, else copies its name (the card says which; a tap shows the card with **Target**
 and Copy name).
 <br><br><img src="../images/map.png" alt="The 3D map">
 </td>
@@ -141,7 +141,24 @@ behind</b> lists nearby systems with work over your thresholds.
 </table>
 
 The **Overview** at the top shows Here and Nearby together: drag the divider, swap sides or stack them. Nearby's
-Standard / Boxel switch sits on its bar, left of ▾ This system.
+Standard / Boxel switch and its Focus/Lock sit on its bar.
+
+<a id="nearby-around"></a>**Nearby around another system** (**Focus/Lock**, beside the Standard / Boxel switch; the idea of Rainmangames' pull
+request #8): to sweep an area for unreported systems while you fly about in it.
+- **You** (the default): the list follows your ship. **Lock this system** keeps it centred where you are now;
+  **your destination**, **carrier** or **next stop** follow those; **a system…** takes a name. The choice is kept by
+  Outrider itself, so every window and the tablet show the same, after a restart too.
+- Away from you a strip above the list names the centre (click its name to copy it), how far it is from you and the
+  sphere's size, with **↻ refresh** and **✕ back to you**. **Dist** is from the centre; a **From you** column and
+  **Jumps** are from you. The Where tile says "known within 25 ly around …".
+- Spansh is asked when the centre changes, and again only when you press ↻ (at most every 2 minutes): nothing on a
+  timer. A system you visit inside the sphere joins the list at once, and your scans fill its rows as usual.
+- A centre that names nothing now (no target, no carrier) says why, and the list stays around you meanwhile.
+- Focus/Lock applies to Standard mode; a boxel has its own centre.
+- **Filters** on Nearby's row of checkboxes, kept per device: **Mass** (one mass code, a to h: the letter before the number of a
+  procedural name), **no scan data** (systems nobody has reported scanning), and **⧉ Copy visible** (the names of
+  the rows shown, one per line). When Spansh returns its maximum, a line above the list says the list is complete only
+  to so many light years: a smaller radius shows them all.
 
 **Any view in a window of its own:** hover a tab and a small **↗** shows in its corner (or press Shift+Enter on the
 tab); it opens that view alone in a new window, to drag to another monitor (pressed again, it brings that window
@@ -157,13 +174,15 @@ or the next stop targets it in the galaxy map, and **Plot route** puts it in Plo
 follow no route). **Export** saves them as CSV or JSON; **Import…** beside it adds the bookmarks in such a file to yours
 ("12 added, 3 already there"): a system you have already bookmarked keeps your own note, and a row it cannot read is
 left out with its line and the reason (a spreadsheet that turned a long id64 into 1.15292E+18 is the usual one; save
-that column as text). Up to 10,000 bookmarks a file. **Plot Route** has its own page:
+that column as text). Up to 10,000 bookmarks a file. The Android app has no Import… (it opens no file picker): import from a browser. **Plot Route** has its own page:
 [Plot Route](plot-route.md).
 
 On a window of at least about 900 × 600 the page fits the window: the header stays put and each list scrolls
 in its own box. **▴** folds the tiles into one line (remembered on this device; Settings → Display can fold
-them only on a small window). A table too wide for its box
-switches to short forms ("HMC", "G star"; hover for the full text) rather than scroll sideways.
+them only on a small window, and untick the tiles this device leaves out, at least one staying). A table too wide for its box
+switches to short forms ("HMC", "G star"; hover for the full text) rather than scroll sideways, then drops its least
+useful columns; Nearby's status and notable tags go under the system's name and its bodies only when that is still
+not enough, and then on every row.
 
 **Themes.** ⚙ Settings → Display → **Theme on this browser** dresses the page in one of the tablet's themes: LCARS,
 Elite, Babylon 5 (Earthforce, Narn, Minbari, Centauri, Vorlon, Shadows), Sith, Rebel Alliance or Dark, each with its colours, its
@@ -174,8 +193,11 @@ follows your system's light mode. Each browser keeps its own choice, and the tab
   <img src="../images/themes.png" alt="The desktop page in four themes: LCARS, Elite, Minbari and Centauri" width="900">
 </p>
 
-**Now** is the cockpit view for a second monitor or a tablet, in big text: the system, the target, fuel,
-what to do next, the body you have targeted, signals worth a detour ("📍 Titan Cocijo · 2 tourist beacons"), any surface sites ("🏛 Guardian sites on 10 b"), any rare star here ("⭐ A black hole (main star)"), the notable stellar phenomena here ("🌀 Three notable stellar phenomena,
+**Now** is the cockpit view for a second monitor or a tablet, in big text: the system (and, from a docking grant until you
+touch down, **PAD 34** in very large letters under it, where it is and, at a starport or carrier, its diagram (a carrier's
+name after the galaxy map's fleet or squadron carrier marker); a
+refusal's reason for a minute), the target, fuel,
+what to do next, the body you have targeted, signals worth a detour ("Titan Cocijo · 📍 2 tourist beacons", a Titan after the galaxy map's Titan marker), any surface sites ("🏛 Guardian sites on 10 b"), any rare star here ("⭐ A black hole (main star)"), the notable stellar phenomena here ("🌀 Three notable stellar phenomena,
 all in rings · 1 of 3 visited": each drop at one counts, since the journal cannot tell which of a kind's sites it was)
 and the nearest unvisited system. Under the target, the jump's cost ("56.7 ly · 0.9 t · leaves 20 max jumps"); under the
 fuel, "scoopable: 9 of last 20" (amber as on the fuel tile), and at the last scoopable star before a dry stretch "⛽ last
@@ -202,14 +224,23 @@ with different reporters.
 
 The **header** shows the galactic region, ranks, fuel, hull, any core module under your level (`module_warn`,
 80%; as of the last Loadout or repair, since the journal logs nothing in between), your carrier's jump countdown
-(and its tritium while it is on a sell order: see [Cargo and trading](cargo-and-trading.md); where auto-target can work
+(its name after the galaxy map's fleet carrier marker, and its tritium while it is on a sell order: see [Cargo and trading](cargo-and-trading.md); where auto-target can work
 🎯 beside its system, when it is elsewhere, puts it in the galaxy map; the tritium for its trip to you, a suspended
 service as its name and a red ✗
-and its balance in weeks of upkeep), the nearest places to sell (your carrier among them while its UC or Vista is on),
+and its balance in weeks of upkeep: "~96 wks upkeep"), the nearest places to sell (your carrier among them while its UC or Vista is on),
 and the last backup.
 
-The **In-Game Route:** line under the tiles is the route the game plotted in the galaxy map: its jumps and light years,
-the next scoopable star, the longest stretch without one, and each star as a chip. The game sometimes logs a plot but
+The **In-Game Route:** line under the tiles is the route the game plotted in the galaxy map (a route of more than one
+jump: a system targeted next door has no line, the target says it; a longer route keeps its line to its last jump): its jumps and light years,
+the next scoopable star, the longest stretch without one, and each star as a chip. A chip marked ✦ is a system nobody
+has reported to Spansh (Outrider asks Spansh about the first 24 hops once you plot, except within 1,000 ly of Sol or
+500 ly of Colonia, where Spansh knows every system); one without it is known there, or was not or could not be checked.
+Click a chip to copy its system's name. A **⛽** between two chips marks how far the fuel in your tank goes without
+scooping (for a ship with no fuel scoop: where you must refuel); it moves as your fuel changes, so scooping on the way
+pushes it further. A jump counts only while it leaves **5 % of the tank** aboard (8 t in a 160 t tank), since the fuel
+figures are a fit to your own jumps, not the game's sums; the mark's hover says what is kept or spare. **⛽✓** at the end:
+your fuel makes the whole route; **⛽ 30** after the chips: it makes 30 jumps, past the ones shown; **⛽ ?**: Outrider
+is still learning this ship's fuel use (the hover says how many more jumps). The game sometimes logs a plot but
 never writes the route's file (NavRoute.json); Outrider then waits a minute for it and says what the game does tell:
 "In-Game Route: 2 jumps left to Smojooe SJ-I b23-0 · the game didn't write the route's stars", without stars, distances
 or fuel figures. If the line stays like that, clear the route in the galaxy map and plot a different destination: the
@@ -220,6 +251,9 @@ answer: "Spansh ok", or just "Spansh unavailable" (EDSM, GitHub... the same) whi
 connection" when two or more fail because this PC has no network. Meanwhile the lists show what Outrider kept from
 earlier, and it asks again by itself. If Spansh or EDSM stays unavailable for 10 minutes, or this PC has no network,
 a card says so at the top of the page (✕ hides it); it goes when they answer. The error itself is in Show log.
+One failure is said in full, on the tile and at once on a card, because it is yours to fix: "couldn't verify
+spansh.co.uk's certificate (expired): check this PC's date and time; if they are right, update Outrider" (see
+[Windows: certificate errors](install.md#-getting-started)). Settings → Uploads' Recent list words it the same way.
 
 The **fuel tile** counts jumps as the ship gets lighter ("≈6 jumps at max range (484 ly), 3,500 at your pace"),
 for any drive, engineered or not, from your own Loadout and jumps. Nearby (and Now) shows laden range and the targeted
@@ -284,7 +318,7 @@ A procedural system name says which cube of space (a **boxel**) it is in and wha
 in `Drojau TF-H c13-5` the **c** is the mass code (a 40 ly cube of K and M stars, some G) and **5** the system's number.
 A boxel's systems are numbered 0, 1, 2… without gaps, so you can visit them in order.
 
-**Nearby → Boxel** (the switch on the Overview's bar, left of ▾ This system, and in Nearby's options on the Nearby tab;
+**Nearby → Boxel** (the switch on the Overview's bar, and on Nearby's top bar on the Nearby tab;
 one choice for both) lists the boxel you are in by number: systems you visited show your scans as Nearby does, ones
 Spansh knows are marked "known" (someone has been there), the rest are "to try". Above the list: how many you have
 visited, how many Spansh knows and the **highest known** number (yours or Spansh's). On the game PC, **Next** (with 🎯 where auto-target can work)
@@ -429,6 +463,86 @@ for your next visit and listed under Materials' **Mining sites**.
 
 The map's sizes and the leash distance are in ⚙ Settings → Surface map; the spoken leash warning
 always uses the config file's `rig_warn`.
+
+<a id="-commander"></a>
+## 🧑‍🚀 CMDR
+
+What you are, what you own and what you have been doing, from all your journals: Outrider keeps it as it reads them
+(nothing is asked of anyone), and a list updates as soon as the game writes something new for it. The tabs (Engineering
+and Missions with the galaxy map's engineer and mission markers), Refresh, Engineering's filter and Earnings' period sit
+above the list:
+
+<p align="center">
+  <img src="../images/cmdr.png" alt="The CMDR tab: credits, net worth, fleet, stored modules and carrier balance, every rank with a bar to the next, reputation, and the fleet with each ship's EDSY and Coriolis links" width="900">
+</p>
+
+- **CMDR**: who you are in the game, as of your last login (the game writes ranks and statistics then): your
+  credits as the Commander tile shows them (the login's plus what you sold since), net worth, the value of your fleet
+  and stored modules, your carrier as the Carrier tile shows it (its balance and weeks of upkeep); every rank with a
+  bar to the next one and, for exobiology, about how many credits it still takes (the community's figures for each
+  rank's step, times the share your game says is left: an estimate; Elite IV and V are marked uncertain);
+  reputation, Powerplay and squadron; your ships (a red ⚖ beside one the game marks hot: wanted, the one you fly
+  included; **EDSY ↗** and **Coriolis ↗** open that ship's build in the ship designer, in a new tab, as the game last
+  described it when you flew it; a ship you have not boarded since your journals begin says "no build"); and career figures (time played, systems visited, distance,
+  profits by career; **History ›** opens History at its Career row, the game's statistics beside your sessions).
+- **Inventory**: your ships (where each is, its value, what bringing it here costs), your stored modules with their
+  engineering, the ship locker, and your suit loadouts. The game writes the list of stored ships when you open a
+  shipyard: ships bought, sold, swapped, sent for or renamed since are followed, and each ship's value is its latest.
+  Each ship has the same EDSY ↗ and Coriolis ↗ links as on the CMDR tab (in the Android app they open in your browser).
+  Rest the mouse on a ship for 2 seconds to see a picture of its type, with its name; it goes when you move away (or
+  press Escape). On the tablet, tap the ship's name (underlined with dots) to open the picture and tap anywhere to close
+  it. The pictures are Frontier's ship designs, rendered from Elite Dangerous Almanac's illustrations; a ship type newer
+  than Outrider has none yet.
+  Stored modules are as outfitting last listed them, with the modules stored, taken back, sent for or sold from
+  storage since (one stored since shows its value once outfitting lists it again; one sent for is in transit until
+  it arrives). A red ⚖ marks a ship or module the game says is hot (wanted). The ship locker is as the game last wrote it, in the journal or in
+  its own file. A suit loadout is listed once you create or wear one, and goes when you delete it.
+
+  <p align="center">
+    <img src="../images/ship-card.png" alt="Inventory: the ship list with a mouse resting on the Asp Explorer ASPLORER-X, its picture and name in a card beside the row" width="900">
+  </p>
+
+- **Engineering**: every ship-module blueprint by kind of module, grade by grade, with the materials one roll takes
+  against what you hold (green: enough, red: short), how many rolls you could make now, and the engineers offering it
+  for that kind of module (green: unlocked up to that grade). A material you are short of opens the Materials tab on
+  it, and its **⇄** finds the nearest material trader of its kind. Filter by module, blueprint or material, or show
+  only what you can craft now. Experimental effects and suit and weapon upgrades are not listed. The blueprints are a
+  copy of EDCD's coriolis-data (community data): a recipe the game changes is wrong until the copy is updated.
+- **Missions**: the missions you hold, the soonest to expire first: where they go, what they ask (and how much is
+  delivered), the reward, and the time left, marked when under half an hour.
+- **Sessions**: your sessions of the last 30 days with fighting or mining in them (40 at most), each from one login to
+  the next. Combat:
+  kills, by ship, bounties and bonds, kills an hour, deaths. Mining: tons refined and of what (what the SRV's refinery
+  collected on a planet is shown apart, and is not in the tons an hour), asteroids prospected and their content,
+  limpets launched, and **Sold**: what the ore you mined sold for in that login, wherever and whenever you mined it (a
+  login where you only sold shows 0 t refined). Tons you bought and sold with it, and sales to your own carrier, are
+  not counted, the same rule as Earnings below.
+- **Earnings**: what exploration, exobiology and mining paid you, from every sale in your journals.
+  - The figures: the total, cartography and exobiology (each its base and bonus, less your NPC crew's share while you
+    had crew hired: the total is what you were paid), mining (the tons you mined and sold), and the data you lost to
+    deaths (an estimate, from History's Ledger).
+  - Above the list: **All time**, a year or a month of it, kept on this device. The chart shows every month,
+    cartography, exobiology and mining stacked, the chosen ones highlighted; click a bar for that month.
+  - Then: every sale (when, where, the ship, what, base, bonus, total), where you sold most, the species that paid
+    most (the game's own figures), each ship's jumps, distance, bodies scanned, species sampled, earnings and active
+    days, mining (refined by ship and by SRV, what the mined tons sold for, per ton, where, the best sales), the star
+    classes, planet types and species you met most, and Outrider's estimates: the systems you sold by its value of your
+    scans (the game pays per page of systems, not per system) and the data lost to deaths. Each estimate says so.
+  - **⬇ CSV** saves every sale (in the Android app too).
+  - Mining counts only ore you mined, from the refinery to its sale. Tons you bought and sell with it are trade, left
+    out. Ore you store on your carrier keeps counting as mined: taken back aboard and sold, it is mining; ore you
+    jettison comes off the count. Mined ore sold to your own carrier is left out: it is your own money changing pockets
+    (taken back and sold elsewhere later, it counts then). Cartographic
+    and exobiology data sold at your carrier counts (the game pays it).
+  - Months are counted in UTC, as the game's journal times are: west of Greenwich, a sale late on a month's last
+    evening counts in the next month.
+  - Each trip's figures (sale to sale, with what deaths lost) are History's Ledger: **History › Trips**.
+  - The first start after updating reads all your journals again once (a few minutes): that fills in where and with
+    which ship you made every sale, and what you mined.
+
+<p align="center">
+  <img src="../images/earnings.png" alt="Earnings, all time: the total, cartography, exobiology, mining and the data lost, the monthly chart stacked by kind, and the first sales with where, ship, what, base, bonus and total" width="900">
+</p>
 
 ---
 

@@ -136,6 +136,18 @@ class ServerLogMain(unittest.TestCase):
         out.flush()
         return out.buffer.getvalue().decode("utf-8")
 
+    def test_the_version_line_once_under_the_launcher(self):
+        """launch_outrider.sh's header names the version on the terminal: the line goes into the log only (the author,
+        2026-10-14); started any other way it is printed as before."""
+        seen = {}
+
+        async def fake_run(args, st):
+            seen["log"] = L.ACTIVE
+        with unittest.mock.patch.dict(os.environ, {"OUTRIDER_LAUNCHER": "/opt/outrider/launch_outrider.sh"}):
+            printed = self.main(fake_run)
+        self.assertEqual([x["text"] for x in seen["log"].since()["lines"]][0], f"ED Outrider {outrider.__version__}")
+        self.assertNotIn(f"ED Outrider {outrider.__version__}", printed)
+
     def test_the_log_runs_with_the_server_only(self):
         seen = {}
 

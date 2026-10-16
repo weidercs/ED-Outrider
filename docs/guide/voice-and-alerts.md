@@ -36,6 +36,16 @@ notification and be spoken (🗣), chosen per alert in **⚙ Settings → Alerts
   own row, **Last scoopable star**)
 - on a route you follow in Outrider, a system targeted in game that is not the next stop (its own row, **Wrong target**;
   spoken once per target, no notification by default; see [Plot Route](plot-route.md))
+- **docking** (its own row, **Docking**, spoken by Comms): the pad the station gave you, said every time, even while
+  hushed ("Pad 34."), 5 seconds after the grant so it doesn't talk over the station's own voice (**Settings → Voice → Say your landing pad … s after docking is granted**, 0 to 20: `[speech] pad_delay`, for a chattier station), and why it refused when that isn't obvious: no pad free, ship too big, access restricted, hostile,
+  your offences, a fighter still out (too far away is not said). No notification by default. The pad also shows large on
+  Now and in the overlay (where the Surface radar goes). At a starport or carrier the pad's place follows: "Pad 34. At the back, up on
+  your right." The words assume you come through the slot with the **green lights on your right**, and the first docking
+  of each game session (then every fourth) says so: "With the green lights on your right, it's at the back, up on your
+  right." **With a docking computer fitted** the pad is shown at once but said only if the computer hasn't taken over
+  within 12 seconds (it flies you in; you switched it off: it is said then). To try a pad without docking, type the
+  LandingPad plugin's commands in the game's chat: `!sppad 34` (a starport), `!fcpad 7` (a fleet carrier), `!scpad 23`
+  (a squadron carrier), `!cspad 3` (a colonisation ship). Local chat reaches other players: use Solo or a private group.
 - docking where the station buys your data, and what you banked when you sold
 - a sale that left data aboard (Universal Cartographics sells 50 systems a page; at Vista Genomics, the species
   you kept back), said 90 seconds after the last page
@@ -75,7 +85,7 @@ browser starts with.
 | Core modules | 80% | A core module under this shows under hull and is said in the status report. |
 | Surface map | 1,000 m / 500 m / 50 m / 3,500 m | Altitude it shows below, narrowest view, rig spacing ring (0 = none), rig leash warning. |
 
-**Export settings** and **Import settings** move them to another browser profile. **Use these for new
+**Export settings** and **Import settings** move them to another browser profile (both are a browser's: the Android app opens no file picker and saves no file the page makes). **Use these for new
 browsers** keeps a copy on the server (`data/browser_defaults.json`, included in backups), so a tablet running
 Now starts with your voice, names and alert choices. The view and layouts stay per device.
 
@@ -108,7 +118,8 @@ Outrider runs (a Docker server too):
   has each crew member say one of its own lines in its own voice and personality. **▶ Audition: crew lines** plays one
   line where a crew member mentions another for each alert that has them, in each personality (or the one picked),
   with your crew's names and made-up ones for a member without. **✂ Cut this line** bans the line just played, like 👎.
-- **Your own words**: type anything for **▶ Speak**, or **⬇ Save WAV** to keep it.
+- **Your own words**: type anything for **▶ Speak**, or **⬇ Save WAV** to keep it (in a browser: the Android app saves
+  no file the page makes).
 - **How is it said**: a word the voice says wrong, said your way. Pick or type the word, write how it sounds as
   syllables joined by "-" with the stressed one in capitals (**fon-TIK-yoo-loo-uh**; "uh", "eh", "ih" are short
   sounds, the rest spelled plainly as English says it: kew, few, NIGH), **▶ this way** to hear it, **Save** to keep it.
@@ -184,7 +195,7 @@ the sentence ends:
 | Exobiologist | valuable bodies, sampling, Exomastery routes |
 | Chief Engineer | fuel, tank full, scooping stopped, jumponium, hull and heat |
 | Quartermaster | sales, unsold data, your carrier, losses |
-| Comms Officer | the game's start and exit, someone scanning your firsts |
+| Comms Officer | the game's start and exit, someone scanning your firsts, docking pads and refusals |
 | Tactical | every danger line (while Danger lines always in Tactical's voice is on) |
 | Mining Officer | the Rhino's rigs |
 
@@ -316,7 +327,12 @@ for the latest session), **this body** (the body you are on, fly near or have ta
 biology and geology), **left behind** (the nearest one or two systems within 100 ly with work over your
 `body_highlight_level` and `bio_min`), **hush** and **unhush**. A hush can take a time: "hush for ten minutes",
 "quiet until the next jump" (30 minutes when you say none; another time gets the nearest of 10, 30 minutes or the
-next jump). Their phrases are in `resources/ask.json`; edit them freely.
+next jump). Their phrases are in `resources/ask.json`; edit them freely (Outrider reads them at start).
+
+**Voice commands** (⚙ Settings → Voice, the fold at the end; on the tablet, Settings → **Voice commands…**) lists
+them all, grouped, from that file: what each one does, every phrase that asks it, and the words that narrow it ("vista",
+"repair", "carrier", "raw" beside "trader"; "for ten minutes", "until the next jump"; "session"). Find a setting finds
+it by "voice commands" or "phrases", and by a phrase's own words ("nearest vista").
 
 **Questions asked** (⚙ Settings, the last section) shows what the voice heard, newest first: the words, which phrase
 they matched and what that asks for ("matched “status report” → a status report"), or "no phrase matched (AI off)",

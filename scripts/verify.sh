@@ -139,6 +139,7 @@ ed_outrider.DSSA_URL = OFF          # nor EDAstro for the DSSA list
 import outrider.galnet
 outrider.galnet.URL = OFF            # nor Frontier's GalNet feed
 ed_outrider.Clipboard.TOOLS = ()   # the desktop clipboard is never touched by the smoke test
+ed_outrider.Clipboard.READ_TOOLS = ()   # nor read (the 📋 buttons)
 import outrider.service   # nor your own ~/.config/systemd/user or Startup folder, nor systemctl (S70's service)
 outrider.service.TARGET_DIR = os.path.join(os.path.dirname(sys.argv[sys.argv.index("--db") + 1]), "service")
 def _no_systemctl(cmd, **kw):

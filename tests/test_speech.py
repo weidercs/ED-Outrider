@@ -1206,8 +1206,8 @@ class PlausibleFixes(unittest.TestCase):
                     outrider.tts.download_voice_files(files, d)
                 except Exception as e:   # noqa: BLE001 -- collected for the assertion
                     errs.append(f"{type(e).__name__}: {e}")
-            with unittest.mock.patch.object(outrider.tts.urllib.request, "urlopen",
-                                            lambda url, timeout: Slow(b"{}" if url.split("?")[0].endswith(".json") else payload)):
+            with unittest.mock.patch.object(outrider.tls.urllib.request, "urlopen",
+                                            lambda url, timeout, **k: Slow(b"{}" if url.split("?")[0].endswith(".json") else payload)):
                 threads = [threading.Thread(target=dl) for _ in range(2)]
                 for t in threads:
                     t.start()
@@ -1394,7 +1394,7 @@ class VoiceCatalogue(unittest.TestCase):
             def read(self):
                 raise http.client.IncompleteRead(b"{")
         with tempfile.TemporaryDirectory() as d, \
-                unittest.mock.patch.object(outrider.tts.urllib.request, "urlopen", lambda *a, **k: Cut()):
+                unittest.mock.patch.object(outrider.tls.urllib.request, "urlopen", lambda *a, **k: Cut()):
             with self.assertRaises(OSError):
                 outrider.tts.fetch_catalogue(force=True, cache=os.path.join(d, "voices.json"))
 
@@ -1405,9 +1405,9 @@ class VoiceCatalogue(unittest.TestCase):
         import outrider.tts
         with tempfile.TemporaryDirectory() as d:
             cache = os.path.join(d, "voices.json")
-            with unittest.mock.patch.object(outrider.tts.urllib.request, "urlopen", lambda url, timeout: io.BytesIO(b'{"en_GB-a-low": {}}')):
+            with unittest.mock.patch.object(outrider.tls.urllib.request, "urlopen", lambda url, timeout, **k: io.BytesIO(b'{"en_GB-a-low": {}}')):
                 self.assertEqual(outrider.tts.fetch_catalogue(cache=cache), {"en_GB-a-low": {}})
-            with unittest.mock.patch.object(outrider.tts.urllib.request, "urlopen", lambda url, timeout: io.BytesIO(b'{"x": 1}')):
+            with unittest.mock.patch.object(outrider.tls.urllib.request, "urlopen", lambda url, timeout, **k: io.BytesIO(b'{"x": 1}')):
                 self.assertEqual(outrider.tts.fetch_catalogue(cache=cache), {"en_GB-a-low": {}})          # cached
                 os.utime(cache, (1, time.time() - outrider.tts.CATALOGUE_MAX_AGE - 5))
                 self.assertEqual(outrider.tts.fetch_catalogue(cache=cache), {"x": 1})                     # a week old

@@ -1,5 +1,5 @@
 {
-  "_note": "What a question to Outrider (POST /api/ask: the tablet app's voice) is matched to, without any AI. Each command lists phrases; a question matches the first command, in this order, that has one of its phrases as whole words in it (case and punctuation ignored; a leading \"hey vespa\" or \"vespa\" is dropped). Hush takes a time from the question (\"hush for ten minutes\", \"quiet until the next jump\"). Edit freely: a command's phrases can change, but its name stays (it picks the answer). Unmatched questions go to the AI layer when [assistant] enabled is true.",
+  "_note": "What a question to Outrider (POST /api/ask: the tablet app's voice) is matched to, without any AI. Each command lists phrases; a question matches the first command, in this order, that has one of its phrases as whole words in it (case and punctuation ignored; a leading \"hey vespa\" or \"vespa\" is dropped). Hush takes a time from the question (\"hush for ten minutes\", \"quiet until the next jump\"). Edit freely: a command's phrases can change, but its name stays (it picks the answer). Unmatched questions go to the AI layer when [assistant] enabled is true. \"descriptions\": what each command does, for the list of voice commands (Settings → Voice, the tablet's Voice commands…).",
   "commands": {
     "unhush": ["unhush", "un hush", "voice back", "unmute", "speak again", "you can talk", "end the hush", "cancel the hush", "stop the hush"],
     "hush": ["hush", "be quiet", "quiet", "shut up", "mute", "silence", "stop talking"],
@@ -15,5 +15,21 @@
     "unsold": ["unsold", "carrying", "on board", "aboard", "data worth", "how much data", "how much am i carrying"],
     "whats_left": ["what's left", "whats left", "what is left", "left here", "left to do", "to do here", "anything else here", "worth staying", "worth landing", "this system"],
     "nearest_unvisited": ["nearest unvisited", "unvisited", "new system", "where next", "nearest unexplored", "never been"]
+  },
+  "descriptions": {
+    "unhush": "Ends a hush: the voice speaks again.",
+    "hush": "Hushes the voice: for 30 minutes, or for 10 minutes or until the next jump when you say so (another time gets the nearer of 10 and 30 minutes). Danger lines still speak.",
+    "nearest_ggg": "The nearest body that could be a green gas giant, from what Outrider has cached: a guess from the ladder model, to check in the system map.",
+    "nearest_dock": "The nearest station or fleet carrier and what to know before docking there; a word in the question narrows it to a service, to stations or carriers, or to a material trader. A far one (500 light years by default) gets a neutron route plotted there.",
+    "fsd_injection": "How many premium, standard and basic FSD injections your materials make, and the material that runs short.",
+    "travel_today": "Jumps, light years, first discoveries, bodies mapped and samples since midnight; with \"session\" in the question, the latest session alone.",
+    "left_behind": "The nearest one or two systems within 100 light years with work worth going back for: bodies not found, planets worth mapping, biology.",
+    "this_body": "The body you are on or near, else the one targeted: its type, gravity, value now and if mapped, and its biological and geological signals.",
+    "next_jump": "The Highway route's next stop: how far, a neutron star or not, the jumps left and the next refuel.",
+    "status_report": "Where you are, fuel, unsold credits and the Highway's next stop.",
+    "fuel": "Fuel in percent and about how many jumps it lasts at full range.",
+    "unsold": "The credits of the cartographic and exobiology data aboard, not yet sold.",
+    "whats_left": "What is still to do in this system: honk it, bodies to find, biology to sample, planets worth mapping.",
+    "nearest_unvisited": "The nearest system you have never visited, how far it is and whether its star is scoopable."
   }
 }

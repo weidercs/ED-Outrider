@@ -17,6 +17,7 @@
   --bg: #000000; --panel: var(--el-panel); --line: var(--el-line); --text: var(--el-text); --muted: #C8732A;
   --accent: var(--el-orange); --good: var(--el-cyan); --warn: #FFC400; --bad: var(--el-alert); --info: var(--el-cyan);
   --hot: var(--el-cyan); --biohot: #B49CFF;
+  --earn-carto: var(--accent); --earn-mine: var(--warn);   /* the Earnings chart's three colours, told apart in this palette */
   --tb-font: "Saira Semi Condensed", system-ui, sans-serif; --tb-font-display: "Elite Display", "Saira Semi Condensed", sans-serif;
   --tb-case: uppercase; --tb-track: 1.5px; --tb-size: 17px;
   --tb-title: var(--el-orange);

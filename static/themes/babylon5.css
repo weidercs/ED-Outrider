@@ -16,6 +16,7 @@
   --bg: var(--b5-navy); --panel: var(--b5-panel); --line: var(--b5-line); --text: var(--b5-text); --muted: var(--b5-grey);
   --accent: var(--b5-cyan); --good: #7FE0B0; --warn: var(--b5-amber); --bad: #FF6B5E; --info: var(--b5-cyan);
   --hot: #7FE0B0; --biohot: #C8A8FF;
+  --earn-carto: var(--b5-steel); --earn-bio: var(--biohot); --earn-mine: var(--warn);   /* the Earnings chart's three colours, told apart in this palette */
   --tb-font: "Exo 2", system-ui, sans-serif; --tb-font-display: "B5 Heading", "Exo 2", sans-serif;
   --tb-case: uppercase; --tb-track: 1px; --tb-size: 17px;
   --tb-title: var(--b5-text);

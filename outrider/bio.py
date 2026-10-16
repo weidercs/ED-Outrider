@@ -72,6 +72,10 @@ import re
 import urllib.request
 from glob import glob, escape as glob_escape
 
+try:   # every download verifies with the shared context (issue #9)
+    from .tls import urlopen
+except ImportError:  # run as a file: tls.py beside it
+    from tls import urlopen
 try:
     from .unsold import ORGANIC_VALUES, find_journal_dirs
 except ImportError:  # standalone use without the price table
@@ -215,7 +219,7 @@ def luminosity_matches(want, have):
 
 def _get(url):
     req = urllib.request.Request(url, headers={"User-Agent": "ED-Outrider outrider.bio"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with urlopen(req, timeout=60) as resp:
         return resp.read().decode("utf-8")
 
 

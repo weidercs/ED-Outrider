@@ -21,6 +21,8 @@ set "VENV=.venv"
 rem requirements.txt as it was when last installed
 set "STAMP=%VENV%\.requirements.txt"
 set "VPY=%VENV%\Scripts\python.exe"
+rem the date certifi was last checked for a newer version (below)
+set "CERTSTAMP=%VENV%\.certifi-checked"
 
 :check
 if not exist "%VPY%" goto create
@@ -76,6 +78,18 @@ goto fail
 copy /y requirements.txt "%STAMP%" >nul
 
 :run
+rem certifi (the root certificates every HTTPS request also trusts, outrider\tls.py) upgraded once a week: pip never
+rem upgrades an installed one that meets requirements.txt's floor (the author, 2026-10-14). The stamp holds the date
+rem of the last check, compared in Python (not with cmd's date, which depends on the region's format); written only
+rem when pip got through, so an offline start tries again next time. Never stops Outrider from starting.
+"%VPY%" -c "import datetime as d, sys; s = open(sys.argv[1]).read().strip(); sys.exit(not 0 <= (d.date.today() - d.date.fromisoformat(s)).days < 7)" "%CERTSTAMP%" >nul 2>&1 && goto overlay
+"%VPY%" -m pip install --upgrade --quiet --disable-pip-version-check --retries 1 --timeout 10 certifi >nul 2>&1 && goto certstamp
+echo certifi: could not check for a newer certificate bundle (offline?); using the installed one
+goto overlay
+:certstamp
+"%VPY%" -c "import datetime, sys; open(sys.argv[1], 'w').write(datetime.date.today().isoformat() + '\n')" "%CERTSTAMP%"
+
+:overlay
 rem the in-game overlay's PyQt6, installed when [overlay] enabled is true in the config and it is missing; run in the
 rem caller's folder like Outrider, so a relative --config is the same file
 cd /d "%CALLER%"

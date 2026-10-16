@@ -1285,7 +1285,7 @@ class Batch4Review(unittest.TestCase):
             self.assertEqual(sp.voice_name, "en_GB-b-low")                # the installed one speaks at once
             self.assertEqual([t["args"] for t in threads], [("en_GB-a-low", "en_GB-b-low")])
             it = iter([_FakeResponse(b"{}"), _FakeResponse(b"model")])
-            with unittest.mock.patch.object(outrider.tts.urllib.request, "urlopen", lambda url, timeout: next(it)), \
+            with unittest.mock.patch.object(outrider.tls.urllib.request, "urlopen", lambda url, timeout, **k: next(it)), \
                     contextlib.redirect_stdout(io.StringIO()):
                 threads[0]["target"](*threads[0]["args"])
             self.assertEqual(sp.voice_name, "en_GB-a-low")                # switched once it arrived
@@ -1556,7 +1556,8 @@ class BatchEExobio(unittest.TestCase):
         m = [x for x in self.j.moments if x["seq"] > seq and x["kind"] == "bio_dropped"]
         self.assertEqual([(x["species"], x["body"], x["elsewhere"]) for x in m], [("Tussock Pennata", "4", False)])
         self.assertIsNone(self.db.execute("SELECT 1 FROM own_organic WHERE body_id = 4").fetchone())
-        self.db.execute("INSERT INTO own_organic VALUES (1, 4, 'x', 'Bacterium', 'Bacterium Aurasus', NULL, 2, NULL, '2026-01-01T00:30:00Z')")
+        self.db.execute("INSERT INTO own_organic (system, body_id, species, genus_name, species_name, variant_name, samples, done_ts, ts)"
+                        " VALUES (1, 4, 'x', 'Bacterium', 'Bacterium Aurasus', NULL, 2, NULL, '2026-01-01T00:30:00Z')")
         seq = self.j.moment_seq
         self.j.handle(self.organic("2026-01-01T00:40:00Z", 5, "Log", self.TUSSOCK, "Tussock Pennata"))
         self.assertEqual([x for x in self.j.moments if x["seq"] > seq and x["kind"] == "bio_dropped"], [])

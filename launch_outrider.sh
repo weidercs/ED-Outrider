@@ -13,6 +13,27 @@ CALLER=$PWD
 cd "$(dirname "$0")"
 HERE=$PWD
 
+# a header at every start and Settings' Restart (which runs this script again), so each run stands out in the
+# terminal and in a service's log (the author, 2026-10-14); the version read from outrider/__init__.py in bash alone
+# (no sed or head: the launcher runs where only bash and Python can be counted on)
+banner() {
+    local version="" line bar="======================================================================"
+    if [ -r outrider/__init__.py ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+            case $line in
+                '__version__ = "'*) version=${line#*\"}; version=${version%%\"*}; break ;;
+            esac
+        done < outrider/__init__.py
+    fi
+    echo
+    echo "$bar"
+    echo "#      ED Outrider v${version:-?}"
+    echo "#"
+    echo "#                       https://github.com/weslocke/ED-Outrider"
+    echo "$bar"
+}
+banner
+
 VENV=.venv
 STAMP="$VENV/.requirements.sha256"   # requirements.txt as it was when last installed
 
@@ -67,6 +88,19 @@ if needs_install; then
         exit 1
     fi
     echo "$want" > "$STAMP"
+fi
+
+# certifi (the root certificates every HTTPS request also trusts, outrider/tls.py) upgraded once a week: pip never
+# upgrades an installed one that meets requirements.txt's floor (the author, 2026-10-14). The stamp holds the date of
+# the last check, compared in Python; written only when pip got through, so an offline start tries again next time.
+# Never stops Outrider from starting.
+CERTIFI_STAMP="$VENV/.certifi-checked"
+if ! "$VENV/bin/python" -c 'import datetime as d, sys; s = open(sys.argv[1]).read().strip(); sys.exit(not 0 <= (d.date.today() - d.date.fromisoformat(s)).days < 7)' "$CERTIFI_STAMP" >/dev/null 2>&1; then
+    if "$VENV/bin/python" -m pip install --upgrade --quiet --disable-pip-version-check --retries 1 --timeout 10 certifi >/dev/null 2>&1; then
+        "$VENV/bin/python" -c 'import datetime, sys; open(sys.argv[1], "w").write(datetime.date.today().isoformat() + "\n")' "$CERTIFI_STAMP" || true
+    else
+        echo "certifi: could not check for a newer certificate bundle (offline?); using the installed one"
+    fi
 fi
 
 # the in-game overlay's PyQt6, installed when [overlay] enabled is true in the config and it is missing (never stops

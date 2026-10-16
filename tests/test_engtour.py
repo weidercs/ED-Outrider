@@ -1,14 +1,14 @@
-"""The engineers' trip (this fork: outrider/engtour.py, POST /api/commander/engineer_tour): which engineers cover the
+"""The engineers' trip (this fork: outrider/engtour.py; its route, POST /api/engineers/tour, in test_engineers.py): which engineers cover the
 picks for the fewest light years, in which order, ending at the carrier when asked. Made-up engineers on a line."""
-import asyncio
 import itertools
 import math
-import types
 import unittest
 
 from support import ed_outrider
 
 import outrider.engtour as T
+
+ROOT = ed_outrider.SCRIPT_DIR   # the repository, on the path through support
 
 PLACES = {"A": (10, 0, 0), "B": (20, 0, 0), "C": (100, 0, 0), "D": (-30, 0, 0), "M": (12, 0, 0), "Far": (5000, 0, 0)}
 ALL = {k: {"progress": "Unlocked", "rank": 5} for k in PLACES}
@@ -77,42 +77,6 @@ class Plan(unittest.TestCase):
 
     def test_nothing_picked(self):
         self.assertEqual(T.plan([], ALL, PLACES, (0, 0, 0)), {"stops": [], "total_ly": 0.0, "back_ly": None, "uncovered": [], "covers_tried": 1})
-
-
-class Server(unittest.TestCase):
-    def test_the_route(self):
-        from aiohttp.test_utils import TestClient, TestServer
-        db = ed_outrider.open_db(":memory:")
-        self.addCleanup(db.close)
-        state = ed_outrider.State(db, ed_outrider.Journals(db), types.SimpleNamespace(cached=lambda i: (None, None)), 25)
-        j = state.journals
-        j.handle({"event": "FSDJump", "timestamp": "2026-10-15T10:00:00Z", "StarSystem": "Sol", "SystemAddress": 10477373803,
-                  "StarPos": [0.0, 0.0, 0.0]})
-        import outrider.commander as C
-        # every workshop placed (far away) but the three that matter: nothing is asked of Spansh
-        places = {v[0]: [9000.0, 0.0, 0.0] for v in C.ENGINEER_SYSTEMS.values()}
-        places.update({"Deciat": [122.6, -0.8, -47.3], "Sirius": [6.2, -1.3, -5.8], "Khun": [-171.6, 20.0, -57.0]})
-        ed_outrider.meta_set(db, "engineer_places", places)
-        real = C.engineer_progress
-        C.engineer_progress = lambda dirs: {"Felicity Farseer": {"progress": "Unlocked", "rank": 5}, "Marco Qwent": {"progress": "Unlocked", "rank": 4}}
-        self.addCleanup(setattr, C, "engineer_progress", real)
-
-        async def record(name):
-            return None
-        state.spansh = types.SimpleNamespace(system_record=record, cached=lambda i: (None, None))
-
-        async def go():
-            async with TestClient(TestServer(ed_outrider.make_app(state))) as c:
-                ok = await c.post("/api/commander/engineer_tour", json={"requirements": [
-                    {"label": "FSD G5", "grade": 5, "engineers": ["Felicity Farseer", "Elvira Martuuk"]},
-                    {"label": "Power plant G4", "grade": 4, "engineers": ["Marco Qwent", "Felicity Farseer"]}]})
-                bad = [(await c.post("/api/commander/engineer_tour", json=b)).status for b in
-                       ({}, {"requirements": "x"}, {"requirements": [{"label": "x", "engineers": "y"}]}, {"requirements": [], "include_locked": "yes"})]
-                return ok.status, await ok.json(), bad
-        status, out, bad = asyncio.run(go())
-        self.assertEqual((status, [(s["engineer"], s["system"]) for s in out["stops"]]), (200, [("Felicity Farseer", "Deciat")]))
-        self.assertEqual((out["from"], out["stops"][0]["covers"]), ("Sol", ["FSD G5", "Power plant G4"]))
-        self.assertEqual(bad, [400, 400, 400, 400])
 
 
 if __name__ == "__main__":
