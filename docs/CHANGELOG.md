@@ -2,11 +2,23 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Version 2026.10.25, a bug fix release
+- Released from d5c1f9d plus the install guide's Updating section (the personalities on main wait for the next release).
+- Since 2026.10.24:
+  - the overlay no longer breaks the game's mouse lock on Linux (a window per panel, none while nothing is drawn),
+    with Foot boxes and "Hide the overlay on foot and in the DSS";
+  - the landing pad's delay as a setting;
+  - the carrier diagram's pads 7 and 8;
+  - Nearby's middle fit step; Settings wider, in two columns;
+  - the Fable sweep's fixes;
+  - the install guide's Updating section;
+  - screenshots back at 1600x1000.
+- What's new has its section. No journal re-read.
+
 ## 2026-10-16 · The install guide: updating a plain install
 - docs/guide/install.md "Updating": what an update never touches (`data/`, which holds the EDSM and Inara keys, and
   `ed_outrider.toml`), and the steps for a `git clone` and for a downloaded ZIP (a new folder of the old name, `data` and
   the config copied over). Only Docker had update steps before (a player's question).
-
 
 ## 2026-10-16 · Screenshots back at 1600x1000, the Overview also on a 27-inch monitor
 - Every full-page desktop shot in `docs/images/` retaken at 1600x1000: the README shows them 900 px wide, where a
