@@ -6,7 +6,7 @@
 // what engineering takes against your materials (Engineering), the missions you hold (Missions) and how your combat
 // and mining sessions went (Sessions). Each tab is read from the journals when opened, and again when stale ----
 // CM: tab (the one shown), data / error / at / loading per tab, q and craft (Engineering's filter), open (its modules)
-const CM = {ship: null, parts: new Set(), grades: new Set(), dist: null, distKey: null, tab: "profile", data: {}, error: {}, at: {}, loading: {}, q: "", craft: false, open: {}, wired: false};
+const CM = {trip: null, tripNote: null, tripLocked: false, tripCarrier: false, ship: null, parts: new Set(), grades: new Set(), dist: null, distKey: null, tab: "profile", data: {}, error: {}, at: {}, loading: {}, q: "", craft: false, open: {}, wired: false};
 const CM_TABS = [["profile", "CMDR", "your ranks and the way to the next, credits and assets, your fleet, your career"],
                  ["inventory", "Inventory", "your ships, stored modules, ship locker and suit loadouts"],
                  ["engineering", "Engineering", "every ship-module blueprint against the materials you hold"],
@@ -37,6 +37,9 @@ function cmdrWire() {
     if (e.target.closest("#cmRefresh")) loadCmdr(true);
     if (e.target.closest("#cmClearAll")) { CM.q = ""; CM.craft = false; CM.parts.clear(); CM.grades.clear(); CM.ship = null; cmdrDrawBody(); return; }
     if (e.target.closest("#cmLoadShip")) { cmdrLoadShip(); return; }
+    if (e.target.closest("#cmPlanTrip")) { cmdrPlanTrip(); return; }
+    if (e.target.closest("#cmTripCopy") && CM.trip) { copyText(cmdrTripText(CM.trip), "the itinerary"); return; }
+    if (e.target.closest("#cmTripForget")) { CM.trip = null; cmdrTripSave(); cmdrDrawBody(); return; }
     const part = e.target.closest("[data-cmpart]"), clear = e.target.closest("[data-cmpart-clear]");
     if (part) { const p = part.dataset.cmpart; if (CM.parts.has(p)) CM.parts.delete(p); else CM.parts.add(p); cmdrDrawBody(); return; }
     if (clear) { CM.parts.clear(); CM.grades.clear(); CM.ship = null; cmdrDrawBody(); return; }
@@ -46,9 +49,12 @@ function cmdrWire() {
     if (cp) copyText(cp.dataset.cmcopy);
   });
   el.addEventListener("input", e => { if (e.target.id === "cmFilter") { CM.q = e.target.value; cmdrDrawBody(); } });
-  el.addEventListener("change", e => { if (e.target.id === "cmCraft") { CM.craft = e.target.checked; cmdrDrawBody(); } });
+  el.addEventListener("change", e => {
+    if (e.target.id === "cmTripLocked") { CM.tripLocked = e.target.checked; return; }
+    if (e.target.id === "cmTripCarrier") { CM.tripCarrier = e.target.checked; return; } if (e.target.id === "cmCraft") { CM.craft = e.target.checked; cmdrDrawBody(); } });
   el.addEventListener("toggle", e => { const k = e.target.dataset && e.target.dataset.cmmod; if (k) CM.open[k] = e.target.open; }, true);
   try { const t = localStorage.getItem("cmdrTab"); if (CM_TABS.some(x => x[0] === t)) CM.tab = t; } catch {}
+  CM.trip = cmdrTripLoad();
 }
 // small pure helpers
 const cmNum = v => v == null ? "" : Number(v).toLocaleString();
@@ -243,6 +249,95 @@ function cmdrShipHtml(sh) {
     `${done.length} engineered: their parts and grades picked (experimental effects are named, not picked)</span><div class="cmstats">${sh.modules.map(mod).join("")}</div></div>`;
 }
 
+// ---- Engineering → Plan the trip (POST /api/commander/engineer_tour, outrider/engtour.py): the engineers who cover the
+// picks for the fewest light years from where you are, in the order to visit them, ending at your carrier if asked ----
+// what the picks ask for: a picked grade is one requirement (for a shared blueprint, one per picked part it is for),
+// a picked part with no picked grade of its own is "that part, any grade". Pure.
+function cmdrTripRequirements(blueprints, parts, grades) {
+  const reqs = [], graded = new Set();
+  for (const b of blueprints) for (const g of b.grades) {
+    if (!grades.has(`${b.id}|${g.grade}`)) continue;
+    const shared = (b.for || []).length, kinds = shared ? b.for.filter(p => parts.has(p)) : [];
+    cmdrPartsOf(b).forEach(p => graded.add(p));
+    if (shared && kinds.length) {
+      for (const k of kinds) reqs.push({label: `${b.name} G${g.grade} (${k})`, grade: g.grade, engineers: ((g.by_kind || {})[k] || []).map(e => e.name)});
+    } else reqs.push({label: `${shared ? "" : `${b.module}: `}${b.name} G${g.grade}`, grade: g.grade, engineers: g.engineers.map(e => e.name)});
+  }
+  for (const p of [...parts].sort((a, b) => a.localeCompare(b))) {
+    if (graded.has(p)) continue;
+    const names = new Set();
+    for (const b of blueprints) if (cmdrPartsOf(b).includes(p)) for (const g of b.grades) for (const e of cmdrGradeEngineers(g, b, new Set([p]))) names.add(e.name);
+    reqs.push({label: `${p} (any grade)`, grade: null, engineers: [...names]});
+  }
+  return reqs;
+}
+// what the picked grades are short of, for one roll each: [{material, have, need, for}]. Pure.
+function cmdrTripShort(blueprints, grades) {
+  const out = [];
+  for (const b of blueprints) for (const g of b.grades) {
+    if (!grades.has(`${b.id}|${g.grade}`)) continue;
+    for (const m of g.materials) if (m.have < m.need) out.push({material: m.name, have: m.have, need: m.need, for: `${b.name} G${g.grade}`});
+  }
+  return out;
+}
+function cmdrTripSave() { try { localStorage.setItem("cmTrip", JSON.stringify(CM.trip)); } catch {} }
+function cmdrTripLoad() { try { const t = JSON.parse(localStorage.getItem("cmTrip") || "null"); return t && Array.isArray(t.stops) ? t : null; } catch { return null; } }
+async function cmdrPlanTrip() {
+  const bps = (CM.data.engineering || {}).blueprints || [];
+  const requirements = cmdrTripRequirements(bps, CM.parts, CM.grades);
+  if (!requirements.length) { CM.tripNote = "pick a part or a grade first"; return cmdrDrawBody(); }
+  CM.tripNote = "planning…"; cmdrDrawBody();
+  let d;
+  try {
+    d = await apiJson("api/commander/engineer_tour", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({requirements, include_locked: !!CM.tripLocked, return_carrier: !!CM.tripCarrier})});
+  } catch (err) { d = {error: err.message}; }
+  if (!d || d.error) { CM.tripNote = `could not plan it: ${(d && d.error) || "no answer"}`; return cmdrDrawBody(); }
+  CM.tripNote = null;
+  CM.trip = Object.assign({}, d, {done: [], short: cmdrTripShort(bps, CM.grades), at: Date.now()});
+  cmdrTripSave();
+  cmdrDrawBody();
+}
+// a stop is done once you are in its system (marked as the page draws, kept with the trip). Pure but for that mark.
+function cmdrTripTick(trip) {
+  const here = data && data.position && data.position.name;
+  if (!trip || !here) return;
+  const i = trip.stops.findIndex((s, k) => s.system === here && !trip.done.includes(k));
+  if (i >= 0 && trip.stops.slice(0, i).every((s, k) => trip.done.includes(k) || s.system === here)) { trip.done.push(i); cmdrTripSave(); }
+}
+// the trip as text, for the clipboard. Pure.
+const cmdrTripText = t => t.stops.map((s, i) => `${i + 1}. ${s.engineer} — ${s.system} (${s.leg_ly} ly): ${s.covers.join(", ")}${s.locked ? ` [${s.locked}]` : ""}`)
+  .concat(t.carrier && t.back_ly != null ? [`then your carrier ${t.carrier.name || ""} — ${t.carrier.system} (${t.back_ly} ly)`] : [])
+  .concat([`${t.total_ly} ly in all, from ${t.from}`]).join("\n");
+// the controls, and the trip once planned. Pure but for cmdrTripTick.
+function cmdrTripHtml() {
+  const picks = CM.parts.size || CM.grades.size, carrier = data && data.carrier;
+  const ctl = !picks && !CM.trip ? "" : `<div class="cmtripctl">` +
+    (picks ? `<button type="button" class="mini primary" id="cmPlanTrip" title="the engineers who cover every pick for the fewest light years from where you are, in order">Plan the trip</button>` +
+      ` <label title="also engineers you have not unlocked, or not far enough for the grade: each stop says what it still needs"><input type="checkbox" id="cmTripLocked"${CM.tripLocked ? " checked" : ""}> include engineers I have not unlocked</label>` +
+      ` <label title="${carrier ? `end the trip at ${esc(carrier.name || "your carrier")} in ${esc(carrier.system || "?")}` : "no fleet carrier on record"}"><input type="checkbox" id="cmTripCarrier"${CM.tripCarrier && carrier ? " checked" : ""}${carrier ? "" : " disabled"}> end at my fleet carrier</label>` : "") +
+    (CM.tripNote ? ` <span class="unk">${esc(CM.tripNote)}</span>` : "") + `</div>`;
+  const t = CM.trip;
+  if (!t) return ctl;
+  cmdrTripTick(t);
+  const next = t.stops.findIndex((s, i) => !t.done.includes(i));
+  const row = (s, i) => `<tr class="${t.done.includes(i) ? "cmtripdone" : i === next ? "cmtripnext" : ""}"><td class="num">${t.done.includes(i) ? "✓" : i + 1}</td>` +
+    `<td><b>${esc(s.engineer)}</b>${s.locked ? ` <span class="warnc" title="you would have to see to this first">${esc(s.locked)}</span>` : ""}</td><td>${esc(s.system || "?")}</td>` +
+    `<td>${esc(s.covers.join(", "))}</td><td class="num">${cmNum(s.leg_ly)} ly</td>` +
+    `<td class="num">${s.system ? `<button type="button" class="mini" data-cmcopy="${esc(s.system)}">Copy</button>${forkPlotBtn(s.system)}` : ""}</td></tr>`;
+  const back = t.carrier && t.back_ly != null ? `<tr class="cmtripback"><td class="num">⌂</td><td><b>${esc(t.carrier.name || "your carrier")}</b></td><td>${esc(t.carrier.system || "?")}</td>` +
+    `<td class="unk">back to your carrier</td><td class="num">${cmNum(t.back_ly)} ly</td><td class="num">${t.carrier.system ? forkPlotBtn(t.carrier.system) : ""}</td></tr>` : "";
+  const short = (t.short || []).length ? `<div class="cmtripshort"><span class="warnc">Short for one roll:</span> ${t.short.map(m => `${esc(m.material)} ${cmNum(m.have)}/${cmNum(m.need)} <span class="unk">(${esc(m.for)})</span>`).join(", ")}</div>` : "";
+  const missed = (t.uncovered || []).length ? `<div class="cmtripshort"><span class="warnc">Not covered:</span> ${t.uncovered.map(u => `${esc(u.label)} <span class="unk">(${esc(u.why)})</span>`).join(", ")}</div>` : "";
+  return ctl + `<div class="cmtrip"><div class="hwyttl">Trip from ${esc(t.from || "?")}: ${t.stops.length} stop${t.stops.length === 1 ? "" : "s"}, ${cmNum(t.total_ly)} ly` +
+    `${t.done.length ? ` <span class="unk">· ${t.done.length} done</span>` : ""}</div>` +
+    `<div class="srow">${next >= 0 && t.stops[next].system ? `<button type="button" class="mini primary" data-plotto="${esc(t.stops[next].system)}">Plot next stop: ${esc(t.stops[next].system)}</button>` : t.stops.length ? `<span class="ok">every stop done</span>` : ""}` +
+    ` <button type="button" class="mini" id="cmTripCopy">Copy itinerary</button> <button type="button" class="mini" id="cmTripForget">Forget the trip</button>` +
+    ` <span class="unk">light years in straight lines: a guide to the jumps</span></div>` +
+    (t.stops.length ? `<table class="cmengtable cmtriptable"><thead><tr><th class="num">#</th><th>Engineer</th><th>System</th><th>Covers</th><th class="num">Leg</th><th></th></tr></thead>` +
+      `<tbody>${t.stops.map(row).join("")}${back}</tbody></table>` : `<div class="unk">No engineer you can use covers these picks.</div>`) + missed + short + `</div>`;
+}
+
 // the part picker: every part as a toggle, the picked ones on; Clear when any part or grade is picked. Pure (CM.parts).
 function cmdrPartsHtml(blueprints) {
   const all = [...new Set(blueprints.flatMap(cmdrPartsOf))].sort((a, b) => a.localeCompare(b));
@@ -286,7 +381,7 @@ function cmdrEngineeringHtml(d) {
     (CM.q || CM.craft || CM.parts.size || CM.grades.size
       ? ` <button type="button" class="mini" id="cmClearAll" title="the search, only what I can craft, the parts and the grades picked: all off">Clear filters</button>` : "") +
     ` <span class="unk">${eng.length ? `${unlocked} of ${eng.length} engineers unlocked` : "no engineer on record yet"} · ship modules only: no experimental effects, suits or weapons</span></div>` +
-    cmdrPartsHtml(d.blueprints || []) + cmdrShipHtml(CM.ship) +
+    cmdrPartsHtml(d.blueprints || []) + cmdrShipHtml(CM.ship) + cmdrTripHtml() +
     (cmdrLoadDistances(), "") + (() => {
       const bps = d.blueprints || [];
       const byPart = CM.parts.size ? cmdrPartEngineers(bps, CM.parts) : null;

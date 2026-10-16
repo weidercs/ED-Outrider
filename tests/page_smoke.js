@@ -5400,6 +5400,7 @@ const settle = async maxMs => {
         const s = String(u);
         if (!s.startsWith("api/commander/")) return __cmApi(u, o);
         __cmAsked.push(s);
+        if (o && o.body) (window.__cmBodies = window.__cmBodies || []).push([s, JSON.parse(o.body)]);
         return {
           profile: {profile: {commander: "Tester", ts: "2026-10-12T08:00:00Z", credits: 1234567890, loan: 0, squadron: "Sample Wing",
             power: {name: "Aisling Duval", rank: 3, merits: 4500},
@@ -5421,6 +5422,9 @@ const settle = async maxMs => {
             locker: {ts: "2026-10-12T09:03:00Z", kinds: [{name: "Goods", items: [{name: "Weapon <Schematic>", count: 3, mission: false}]}, {name: "Data", items: []}]},
             suits: [{loadout: "Bio", suit: "Artemis Suit", class: 3, mods: ["Increased sprint duration"], weapons: [{name: "TK Aphelion", class: 2, slot: "PrimaryWeapon1", mods: []}]}]},
           engineer_distances: {from: "Sol", distances: {Deciat: 122.6, Khun: 1234.56}, missing: ["Einheriar"], error: null},
+          engineer_tour: {from: "Sol", total_ly: 1356.8, back_ly: 0, carrier: null, covers_tried: 2, uncovered: [{label: "Sensors (any grade)", why: "no engineer you can use (not met yet)"}],
+            stops: [{engineer: "Felicity Farseer", system: "Deciat", covers: ["Frame shift drive: Increased range G1"], leg_ly: 122.6, locked: null},
+                    {engineer: "Elvira Martuuk", system: "Khun", covers: ["High capacity G1 (missile racks)"], leg_ly: 1234.2, locked: "not unlocked yet"}]},
           ship_parts: {ship: {name: "Sample", type: "krait_light"}, parts: ["Frame shift drive", "missile racks", "Thrusters"],
             grades: ["fsd_longrange|5", "Weapon_HighCapacity|1", "Nowhere_X|2"],
             modules: [{slot: "FrameShiftDrive", name: "Frame Shift Drive", parts: ["Frame shift drive"], blueprint_id: "FSD_LongRange", blueprint: "Long Range", level: 5,
@@ -5532,6 +5536,33 @@ const settle = async maxMs => {
                       text(body().querySelector(".cmship")), engNames()];
       body().querySelector("#cmClearAll").click();
       got.loadShipCleared = [body().querySelectorAll(".cmpart.on").length, !!body().querySelector(".cmship")];
+      // Plan the trip: what the picks ask for is posted, the plan drawn in order, the next stop to plot, the itinerary
+      body().querySelector('[data-cmgrade="FSD_LongRange|1"]').click();   // before any part: a picked part hides the others
+      partBtn("Sensors").click();
+      partBtn("missile racks").click();
+      body().querySelector('[data-cmgrade="Weapon_HighCapacity|1"]').click();
+      d.getElementById("cmTripLocked").checked = true; d.getElementById("cmTripLocked").dispatchEvent(new w.Event("change", {bubbles: true}));
+      body().querySelector("#cmPlanTrip").click();
+      await sleep(80);
+      const tripBody = w.__cmBodies.find(b => b[0] === "api/commander/engineer_tour");
+      got.tripAsked = tripBody && [tripBody[1].requirements.map(r => `${r.label}|${r.grade}|${r.engineers.join("+")}`), tripBody[1].include_locked, tripBody[1].return_carrier];
+      const tripRows = () => [...body().querySelectorAll(".cmtriptable tbody tr")].map(t => [...t.cells].slice(0, 5).map(text).join(" | "));
+      got.trip = [text(body().querySelector(".cmtrip .hwyttl")), tripRows(), text(body().querySelector("[data-plotto].primary")),
+                  [...body().querySelectorAll(".cmtripshort")].map(text)];
+      const tripCopied = [];
+      w.eval("window.__cmCopy2 = copyText"); w.__tripCopied = tripCopied;
+      w.eval("copyText = (t, what) => __tripCopied.push(t)");
+      body().querySelector("#cmTripCopy").click();
+      w.eval("copyText = __cmCopy2");
+      got.tripCopy = tripCopied;
+      got.tripKept = w.eval(`JSON.parse(localStorage.getItem("cmTrip")).stops.length`);
+      // arriving in the first stop's system ticks it: the next one to plot moves on
+      w.eval(`data.position = Object.assign({}, data.position, {name: "Deciat"})`);
+      w.eval("cmdrDrawBody()");
+      got.tripTicked = [tripRows()[0].split(" | ")[0], text(body().querySelector("[data-plotto].primary")), text(body().querySelector(".cmtrip .hwyttl"))];
+      body().querySelector("#cmTripForget").click();
+      got.tripForgot = [!!body().querySelector(".cmtrip"), w.eval(`localStorage.getItem("cmTrip")`)];
+      body().querySelector("#cmClearAll").click();
       got.cleared = [body().querySelectorAll(".cmpart.on").length, body().querySelectorAll("details.cmmod").length];
       search("wake");
 
@@ -5582,7 +5613,15 @@ const settle = async maxMs => {
                  "Sample 2 modules with blueprints, 1 engineered: their parts and grades picked (experimental effects are named, not picked)" +
                  "Frame Shift Drive Long Range G5 · Mass ManagerMissile Rack stock",
                  ["Elvira Martuuk · Frame shift drive, High capacity G1, Increased range G5, missile racks"]],
-      loadShipCleared: [0, false], engDist: ["122.6 ly", "1,234.6 ly", "?", "?", ""],
+      loadShipCleared: [0, false],
+      tripAsked: [["Frame shift drive: Increased range G1|1|Felicity Farseer", "High capacity G1 (missile racks)|1|Elvira Martuuk",
+                   "Sensors (any grade)|null|"], true, false],
+      trip: ["Trip from Sol: 2 stops, 1,356.8 ly",
+             ["1 | Felicity Farseer | Deciat | Frame shift drive: Increased range G1 | 122.6 ly",
+              "2 | Elvira Martuuk not unlocked yet | Khun | High capacity G1 (missile racks) | 1,234.2 ly"],
+             "Plot next stop: Deciat", ["Not covered: Sensors (any grade) (no engineer you can use (not met yet))", "Short for one roll: Vanadium 0/1 (High capacity G1)"]],
+      tripCopy: ["1. Felicity Farseer — Deciat (122.6 ly): Frame shift drive: Increased range G1\n2. Elvira Martuuk — Khun (1234.2 ly): High capacity G1 (missile racks) [not unlocked yet]\n1356.8 ly in all, from Sol"],
+      tripKept: 2, tripTicked: ["✓", "Plot next stop: Khun", "Trip from Sol: 2 stops, 1,356.8 ly · 1 done"], tripForgot: [false, "null"], engDist: ["122.6 ly", "1,234.6 ly", "?", "?", ""],
       filtered: [["Frame shift drive 1 blueprint open"], ["G1 | Atypical Disrupted Wake Echoes 7/1 | ×7 | Felicity Farseer",
                  "G5 | Arsenic 0/1Datamined Wake Exceptions 5/2 | – | Elvira Martuuk"], "cmFilter", 2, 1],
       craft: 1,
@@ -5594,7 +5633,7 @@ const settle = async maxMs => {
       pure: ["2 h 0 min", "2 d 7 h", "9 min"],
     };
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    if (JSON.stringify(asked) !== JSON.stringify(["api/commander/profile", "api/commander/inventory", "api/commander/engineering", "api/commander/engineer_distances", "api/commander/ship_parts", "api/commander/missions", "api/commander/sessions",
+    if (JSON.stringify(asked) !== JSON.stringify(["api/commander/profile", "api/commander/inventory", "api/commander/engineering", "api/commander/engineer_distances", "api/commander/ship_parts", "api/commander/engineer_tour", "api/commander/missions", "api/commander/sessions",
                                                  "api/commander/missions"])) bad.push("asked");
     const goodCM = !bad.length && errors.length === before;
     allOk = allOk && goodCM;

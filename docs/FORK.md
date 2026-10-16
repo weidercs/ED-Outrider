@@ -93,6 +93,7 @@ Beside upstream's ([AGENT_GUIDE.md](AGENT_GUIDE.md)):
 |---|---|
 | `outrider/commander.py` | This fork's Commander view, pure functions over journal events: `profile` (`rank_rows` with `RANKS` and `RANK_CREDITS`, the money, the fleet, `CAREER`), `ships`, `stored_modules`, `locker`, `suits` (`inventory`), `engineers` and `blueprints(counts, known, name)` (`engineering`; `load_blueprints` reads `resources/blueprints.json`, built by `scripts/build_blueprints.py`), `missions(events, now)` (the login's `Missions` line decides what is still held), `sessions(events)` and `totals` (a session: LoadGame to the next or Shutdown; only those with fighting or mining). `add_routes(app, state, dirs)` serves GET `/api/commander/<part>` in an executor (one line in `make_app`). The page: view `cmdr` in `static/fork.js` (`CM`, `loadCmdr`, `cmdr<Tab>Html`), hooked from page.js's `render()`. Tests: `tests/test_commander.py` |
 | `outrider/jscan.py` | This fork's journal reader for the Commander view: `events(dirs, names, days)` (the files that can hold the window, by `outrider.log`'s `journal_files` / `window`; a line is parsed only when it names one of the events; a file that has not grown is read once: `_CACHE` by path, size and names) |
+| `outrider/engtour.py` | This fork's engineers' trip, pure: `plan(requirements, engineers, places, start, end, include_locked)` (`_covers`: every minimal cover; `_order`: Held-Karp up to `EXACT_STOPS`, else nearest neighbour and 2-opt; `usable`: unlocked at a rank that reaches the grade). Served by `commander.engineer_tour` (POST `/api/commander/engineer_tour`); the page builds the requirements from the picks (`cmdrTripRequirements` in `static/fork.js`). Tests: `tests/test_engtour.py` |
 | `static/fork.js` | This fork's own page code, loaded before page.js (definitions only; page.js's helpers are used when called). New fork page code goes here, with a one-line hook in page.js where upstream's code must call it |
 | `outrider/shipinfo.py` | This fork's Ship view: `summary(loadout event)` (the ship's figures, its modules by group with `module_name` (name, size, rating, mount from the journal symbol: `_NAMES` by prefix, an unknown family tidied), `slot_group`, `engineering` (blueprint, level, the Modifiers as {label, value, original, pct, good})), `links` (the Loadout gzipped and base64'd into EDSY's and Coriolis's import addresses, as EDMC does), `latest_loadout(dirs, ship_id)` (the newest Loadout in the last journals: nothing is stored). `State.ship_summary` and GET `/api/ship` (in an executor: it reads files). The page: view `ship` (`SH`, `loadShip`, `shipModuleHtml`, `shipStatHtml`, `shipFiguresHtml`). Tests: `tests/test_shipinfo.py`. No module database: a stock module's figures and ship totals are EDSY's to show |
 | `outrider/biohunt.py` | This fork's Unscanned (bio) plotter, pure: `mass_code(name)`, `rates(counts)` (`PRIOR` blended with the player's own counts, `PRIOR_WEIGHT`), `odds`, `pick(candidates, here, reach, rate, start, toward, taken)` (the next hop: odds x how much of the range it uses; outward or towards a system; never twice), `rows` (highway_route rows). In ed_outrider.py: `Spansh.unscanned_near` (systems search, `estimated_scan_value` 0, the farthest first), `State.bio_mass_counts` (your own journals), `route_end`, `unscanned_start_plot` (the `unscanned` branch of `highway_start_plot`) and `_unscanned_plot` (one search per hop, `UNSCANNED_GAP_S` apart, `REACH_STEPS` when nothing is in reach; stored with `highway_store`, plotter `unscanned`). `highway_text(rows, i, plotter)` words its arrival line. Favouring one species: `biohunt.species_lean(found names, scanned names)` (each code's lift, the odds scaled to 1; `LEAN_MIN_FOUND` / `LEAN_MIN_SCANNED` or no lean) from `State.species_lean` (`Spansh.body_search` with the species' landmark, `Spansh.sphere` for the scanned systems around; `SPECIES_RADIUS`, `SPECIES_BASE_RADIUS`), kept in the route's options as `species` and `lean`; `State.bio_species_names` fills `/api/highway`'s `bio_species`. The page: the `unscanned` radio, `.hwy-uopt` (`#hwyStops`, `#hwyBioFor`), `unscannedHow`. Tests: `tests/test_biohunt.py` |
@@ -151,6 +152,22 @@ Beside upstream's ([DESIGN_NOTES.md](DESIGN_NOTES.md)):
 ## Changelog
 
 Newest first. Upstream's is [CHANGELOG.md](CHANGELOG.md).
+
+## 2026-10-15 · This fork: Engineering parts, grades, Load my ship, and Plan the trip
+- Each shared blueprint says which modules it is for ("for: missile racks, cannons, ..."), and the table
+  (`resources/blueprints.json`, rebuilt by `scripts/build_blueprints.py`) keeps its engineers per kind per grade
+  (`by_kind`): High capacity's missile racks go to other engineers than its cannons.
+- **Parts** (a module, or each kind a shared blueprint is for) and **grades** (G1 to G5 of a blueprint) can be picked,
+  any number: the blueprints narrow to theirs, the Engineers list to the engineers who do any of them, each row naming
+  what they do of the picks ("Hera Tani · Power plant, Overcharged G5"). The search covers modules, weapons,
+  blueprints, materials and engineers; **Clear filters** resets it all.
+- **Load my ship** picks the parts of the ship you fly and the grade each engineered module is at, and lists them
+  with their experimental effects (GET `/api/commander/ship_parts`, `commander.ship_parts`, `SHIP_PARTS`).
+- **Plan the trip** (`outrider/engtour.py`, POST `/api/commander/engineer_tour`): the engineers who cover every
+  pick for the fewest light years from where you are (every minimal cover, each ordered exactly up to 11 stops),
+  only those you can use unless asked, ending at your fleet carrier if asked; what each stop covers, the legs, the
+  total, what nobody covers, the materials short for one roll. Kept in this browser: a stop is ticked once you are
+  in its system, Plot next stop, Copy itinerary, Forget the trip. Straight-line light years: a guide to the jumps.
 
 ## 2026-10-15 · This fork: a database a newer Outrider wrote starts again
 - After the newer upstream code had run once on the player's database (reader version 54) and tweak-update was

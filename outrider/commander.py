@@ -699,6 +699,58 @@ def ship_parts_now(dirs, state):
     return ship_parts(ev)
 
 
+# ---- the engineers' trip: which engineers cover the picks for the fewest light years (outrider/engtour.py) ----
+
+def engineer_progress(dirs, days=INVENTORY_DAYS, now=None):
+    """{engineer: {progress, rank}} from the journals' EngineerProgress lines (reads files: off the event loop)."""
+    return engineers(jscan.events(dirs, ("EngineerProgress",), days, now))
+
+
+def tour_body_problem(body):
+    """What is wrong with a POST /api/commander/engineer_tour body, or None."""
+    if not isinstance(body, dict) or not isinstance(body.get("requirements"), list):
+        return "requirements: a list of {label, grade, engineers}"
+    for r in body["requirements"]:
+        if not (isinstance(r, dict) and isinstance(r.get("label"), str) and isinstance(r.get("engineers"), list)
+                and all(isinstance(e, str) for e in r["engineers"])
+                and (r.get("grade") is None or (isinstance(r["grade"], int) and not isinstance(r["grade"], bool) and 1 <= r["grade"] <= 5))):
+            return "requirements: each {label: text, grade: 1 to 5 or null, engineers: [names]}"
+    for k in ("include_locked", "return_carrier"):
+        if k in body and not isinstance(body[k], bool):
+            return f"{k}: true or false"
+    if len(body["requirements"]) > 60:
+        return "requirements: 60 at most"
+    return None
+
+
+async def engineer_tour(state, body, dirs):
+    """POST /api/commander/engineer_tour {requirements, include_locked?, return_carrier?}: the trip (engtour.plan) from
+    where you are, each stop with its system; with return_carrier, ending at your fleet carrier. ({...}, status)."""
+    import asyncio
+    from . import engtour
+    problem = tour_body_problem(body)
+    if problem:
+        return {"error": problem}, 400
+    pos = state.journals.pos
+    if not pos or None in (pos.get("x"), pos.get("y"), pos.get("z")):
+        return {"error": "no position yet: after your first jump"}, 409
+    places = (await engineer_distances(state)) and _places(state.db)
+    at = {name: places[v[0]] for name, v in ENGINEER_SYSTEMS.items() if v[0] in places}
+    end, carrier = None, None
+    if body.get("return_carrier"):
+        summary = state.carrier_summary() if hasattr(state, "carrier_summary") else None
+        c = getattr(state.journals, "carrier", None) or {}
+        if not summary or c.get("x") is None:
+            return {"error": "no fleet carrier on record, or not where it is yet"}, 409
+        end, carrier = (c["x"], c["y"], c["z"]), {"name": summary.get("name"), "system": summary.get("system")}
+    progress = await asyncio.get_running_loop().run_in_executor(None, engineer_progress, dirs())
+    out = engtour.plan(body["requirements"], progress, at, (pos["x"], pos["y"], pos["z"]), end,
+                       include_locked=bool(body.get("include_locked")))
+    for s in out["stops"]:
+        s["system"] = (engineer_system(s["engineer"]) or (None,))[0]
+    return dict(out, **{"from": pos.get("name"), "carrier": carrier}), 200
+
+
 # ---- the server's routes ----
 
 def add_routes(app, state, dirs):
@@ -724,3 +776,12 @@ def add_routes(app, state, dirs):
     async def distances(_):
         return web.json_response(await engineer_distances(state))
     app.router.add_get("/api/commander/engineer_distances", distances)
+
+    async def tour(request):
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        out, status = await engineer_tour(state, body, dirs)
+        return web.json_response(out, status=status)
+    app.router.add_post("/api/commander/engineer_tour", tour)

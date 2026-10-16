@@ -243,6 +243,10 @@ main > #hereView.detail > #bodyPanel { position: sticky; top: calc(var(--head-h,
 .cmparts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0 8px; } .cmparts > .unk { margin-right: 4px; }
 .cmgrade { min-width: 2.6em; } .cmgrade.on { background: var(--accent, #4a7); color: var(--bg); border-color: var(--accent, #4a7); }
 tr.cmgradeon td { background: rgba(120, 170, 120, .12); }
+.cmtripctl { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 4px 0; }
+.cmtrip { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; margin: 6px 0 10px; }
+.cmtriptable tr.cmtripnext td { background: rgba(120, 170, 120, .14); } .cmtriptable tr.cmtripdone td { opacity: .55; }
+.cmtripshort { margin-top: 6px; }
 .cmship { margin: 2px 0 8px; } .cmshipmod { white-space: nowrap; }
 .cmsupports { color: var(--good, #4a7); font-size: 12px; font-weight: 400; }
 .cmpart.on { background: var(--accent, #4a7); color: var(--bg); border-color: var(--accent, #4a7); }
