@@ -205,10 +205,13 @@ function forkEngineeringHtml(d) {
     if (!groups.has(b.module)) groups.set(b.module, []);
     groups.get(b.module).push(`<h4 class="cmbp">${esc(b.name)}</h4>` + cmTable([["Grade"], ["Materials <span class=\"unk\">(held / one roll)</span>"], ["Rolls", 1], ["Engineers"]], grades.map(g => gradeRow(g, b))));
   }
-  const open = k => q || CM.craft || FX.parts.size || FX.grades.size || CM.open[k];   // a search or a pick shows what it found
+  // collapsed unless you opened one (a search still opens what it found, as upstream's tab does); a pick shows in the title
+  const open = k => q || CM.craft || CM.open[k];
+  const picked = mod => rows.filter(b => b.module === mod).flatMap(b => b.grades.filter(g => FX.grades.has(fxGradeKey(b, g))).map(g => `${b.name} G${g.grade}`));
   return `<div class="unk cmnote">${eng.length ? `${unlocked} of ${eng.length} engineers unlocked` : "no engineer on record yet"} · ship modules only: no experimental effects, suits or weapons</div>` +
     fxPartsHtml(rows) + fxShipHtml(FX.ship) + fxTripHtml() + fxEngineersHtml(sup, q) +
-    ([...groups].map(([mod, list]) => `<details class="cmmod" data-cmmod="${esc(mod)}"${open(mod) ? " open" : ""}><summary><b>${esc(mod)}</b> <span class="unk">${list.length} blueprint${list.length === 1 ? "" : "s"}</span></summary>${list.join("")}</details>`).join("")
+    ([...groups].map(([mod, list]) => `<details class="cmmod" data-cmmod="${esc(mod)}"${open(mod) ? " open" : ""}><summary><b>${esc(mod)}</b> <span class="unk">${list.length} blueprint${list.length === 1 ? "" : "s"}</span>` +
+      `${picked(mod).length ? ` <span class="cmsupports">· ${esc(picked(mod).join(", "))}</span>` : ""}</summary>${list.join("")}</details>`).join("")
       || `<div class="unk">Nothing matches.</div>`);
 }
 document.addEventListener("click", e => {

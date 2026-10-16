@@ -9298,6 +9298,7 @@ const releasePayloads = async () => {
       got.g5 = engNames();
       body().querySelector('[data-fxgrade="Power plant|PowerPlant_Boosted|4"]').click();
       got.g45 = engNames();
+      got.groupTitle = [...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary")) + (x.open ? " open" : ""));   // collapsed, the picks named
       body().querySelector("[data-fxclear]").click();
       body().querySelector('[data-fxpart="Missile rack"]').click();
       got.part = [engNames(), [...body().querySelectorAll("details.cmmod summary")].map(text)];
@@ -9330,6 +9331,7 @@ const releasePayloads = async () => {
       drawn: [true, ["Missile rack", "Power plant"], ["Hera Tani", "Etienne Dorn Colonia", "Marco Qwent", "Juri Ishmaak"].map(x => x.replace(" Colonia", "")),
               ["108.4 ly", "22,000.0 ly", "8.6 ly", "300.5 ly"]],
       g5: ["Hera Tani · Overcharged G5", "Etienne Dorn · Overcharged G5"],
+      groupTitle: ["Power plant 1 blueprint · Overcharged G4, Overcharged G5", "Missile rack 1 blueprint"],
       g45: ["Hera Tani · Overcharged G4, Overcharged G5", "Etienne Dorn · Overcharged G4, Overcharged G5", "Marco Qwent · Overcharged G4"],
       part: [["Juri Ishmaak · Missile rack"], ["Missile rack 1 blueprint"]],
       ship: [["Power plant"], ["Power plant|PowerPlant_Boosted|5"], "Sample 1 module with blueprints, 1 engineered: their parts and grades picked (experimental effects are named, not picked)Power Plant Boosted G5 · Thermal Spread"],
