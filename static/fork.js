@@ -6,7 +6,7 @@
 // what engineering takes against your materials (Engineering), the missions you hold (Missions) and how your combat
 // and mining sessions went (Sessions). Each tab is read from the journals when opened, and again when stale ----
 // CM: tab (the one shown), data / error / at / loading per tab, q and craft (Engineering's filter), open (its modules)
-const CM = {dist: null, distKey: null, tab: "profile", data: {}, error: {}, at: {}, loading: {}, q: "", craft: false, open: {}, wired: false};
+const CM = {ship: null, parts: new Set(), grades: new Set(), dist: null, distKey: null, tab: "profile", data: {}, error: {}, at: {}, loading: {}, q: "", craft: false, open: {}, wired: false};
 const CM_TABS = [["profile", "CMDR", "your ranks and the way to the next, credits and assets, your fleet, your career"],
                  ["inventory", "Inventory", "your ships, stored modules, ship locker and suit loadouts"],
                  ["engineering", "Engineering", "every ship-module blueprint against the materials you hold"],
@@ -35,6 +35,13 @@ function cmdrWire() {
     const t = e.target.closest("[data-cmtab]");
     if (t) { CM.tab = t.dataset.cmtab; try { localStorage.setItem("cmdrTab", CM.tab); } catch {} loadCmdr(); return; }
     if (e.target.closest("#cmRefresh")) loadCmdr(true);
+    if (e.target.closest("#cmClearAll")) { CM.q = ""; CM.craft = false; CM.parts.clear(); CM.grades.clear(); CM.ship = null; cmdrDrawBody(); return; }
+    if (e.target.closest("#cmLoadShip")) { cmdrLoadShip(); return; }
+    const part = e.target.closest("[data-cmpart]"), clear = e.target.closest("[data-cmpart-clear]");
+    if (part) { const p = part.dataset.cmpart; if (CM.parts.has(p)) CM.parts.delete(p); else CM.parts.add(p); cmdrDrawBody(); return; }
+    if (clear) { CM.parts.clear(); CM.grades.clear(); CM.ship = null; cmdrDrawBody(); return; }
+    const grade = e.target.closest("[data-cmgrade]");
+    if (grade) { const k = grade.dataset.cmgrade; if (CM.grades.has(k)) CM.grades.delete(k); else CM.grades.add(k); cmdrDrawBody(); return; }
     const cp = e.target.closest("[data-cmcopy]");
     if (cp) copyText(cp.dataset.cmcopy);
   });
@@ -154,42 +161,143 @@ document.addEventListener("click", e => {
   toast(`Plot Route: to ${b.dataset.plotto}`);
 });
 // the engineers: where each works, with Copy and Plot route (and how far you are with them). Pure.
-function cmdrEngineersHtml(eng) {
-  if (!eng.length) return "";
+function cmdrEngineersHtml(eng, q = "", supports = null) {
+  if (!eng.length) return q ? `<div class="unk cmnote">No engineer matches.</div>` : "";
+  const forParts = CM.parts.size || CM.grades.size ? ` <span class="unk">· those who engineer ${esc([...CM.parts].join(" or ") || "it")}` +
+    `${CM.grades.size ? ` at a picked grade` : ""}</span>` : "";
   const status = e => e.progress === "Unlocked" ? `<span class="ok">unlocked${e.rank != null ? `, grade ${e.rank}` : ""}</span>`
     : e.progress ? `<span class="warnc">${esc(e.progress.toLowerCase())}</span>` : `<span class="unk">not met</span>`;
-  const row = e => `<tr><td><b>${esc(e.name)}</b>${e.kind && e.kind !== "ship" ? ` <span class="unk">${esc(e.kind)}</span>` : ""}</td><td>${status(e)}</td>` +
+  // with parts picked: the picked parts this engineer engineers, after the name
+  const parts = e => { const p = supports && supports.get(cmPlain(e.name)); return p && p.size ? ` <span class="cmsupports">· ${esc([...p].sort((a, b) => a.localeCompare(b)).join(", "))}</span>` : ""; };
+  const row = e => `<tr><td><b>${esc(e.name)}</b>${parts(e)}${e.kind && e.kind !== "ship" ? ` <span class="unk">${esc(e.kind)}</span>` : ""}</td><td>${status(e)}</td>` +
     `<td>${e.system ? `${esc(e.system)}${e.region === "Colonia" ? ` <span class="unk">Colonia</span>` : ""}` : `<span class="unk">not known</span>`}</td>` +
     `<td class="num">${cmdrDistHtml(e.system, CM.dist)}</td>` +
     `<td class="num">${e.system ? `<button type="button" class="mini" data-cmcopy="${esc(e.system)}" title="copy ${esc(e.system)} for the galaxy map">Copy</button>${forkPlotBtn(e.system)}` : ""}</td></tr>`;
-  const open = CM.open.__engineers !== false;
-  return `<details class="cmengs" data-cmmod="__engineers"${open ? " open" : ""}><summary><b>Engineers</b> <span class="unk">where each works: copy the system or plot a route there</span></summary>` +
+  const open = q ? true : CM.open.__engineers !== false;   // a search shows what it found
+  return `<details class="cmengs" data-cmmod="__engineers"${open ? " open" : ""}><summary><b>Engineers</b> <span class="unk">where each works: copy the system or plot a route there</span>${forParts}</summary>` +
     `<table class="cmengtable"><thead><tr><th>Engineer</th><th>With you</th><th>System</th><th class="num" title="light years from where you are">Distance</th><th></th></tr></thead><tbody>${eng.map(row).join("")}</tbody></table></details>`;
 }
 
+// The parts the Engineering tab can narrow to: a blueprint's module, or for one shared by several kinds of module each
+// kind it is for (missile racks, multi-cannons...). Pure.
+const cmdrPartsOf = b => (b.for || []).length ? b.for : [b.module];
+// a grade's engineers for the picked parts (all of them with none picked). Pure.
+function cmdrGradeEngineers(g, b, parts) {
+  if (!parts.size || !(b.for || []).length) return g.engineers;
+  const names = new Set(Object.entries(g.by_kind || {}).filter(([k]) => parts.has(k)).flatMap(([, list]) => list.map(e => e.name)));
+  return g.engineers.filter(e => names.has(e.name));
+}
+// the engineers who engineer any of the picked parts at any grade: {name (lower case, letters only): Set of the picked
+// parts they engineer}. Pure.
+const cmPlain = n => String(n || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+function cmdrPartEngineers(blueprints, parts) {
+  const out = new Map();
+  for (const b of blueprints) {
+    for (const p of cmdrPartsOf(b)) {
+      if (!parts.has(p)) continue;
+      for (const g of b.grades) for (const e of cmdrGradeEngineers(g, b, new Set([p]))) {
+        const k = cmPlain(e.name);
+        if (!out.has(k)) out.set(k, new Set());
+        out.get(k).add(p);
+      }
+    }
+  }
+  return out;
+}
+// the engineers who do any of the picked grades (`${blueprint id}|${grade}`, CM.grades), for the picked parts: {name (as
+// cmPlain): Set of what they do of them, "Overcharged G5"}. Pure.
+function cmdrGradeEngineersPicked(blueprints, picked, parts) {
+  const out = new Map();
+  for (const b of blueprints) for (const g of b.grades) {
+    if (!picked.has(`${b.id}|${g.grade}`)) continue;
+    for (const e of cmdrGradeEngineers(g, b, parts)) {
+      const k = cmPlain(e.name);
+      if (!out.has(k)) out.set(k, new Set());
+      out.get(k).add(`${b.name} G${g.grade}`);
+    }
+  }
+  return out;
+}
+// "Load my ship" (GET /api/commander/ship_parts): the parts the ship you fly has, and the grade each engineered module
+// is at, picked; the modules listed under the buttons with their blueprints, levels and experimental effects
+async function cmdrLoadShip() {
+  let d;
+  try { d = await apiJson("api/commander/ship_parts"); } catch (err) { d = {error: err.message}; }
+  if (!d || d.error || !d.ship) { CM.ship = {error: (d && d.error) || "no ship yet: the game writes its Loadout when you log in"}; return cmdrDrawBody(); }
+  const have = new Set(((CM.data.engineering || {}).blueprints || []).flatMap(cmdrPartsOf));
+  const ids = new Map(((CM.data.engineering || {}).blueprints || []).map(b => [b.id.toLowerCase(), b]));
+  CM.parts = new Set(d.parts.filter(p => have.has(p)));
+  CM.grades = new Set(d.grades.map(k => { const [id, g] = k.split("|"), b = ids.get(id.toLowerCase());
+    return b && b.grades.some(x => String(x.grade) === g) ? `${b.id}|${g}` : null; }).filter(Boolean));
+  CM.ship = d;
+  cmdrDrawBody();
+}
+// the loaded ship's modules: each with its blueprint, grade and experimental effect, stock ones by name. Pure.
+function cmdrShipHtml(sh) {
+  if (!sh) return "";
+  if (sh.error) return `<div class="unk cmnote">Load my ship: ${esc(sh.error)}</div>`;
+  const label = shipLabel(sh.ship.name, sh.ship.type), done = sh.modules.filter(m => m.blueprint);
+  const mod = m => `<span class="cmshipmod"><b>${esc(m.name)}</b> ${m.blueprint ? `${esc(m.blueprint)} G${m.level || "?"}` +
+    (m.experimental ? ` <span class="unk">· ${esc(m.experimental)}</span>` : "") : `<span class="unk">stock</span>`}</span>`;
+  return `<div class="cmship"><b>${esc(label)}</b> <span class="unk">${sh.modules.length} module${sh.modules.length === 1 ? "" : "s"} with blueprints, ` +
+    `${done.length} engineered: their parts and grades picked (experimental effects are named, not picked)</span><div class="cmstats">${sh.modules.map(mod).join("")}</div></div>`;
+}
+
+// the part picker: every part as a toggle, the picked ones on; Clear when any part or grade is picked. Pure (CM.parts).
+function cmdrPartsHtml(blueprints) {
+  const all = [...new Set(blueprints.flatMap(cmdrPartsOf))].sort((a, b) => a.localeCompare(b));
+  if (!all.length) return "";
+  return `<div class="cmparts" role="group" aria-label="parts"><span class="unk">Parts:</span>` +
+    all.map(p => `<button type="button" class="mini cmpart${CM.parts.has(p) ? " on" : ""}" data-cmpart="${esc(p)}" aria-pressed="${CM.parts.has(p)}">${esc(p)}</button>`).join("") +
+    (CM.parts.size || CM.grades.size ? ` <button type="button" class="mini" data-cmpart-clear title="every part and grade again">Clear</button>` : "") +
+    (CM.grades.size ? ` <span class="unk">· grades picked: ${CM.grades.size} (click a grade below to pick or unpick it)</span>` : "") + `</div>`;
+}
+
+// what the Engineering search looks in, lower case: a blueprint's module, name, the modules it is for (missile racks...),
+// its materials and its engineers; an engineer's name, kind, system and region. Pure.
+const cmdrBlueprintText = b => [b.module, b.name, ...(b.for || []), ...b.grades.flatMap(g => g.materials.map(x => x.name).concat(g.engineers.map(e => e.name)))]
+  .join(" ").toLowerCase();
+const cmdrEngineerText = e => [e.name, e.kind, e.system, e.region].filter(Boolean).join(" ").toLowerCase();
 // Engineering: the blueprints by module, each grade's materials against what you hold. Pure (CM.q, CM.craft, CM.open).
 function cmdrEngineeringHtml(d) {
   const q = CM.q.trim().toLowerCase();
   const all = d.engineers || [], eng = all.filter(e => e.progress), unlocked = eng.filter(e => e.progress === "Unlocked").length;
-  const gradeRow = g => {
+  const gradeRow = (g, b) => {
     const mats = g.materials.map(x => `<span class="cmmat ${x.have >= x.need ? "ok" : "noscoop"}" title="you hold ${cmNum(x.have)}">${esc(x.name)} ${cmNum(x.have)}/${x.need}</span>`).join("");
-    const who = g.engineers.map(e => `<span class="${e.ready ? "ok" : "unk"}" title="${esc((e.progress ? `${e.progress}${e.rank != null ? `, rank ${e.rank}` : ""}` : "not met yet") + (e.system ? ` · in ${e.system}` : ""))}">${esc(e.name)}</span>`).join(", ");
-    return `<tr><td><b>G${g.grade}</b></td><td><div class="cmstats">${mats}</div></td>` +
+    const who = cmdrGradeEngineers(g, b, CM.parts).map(e => `<span class="${e.ready ? "ok" : "unk"}" title="${esc((e.progress ? `${e.progress}${e.rank != null ? `, rank ${e.rank}` : ""}` : "not met yet") + (e.system ? ` · in ${e.system}` : ""))}">${esc(e.name)}</span>`).join(", ");
+    const key = `${b.id}|${g.grade}`, on = CM.grades.has(key);
+    return `<tr${on ? ` class="cmgradeon"` : ""}><td><button type="button" class="mini cmgrade${on ? " on" : ""}" data-cmgrade="${esc(key)}" aria-pressed="${on}" ` +
+      `title="${on ? "unpick this grade" : "show only the engineers who do this grade"}"><b>G${g.grade}</b></button></td><td><div class="cmstats">${mats}</div></td>` +
       `<td class="num ${g.rolls ? "ok" : "unk"}" title="how many times you could craft this grade now">${g.rolls ? `×${cmNum(g.rolls)}` : "–"}</td><td>${who}</td></tr>`;
   };
   const groups = new Map();
   for (const b of d.blueprints || []) {
-    if (q && !`${b.module} ${b.name} ${b.grades.map(g => g.materials.map(x => x.name).join(" ")).join(" ")}`.toLowerCase().includes(q)) continue;
+    if (q && !cmdrBlueprintText(b).includes(q)) continue;
+    if (CM.parts.size && !cmdrPartsOf(b).some(p => CM.parts.has(p))) continue;
     const grades = CM.craft ? b.grades.filter(g => g.rolls > 0) : b.grades;
     if (!grades.length) continue;
     if (!groups.has(b.module)) groups.set(b.module, []);
-    groups.get(b.module).push(`<h4 class="cmbp">${esc(b.name)}</h4>` + cmTable([["Grade"], ["Materials <span class=\"unk\">(held / one roll)</span>"], ["Rolls", 1], ["Engineers"]], grades.map(gradeRow)));
+    groups.get(b.module).push(`<h4 class="cmbp">${esc(b.name)}</h4>` + ((b.for || []).length ? `<div class="unk cmfor">for: ${esc(b.for.join(", "))}</div>` : "") + cmTable([["Grade"], ["Materials <span class=\"unk\">(held / one roll)</span>"], ["Rolls", 1], ["Engineers"]], grades.map(g => gradeRow(g, b))));
   }
-  const open = k => q || CM.craft || CM.open[k];   // a filter shows what it found
-  return `<div class="srow cmfilter"><input type="search" id="cmFilter" placeholder="filter: module, blueprint or material" value="${esc(CM.q)}" size="34">` +
+  const open = k => q || CM.craft || CM.parts.size || CM.grades.size || CM.open[k];   // a search or a pick shows what it found   // a filter shows what it found
+  return `<div class="srow cmfilter"><input type="search" id="cmFilter" placeholder="search: module, weapon, blueprint, material or engineer" value="${esc(CM.q)}" size="34">` +
     ` <label title="only the grades you hold every material for"><input type="checkbox" id="cmCraft"${CM.craft ? " checked" : ""}> only what I can craft now</label>` +
+    ` <button type="button" class="mini" id="cmLoadShip" title="pick the parts the ship you fly has, and the grade each engineered module is at">Load my ship</button>` +
+    (CM.q || CM.craft || CM.parts.size || CM.grades.size
+      ? ` <button type="button" class="mini" id="cmClearAll" title="the search, only what I can craft, the parts and the grades picked: all off">Clear filters</button>` : "") +
     ` <span class="unk">${eng.length ? `${unlocked} of ${eng.length} engineers unlocked` : "no engineer on record yet"} · ship modules only: no experimental effects, suits or weapons</span></div>` +
-    (cmdrLoadDistances(), "") + cmdrEngineersHtml(all) +
+    cmdrPartsHtml(d.blueprints || []) + cmdrShipHtml(CM.ship) +
+    (cmdrLoadDistances(), "") + (() => {
+      const bps = d.blueprints || [];
+      const byPart = CM.parts.size ? cmdrPartEngineers(bps, CM.parts) : null;
+      const byGrade = CM.grades.size ? cmdrGradeEngineersPicked(bps, CM.grades, CM.parts) : null;
+      // a picked grade narrows further: the engineers who do it (and, with parts picked, those parts' engineers too)
+      const keep = e => { const k = cmPlain(e.name); return (!byPart || byPart.has(k)) && (!byGrade || byGrade.has(k)); };
+      const supports = byPart || byGrade ? new Map(all.map(e => [cmPlain(e.name), new Set([...(byPart && byPart.get(cmPlain(e.name)) || []),
+                                                                                         ...(byGrade && byGrade.get(cmPlain(e.name)) || [])])])) : null;
+      return cmdrEngineersHtml(all.filter(e => (!q || cmdrEngineerText(e).includes(q)) && keep(e)),
+                               q || CM.parts.size || CM.grades.size ? [...CM.parts].join(", ") || q || "grades" : "", supports);
+    })() +
     ([...groups].map(([mod, list]) => `<details class="cmmod" data-cmmod="${esc(mod)}"${open(mod) ? " open" : ""}><summary><b>${esc(mod)}</b> <span class="unk">${list.length} blueprint${list.length === 1 ? "" : "s"}</span></summary>${list.join("")}</details>`).join("")
       || `<div class="unk">Nothing matches.</div>`);
 }

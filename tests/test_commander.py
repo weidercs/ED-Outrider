@@ -151,6 +151,32 @@ class Engineering(unittest.TestCase):
                 for e in g["engineers"]:
                     self.assertIsNotNone(C.engineer_system(e), e)
 
+    def test_what_a_blueprint_is_for(self):
+        """A blueprint shared by several kinds of module says which (a weapon's: missile racks, multi-cannons...), so the
+        page's search finds the missile racks' four by "missile"; the two Overcharged are told apart."""
+        rows = {b["id"]: b for b in C.load_blueprints()}
+        self.assertIn("missile racks", rows["Weapon_HighCapacity"]["for"])
+        self.assertEqual(sorted(b["name"] for b in rows.values() if any("missile racks" == k for k in b.get("for") or [])),
+                         ["High capacity", "Lightweight", "Rapid fire", "Sturdy"])
+        self.assertEqual(rows["MC_Overcharged"]["for"], ["advanced multi-cannons", "multi-cannons"])
+        self.assertNotIn("multi-cannons", rows["Weapon_Overcharged"]["for"])
+        self.assertEqual(rows["FSD_LongRange"]["for"], [])                     # one kind of module: its group says it
+        for b in rows.values():
+            self.assertFalse([k for k in b.get("for") or [] if len(k) <= 5], b["id"])   # every kind by its name, no code
+        out = C.blueprints({}, rows=[rows["Weapon_Sturdy"]])[0]
+        self.assertIn("torpedo pylons", out["for"])
+
+    def test_engineers_by_part(self):
+        """A shared blueprint keeps its engineers per kind of module per grade: High capacity's missile racks go to other
+        engineers than its cannons, so picking a part names the right ones."""
+        rows = {b["id"]: b for b in C.load_blueprints()}
+        g1 = rows["Weapon_HighCapacity"]["grades"]["1"]
+        self.assertTrue(set(g1["by_kind"]["missile racks"]) and set(g1["by_kind"]["missile racks"]) != set(g1["by_kind"]["cannons"]))
+        self.assertLessEqual(set(g1["by_kind"]["missile racks"]), set(g1["engineers"]))
+        self.assertNotIn("by_kind", rows["FSD_LongRange"]["grades"]["1"])    # one kind of module: its engineers are the grade's
+        out = C.blueprints({}, {}, rows=[rows["Weapon_HighCapacity"]])[0]["grades"][0]
+        self.assertEqual({e["name"] for e in out["by_kind"]["missile racks"]}, set(g1["by_kind"]["missile racks"]))
+
     def test_the_shipped_table(self):
         import outrider.materials as M
         rows = C.load_blueprints()
@@ -331,6 +357,41 @@ class Distances(unittest.TestCase):
         self.assertIn("Spansh could not be asked", out["error"])
         self.assertEqual(len(self.asked), 1)                                          # stopped at the first failure
         self.assertEqual(set(out["distances"]), {"Sol", "Deciat"})
+
+
+class LoadMyShip(unittest.TestCase):
+    """Engineering's "Load my ship": the ship's modules as the tab's parts, and each engineered one's blueprint and grade."""
+    LOADOUT = {"event": "Loadout", "Ship": "krait_mkii", "ShipName": "Sample", "Modules": [
+        {"Slot": "PowerPlant", "Item": "int_powerplant_size7_class5", "Engineering": {"BlueprintName": "PowerPlant_Boosted", "Level": 5,
+                                                                                   "Quality": 0.9, "ExperimentalEffect_Localised": "Thermal Spread"}},
+        {"Slot": "FrameShiftDrive", "Item": "int_hyperdrive_size5_class5", "Engineering": {"BlueprintName": "FSD_LongRange", "Level": 4}},
+        {"Slot": "ShieldGenerator", "Item": "int_shieldgenerator_size6_class3_fast"},
+        {"Slot": "MediumHardpoint1", "Item": "hpt_basicmissilerack_fixed_medium", "Engineering": {"BlueprintName": "Weapon_HighCapacity", "Level": 3}},
+        {"Slot": "MediumHardpoint2", "Item": "hpt_pulselaserburst_gimbal_medium"},
+        {"Slot": "TinyHardpoint1", "Item": "hpt_chafflauncher_tiny"},
+        {"Slot": "Armour", "Item": "krait_mkii_armour_grade3", "Engineering": {"BlueprintName": "Armour_HeavyDuty", "Level": 5}},
+        {"Slot": "Slot01_Size6", "Item": "int_cargorack_size6_class1"}, {"Slot": "PaintJob", "Item": "paintjob_x"}, "junk"]}
+
+    def test_the_picks(self):
+        out = C.ship_parts(self.LOADOUT)
+        self.assertEqual(out["parts"], ["Power plant", "Frame shift drive", "bi-weave shield generators", "missile racks", "burst lasers",
+                                        "Chaff launcher", "chaff launchers", "Bulkheads"])   # the cargo rack and paint job: none
+        self.assertEqual(out["grades"], ["PowerPlant_Boosted|5", "FSD_LongRange|4", "Weapon_HighCapacity|3", "Armour_HeavyDuty|5"])
+        pp = out["modules"][0]
+        self.assertEqual((pp["name"], pp["level"], pp["experimental"], pp["blueprint"]), ("Power Plant", 5, "Thermal Spread", "Boosted"))
+        self.assertEqual(out["ship"], {"name": "Sample", "type": "krait_mkii"})
+        self.assertEqual(C.ship_parts(None), {"ship": None, "modules": [], "parts": [], "grades": []})
+
+    def test_every_part_and_blueprint_is_in_the_table(self):
+        rows = C.load_blueprints()
+        parts = {p for b in rows for p in (b.get("for") or [b["module"]])}
+        ids = {b["id"] for b in rows}
+        for _, these in C.SHIP_PARTS:
+            self.assertLessEqual(set(these), parts, these)
+        for item in ("int_shieldgenerator_size5_class3", "int_shieldgenerator_size5_class3_fast", "int_shieldgenerator_size5_class3_strong",
+                     "anaconda_armour_grade1"):
+            self.assertLessEqual(set(C.ship_part(item)), parts, item)
+        self.assertLessEqual({k.split("|")[0] for k in C.ship_parts(self.LOADOUT)["grades"]}, ids)
 
 
 class Server(unittest.TestCase):

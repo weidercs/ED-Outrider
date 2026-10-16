@@ -12,7 +12,7 @@ import os
 import re
 import time
 
-from . import RESOURCES_DIR, jscan, materials
+from . import RESOURCES_DIR, jscan, materials, shipinfo
 from .core import iso_ts, ts_seconds
 
 BLUEPRINTS_FILE = os.path.join(RESOURCES_DIR, "blueprints.json")
@@ -265,9 +265,10 @@ def blueprints(counts, known=None, name=None, rows=None):
                 # an engineer crafts up to one grade past the rank reached (rank 0: grade 1)
                 who.append({"name": e, "progress": st.get("progress"), "rank": rank, "system": (engineer_system(e) or (None,))[0],
                             "ready": st.get("progress") == "Unlocked" and (rank or 0) + 1 >= int(g)})
-            grades.append({"grade": int(g), "materials": need, "engineers": who,
+            by_kind = {kind: [x for x in who if x["name"] in names] for kind, names in (v.get("by_kind") or {}).items()}
+            grades.append({"grade": int(g), "materials": need, "engineers": who, "by_kind": by_kind,
                            "rolls": min((m["have"] // m["need"] for m in need if m["need"]), default=0)})
-        out.append({"id": b["id"], "module": b["module"], "name": b["name"], "grades": grades})
+        out.append({"id": b["id"], "module": b["module"], "name": b["name"], "grades": grades, "for": b.get("for") or []})
     return out
 
 
@@ -628,6 +629,76 @@ async def engineer_distances(state, gap=PLACES_GAP_S):
             "missing": [s for s in systems if s not in places], "error": err}
 
 
+# ---- the ship you fly, as the Engineering tab's parts: "Load my ship" ----
+
+# a module's journal symbol (Loadout's Item, lower case) -> the Engineering tab's parts it is: the blueprint table's module
+# names, and for a blueprint shared by several kinds of module the kind's name. The first prefix that matches wins (the
+# longer ones first where one begins another: pulselaserburst before pulselaser).
+SHIP_PARTS = (
+    ("int_powerplant", ("Power plant",)), ("int_hyperdrive", ("Frame shift drive",)), ("int_engine", ("Thrusters",)),
+    ("int_powerdistributor", ("Power distributor",)), ("int_sensors", ("Sensors",)), ("int_lifesupport", ("Life support",)),
+    ("int_shieldcellbank", ("Shield cell bank",)), ("int_hullreinforcement", ("Hull reinforcement",)),
+    ("int_fuelscoop", ("Fuel scoop",)), ("int_refinery", ("Refinery",)), ("int_detailedsurfacescanner", ("Detailed surface scanner",)),
+    ("int_fsdinterdictor", ("Frame shift drive interdictor",)), ("int_repairer", ("Auto field maintenance unit",)),
+    ("int_dronecontrol_collection", ("Collector limpet controller",)), ("int_dronecontrol_fueltransfer", ("Fuel transfer limpet controller",)),
+    ("int_dronecontrol_resourcesiphon", ("Hatch breaker limpet controller",)), ("int_dronecontrol_prospector", ("Prospector limpet controller",)),
+    ("hpt_shieldbooster", ("Shield booster",)),
+    ("hpt_chafflauncher", ("Chaff launcher", "chaff launchers")), ("hpt_plasmapointdefence", ("Point defence", "point defence")),
+    ("hpt_heatsinklauncher", ("heat sink launchers",)), ("hpt_causticsinklauncher", ("caustic sink launchers",)),
+    ("hpt_electroniccountermeasure", ("electronic countermeasures",)), ("hpt_cargoscanner", ("manifest scanners",)),
+    ("hpt_cloudscanner", ("frame shift wake scanners",)), ("hpt_crimescanner", ("kill warrant scanners",)),
+    ("hpt_pulselaserburst", ("burst lasers",)), ("hpt_pulselaser", ("pulse lasers",)), ("hpt_beamlaser", ("beam lasers",)),
+    ("hpt_multicannon", ("multi-cannons",)), ("hpt_cannon", ("cannons",)), ("hpt_slugshot", ("fragment cannons",)),
+    ("hpt_plasmaaccelerator", ("plasma accelerators",)), ("hpt_railgun", ("rail guns",)),
+    ("hpt_dumbfiremissilerack", ("missile racks",)), ("hpt_basicmissilerack", ("missile racks",)), ("hpt_drunkmissilerack", ("missile racks",)),
+    ("hpt_minelauncher", ("mine launchers",)), ("hpt_advancedtorppylon", ("torpedo pylons",)),
+)
+
+
+def ship_part(item):
+    """The parts a module is, by its journal symbol: a shield generator by its kind (bi-weave _fast, prismatic _strong),
+    bulkheads by "_armour_"; () for one the blueprint table has nothing for (cargo racks, the cockpit, a paint job)."""
+    it = str(item or "").lower()
+    if it.startswith("int_shieldgenerator"):
+        return ("bi-weave shield generators",) if it.endswith("_fast") else ("prismatic shield generators",) if it.endswith("_strong") \
+            else ("shield generators",)
+    if "_armour_" in it:
+        return ("Bulkheads",)
+    return next((parts for prefix, parts in SHIP_PARTS if it.startswith(prefix)), ())
+
+
+def ship_parts(loadout):
+    """The ship of a Loadout as the Engineering tab's picks: {ship: {name, type}, modules: [{slot, name, parts,
+    blueprint_id, blueprint, level, quality, experimental}] (only modules the table has a part for), parts: the
+    parts, grades: ["<blueprint id>|<level>"] of the engineered modules}. Experimental effects are named, not picked:
+    the blueprint table has none."""
+    mods, parts, grades = [], [], []
+    for m in (loadout or {}).get("Modules") or []:
+        if not isinstance(m, dict):
+            continue
+        these = ship_part(m.get("Item"))
+        if not these:
+            continue
+        e = m.get("Engineering") if isinstance(m.get("Engineering"), dict) else {}
+        bid, level = e.get("BlueprintName"), e.get("Level") if isinstance(e.get("Level"), int) else None
+        name = shipinfo.module_name(m.get("Item"))[0]
+        mods.append({"slot": m.get("Slot"), "name": name, "parts": list(these), "blueprint_id": bid,
+                     "blueprint": shipinfo.engineering(e)["blueprint"] if e else None, "level": level,
+                     "quality": e.get("Quality"), "experimental": e.get("ExperimentalEffect_Localised") or None})
+        parts += [p for p in these if p not in parts]
+        if bid and level and f"{bid}|{level}" not in grades:
+            grades.append(f"{bid}|{level}")
+    return {"ship": {"name": (loadout or {}).get("ShipName") or None, "type": (loadout or {}).get("Ship")} if loadout else None,
+            "modules": mods, "parts": parts, "grades": grades}
+
+
+def ship_parts_now(dirs, state):
+    """GET /api/commander/ship_parts: the ship you fly (its newest Loadout, as the Ship view reads it)."""
+    sid = (getattr(state.journals, "ship", None) or {}).get("ship_id")
+    ev = (shipinfo.latest_loadout(dirs, sid) if sid is not None else None) or shipinfo.latest_loadout(dirs)
+    return ship_parts(ev)
+
+
 # ---- the server's routes ----
 
 def add_routes(app, state, dirs):
@@ -648,6 +719,7 @@ def add_routes(app, state, dirs):
     route("engineering", lambda: engineering(dirs(), state.journals.materials))
     route("missions", lambda: missions_now(dirs()))
     route("sessions", lambda: sessions_now(dirs()))
+    route("ship_parts", lambda: ship_parts_now(dirs(), state))
 
     async def distances(_):
         return web.json_response(await engineer_distances(state))

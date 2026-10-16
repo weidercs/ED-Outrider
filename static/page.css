@@ -239,7 +239,13 @@ main > #hereView.detail > #bodyPanel { position: sticky; top: calc(var(--head-h,
 .cmmod { border-top: 1px solid var(--line); padding: 5px 0; } .cmmod > summary { cursor: pointer; }
 .cmengs { padding: 5px 0 8px; } .cmengs > summary { cursor: pointer; } .cmengtable { border-collapse: collapse; margin-top: 4px; }
 .cmengtable td, .cmengtable th { padding: 3px 14px 3px 0; text-align: left; border-top: 1px solid var(--line); } .cmengtable th { color: var(--muted); font-weight: 600; border-top: 0; }
-.cmengtable .num { text-align: right; white-space: nowrap; }
+.cmengtable .num { text-align: right; white-space: nowrap; } .cmfor { font-size: 12px; margin-top: 1px; }
+.cmparts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0 8px; } .cmparts > .unk { margin-right: 4px; }
+.cmgrade { min-width: 2.6em; } .cmgrade.on { background: var(--accent, #4a7); color: var(--bg); border-color: var(--accent, #4a7); }
+tr.cmgradeon td { background: rgba(120, 170, 120, .12); }
+.cmship { margin: 2px 0 8px; } .cmshipmod { white-space: nowrap; }
+.cmsupports { color: var(--good, #4a7); font-size: 12px; font-weight: 400; }
+.cmpart.on { background: var(--accent, #4a7); color: var(--bg); border-color: var(--accent, #4a7); }
 .cmbp { margin: 10px 0 0; font-size: 13px; } .cmmat { white-space: nowrap; }
 .cmbar { display: inline-block; width: 120px; height: 8px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; vertical-align: middle; }
 .cmbar > span { display: block; height: 100%; background: var(--info, var(--muted)); } .cmbarcell { white-space: nowrap; } .cmrep { margin-top: 8px; }

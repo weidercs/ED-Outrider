@@ -5421,6 +5421,11 @@ const settle = async maxMs => {
             locker: {ts: "2026-10-12T09:03:00Z", kinds: [{name: "Goods", items: [{name: "Weapon <Schematic>", count: 3, mission: false}]}, {name: "Data", items: []}]},
             suits: [{loadout: "Bio", suit: "Artemis Suit", class: 3, mods: ["Increased sprint duration"], weapons: [{name: "TK Aphelion", class: 2, slot: "PrimaryWeapon1", mods: []}]}]},
           engineer_distances: {from: "Sol", distances: {Deciat: 122.6, Khun: 1234.56}, missing: ["Einheriar"], error: null},
+          ship_parts: {ship: {name: "Sample", type: "krait_light"}, parts: ["Frame shift drive", "missile racks", "Thrusters"],
+            grades: ["fsd_longrange|5", "Weapon_HighCapacity|1", "Nowhere_X|2"],
+            modules: [{slot: "FrameShiftDrive", name: "Frame Shift Drive", parts: ["Frame shift drive"], blueprint_id: "FSD_LongRange", blueprint: "Long Range", level: 5,
+                       quality: 1, experimental: "Mass Manager"},
+                      {slot: "MediumHardpoint1", name: "Missile Rack", parts: ["missile racks"], blueprint_id: null, blueprint: null, level: null, quality: null, experimental: null}]},
           engineering: {engineers: [{name: "Felicity Farseer", system: "Deciat", kind: "ship", region: "bubble", progress: "Unlocked", rank: 5},
                                     {name: "Elvira Martuuk", system: "Khun", kind: "ship", region: "bubble", progress: "Known", rank: null},
                                     {name: "Petra Olmanova", system: "Asura", kind: "ship", region: "Colonia", progress: null, rank: null},
@@ -5431,6 +5436,10 @@ const settle = async maxMs => {
                 {grade: 1, rolls: 7, materials: [{id: "a", name: "Atypical Disrupted Wake Echoes", need: 1, have: 7}], engineers: [{name: "Felicity Farseer", progress: "Unlocked", rank: 5, ready: true}]},
                 {grade: 5, rolls: 0, materials: [{id: "b", name: "Arsenic", need: 1, have: 0}, {id: "c", name: "Datamined Wake Exceptions", need: 2, have: 5}],
                  engineers: [{name: "Elvira Martuuk", progress: "Known", rank: null, ready: false}]}]},
+              {id: "Weapon_HighCapacity", module: "Weapon", name: "High capacity", for: ["cannons", "missile racks"], grades: [
+                {grade: 1, rolls: 0, materials: [{id: "v", name: "Vanadium", need: 1, have: 0}],
+                 engineers: [{name: "Tod 'The Blaster' McQuinn", progress: null, rank: null, ready: false}, {name: "Elvira Martuuk", progress: "Known", rank: null, ready: false}],
+                 by_kind: {cannons: [{name: "Tod 'The Blaster' McQuinn"}], "missile racks": [{name: "Elvira Martuuk"}]}}]},
               {id: "Sensor_Light", module: "Sensors", name: "Lightweight", grades: [
                 {grade: 1, rolls: 0, materials: [{id: "p", name: "Phosphorus", need: 1, have: 0}], engineers: []}]}]},
           missions: {missions: [
@@ -5475,7 +5484,57 @@ const settle = async maxMs => {
       w.eval("copyText = __cmCopy");
       got.engCopy = [cmCopied, engRows[0].querySelector("[data-plotto]").dataset.plotto];
       const f = d.getElementById("cmFilter");
-      f.focus(); f.value = "wake"; f.dispatchEvent(new w.Event("input", {bubbles: true}));
+      // the box is drawn anew with each search: each step types into the one on the page now
+      const search = v => { const el = d.getElementById("cmFilter"); el.focus(); el.value = v; el.dispatchEvent(new w.Event("input", {bubbles: true})); };
+      f.focus();
+      // the search: a weapon the blueprint is for ("missile": Weapon's "for" line), an engineer (the Engineers list too)
+      search("missile");
+      got.searchFor = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary"))), [...body().querySelectorAll(".cmfor")].map(text),
+                       [...body().querySelectorAll(".cmengtable tbody tr")].length, text(body().querySelector(".cmengs ~ .cmnote, .cmnote") || {textContent: ""})];
+      search("khun");
+      got.searchEng = [[...body().querySelectorAll(".cmengtable tbody tr")].map(t => text(t.cells[0])), body().querySelector("details.cmengs").open,
+                       [...body().querySelectorAll("details.cmmod")].length];
+      // the parts: picked ones narrow the blueprints and the Engineers list (any picked part), a grade's engineers to theirs
+      search("");
+      const partBtn = name => body().querySelector(`[data-cmpart="${name}"]`);
+      got.parts = [...body().querySelectorAll("[data-cmpart]")].map(text);
+      partBtn("missile racks").click();
+      const engNames = () => [...body().querySelectorAll(".cmengtable tbody tr")].map(t => text(t.cells[0]));
+      got.pickOpen = [...body().querySelectorAll("details.cmmod")].every(x => x.open);   // a pick opens what it found
+      got.pickOne = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary"))), engNames(),
+                     [...body().querySelectorAll("table.cmtable tbody tr")].map(t => text(t.cells[3])), !!body().querySelector("[data-cmpart-clear]")];
+      partBtn("Frame shift drive").click();
+      got.pickTwo = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary"))), engNames(),
+                     [...body().querySelectorAll(".cmpart.on")].map(text)];
+      body().querySelector("[data-cmpart-clear]").click();
+      // a grade picked (G5 of the blueprint): the Engineers list is those who do that grade, each naming it
+      partBtn("Frame shift drive").click();
+      body().querySelector('[data-cmgrade="FSD_LongRange|5"]').click();
+      got.grade5 = [engNames(), body().querySelectorAll(".cmgrade.on").length, !!body().querySelector("tr.cmgradeon")];
+      body().querySelector('[data-cmgrade="FSD_LongRange|1"]').click();
+      got.grade15 = engNames();
+      body().querySelector('[data-cmgrade="FSD_LongRange|5"]').click();
+      got.grade1 = engNames();
+      body().querySelector("[data-cmpart-clear]").click();
+      got.gradeCleared = [body().querySelectorAll(".cmgrade.on").length, body().querySelectorAll(".cmpart.on").length];
+      // Clear filters: the search, the craft box, the parts and the grades, at once; shown only while one is on
+      got.clearShown = [!!body().querySelector("#cmClearAll")];
+      search("vanadium"); d.getElementById("cmCraft").checked = true; d.getElementById("cmCraft").dispatchEvent(new w.Event("change", {bubbles: true}));
+      partBtn("missile racks").click();
+      got.clearShown.push(!!body().querySelector("#cmClearAll"));
+      body().querySelector("#cmClearAll").click();
+      got.clearAll = [d.getElementById("cmFilter").value, d.getElementById("cmCraft").checked, body().querySelectorAll(".cmpart.on").length,
+                      body().querySelectorAll("details.cmmod").length, !!body().querySelector("#cmClearAll")];
+      // Load my ship: its parts (those the table has) and each engineered module's grade picked, the modules listed
+      body().querySelector("#cmLoadShip").click();
+      await sleep(80);
+      got.loadShip = [[...body().querySelectorAll(".cmpart.on")].map(text), [...body().querySelectorAll(".cmgrade.on")].map(b => b.dataset.cmgrade),
+                      text(body().querySelector(".cmship")), engNames()];
+      body().querySelector("#cmClearAll").click();
+      got.loadShipCleared = [body().querySelectorAll(".cmpart.on").length, !!body().querySelector(".cmship")];
+      got.cleared = [body().querySelectorAll(".cmpart.on").length, body().querySelectorAll("details.cmmod").length];
+      search("wake");
+
       got.filtered = [[...body().querySelectorAll("details.cmmod")].map(x => text(x.querySelector("summary")) + (x.open ? " open" : "")), rows(),
                       d.activeElement && d.activeElement.id, body().querySelectorAll(".cmmat.ok").length, body().querySelectorAll(".cmmat.noscoop").length];
       d.getElementById("cmCraft").checked = true; d.getElementById("cmCraft").dispatchEvent(new w.Event("change", {bubbles: true}));
@@ -5502,10 +5561,28 @@ const settle = async maxMs => {
                   "5A Frame Shift Drive | Long Range G5 | Sol | 5.1M cr | ", "Bio | Artemis Suit G3Increased sprint duration | TK Aphelion G2"],
       heads: ["Ships 2 as of 2026-10-12 09:01", "Stored modules 1 as of 2026-10-12 09:02", "Ship locker as of 2026-10-12 09:03", "Suit loadouts 1"],
       locker: ["Weapon <Schematic>3"],
-      engineering: [["Frame shift drive 1 blueprint", "Sensors 1 blueprint"], "1 of 3 engineers unlocked · ship modules only: no experimental effects, suits or weapons"],
+      engineering: [["Frame shift drive 1 blueprint", "Weapon 1 blueprint", "Sensors 1 blueprint"], "1 of 3 engineers unlocked · ship modules only: no experimental effects, suits or weapons"],
       engineers: [true, ["Felicity Farseer | unlocked, grade 5 | Deciat", "Elvira Martuuk | known | Khun", "Petra Olmanova | not met | Asura Colonia",
                          "Yi Shen suit & weapon | not met | Einheriar Colonia", "New One | known | not known"], "22220"],
-      engCopy: [["Deciat"], "Deciat"], engDist: ["122.6 ly", "1,234.6 ly", "?", "?", ""],
+      engCopy: [["Deciat"], "Deciat"],
+      searchFor: [["Weapon 1 blueprint"], ["for: cannons, missile racks"], 0, "No engineer matches."],
+      searchEng: [["Elvira Martuuk"], true, 0],
+      parts: ["cannons", "Frame shift drive", "missile racks", "Sensors"],
+      pickOne: [["Weapon 1 blueprint"], ["Elvira Martuuk · missile racks"], ["Elvira Martuuk"], true],
+      pickTwo: [["Frame shift drive 1 blueprint", "Weapon 1 blueprint"],
+                ["Felicity Farseer · Frame shift drive", "Elvira Martuuk · Frame shift drive, missile racks"], ["Frame shift drive", "missile racks"]],
+      cleared: [0, 3],
+      pickOpen: true,
+      grade5: [["Elvira Martuuk · Frame shift drive, Increased range G5"], 1, true],
+      grade15: ["Felicity Farseer · Frame shift drive, Increased range G1", "Elvira Martuuk · Frame shift drive, Increased range G5"],
+      grade1: ["Felicity Farseer · Frame shift drive, Increased range G1"],
+      gradeCleared: [0, 0],
+      clearShown: [false, true], clearAll: ["", false, 0, 3, false],
+      loadShip: [["Frame shift drive", "missile racks"], ["FSD_LongRange|5", "Weapon_HighCapacity|1"],
+                 "Sample 2 modules with blueprints, 1 engineered: their parts and grades picked (experimental effects are named, not picked)" +
+                 "Frame Shift Drive Long Range G5 · Mass ManagerMissile Rack stock",
+                 ["Elvira Martuuk · Frame shift drive, High capacity G1, Increased range G5, missile racks"]],
+      loadShipCleared: [0, false], engDist: ["122.6 ly", "1,234.6 ly", "?", "?", ""],
       filtered: [["Frame shift drive 1 blueprint open"], ["G1 | Atypical Disrupted Wake Echoes 7/1 | ×7 | Felicity Farseer",
                  "G5 | Arsenic 0/1Datamined Wake Exceptions 5/2 | – | Elvira Martuuk"], "cmFilter", 2, 1],
       craft: 1,
@@ -5517,7 +5594,7 @@ const settle = async maxMs => {
       pure: ["2 h 0 min", "2 d 7 h", "9 min"],
     };
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
-    if (JSON.stringify(asked) !== JSON.stringify(["api/commander/profile", "api/commander/inventory", "api/commander/engineering", "api/commander/engineer_distances", "api/commander/missions", "api/commander/sessions",
+    if (JSON.stringify(asked) !== JSON.stringify(["api/commander/profile", "api/commander/inventory", "api/commander/engineering", "api/commander/engineer_distances", "api/commander/ship_parts", "api/commander/missions", "api/commander/sessions",
                                                  "api/commander/missions"])) bad.push("asked");
     const goodCM = !bad.length && errors.length === before;
     allOk = allOk && goodCM;
