@@ -65,6 +65,31 @@ Elite's window with **`wmctrl`** and **`xprop`** / **`xwininfo`** (the `x11-util
 Start Outrider with the `.venv`'s Python (`.venv/bin/python ed_outrider.py`, as above): plain `python3 ed_outrider.py` finds Piper and evdev in a `.venv` in the Outrider folder, but aiohttp must then be installed for that `python3` too.
 Your own files (the database, backups, downloaded voices, banned lines, your own pronunciations) all go in `data/`.
 
+### Updating
+
+The page's **⬆ Update** pill says when a new release is out. Everything of yours stays in two places an update never
+touches:
+- the **`data`** folder (the database, which holds your EDSM and Inara keys, your history and bookmarks, backups,
+  downloaded voices, banned lines, your own personalities);
+- **`ed_outrider.toml`** (your config: the page password, the AI key, journal folders and the rest).
+
+The page's own settings (theme, alerts, voice choices) live in each browser.
+
+- **A `git clone`:** quit Outrider, run `git pull` in its folder, and start it again (`launch_outrider.sh` or
+  `launch_outrider.bat`: it installs whatever changed).
+- **A downloaded ZIP:**
+  1. Quit Outrider.
+  2. Rename its folder (say `ED-Outrider` to `ED-Outrider-old`).
+  3. Extract the new ZIP into a folder of the old name.
+  4. Copy `data` and `ed_outrider.toml` from the old folder into the new one.
+  5. Start the launcher in the new folder (its first start sets up again, about a minute).
+
+  Keeping the folder's name keeps a "start with your computer" service pointing at it. Delete the old folder once
+  the new one runs.
+
+When an update changes how journals are read, the first start reads them again once, and backs up the database
+before it does.
+
 ### Start with your computer
 
 To have Outrider running without a terminal to keep open, install it as a service, with the arguments you give

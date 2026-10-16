@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · The install guide: updating a plain install
+- docs/guide/install.md "Updating": what an update never touches (`data/`, which holds the EDSM and Inara keys, and
+  `ed_outrider.toml`), and the steps for a `git clone` and for a downloaded ZIP (a new folder of the old name, `data` and
+  the config copied over). Only Docker had update steps before (a player's question).
+
+
 ## 2026-10-16 · Screenshots back at 1600x1000, the Overview also on a 27-inch monitor
 - Every full-page desktop shot in `docs/images/` retaken at 1600x1000: the README shows them 900 px wide, where a
   2560x1440 shot's text came out about 4.5 px (unreadable) and a 1600 one's about 7 px; most players' screens are
