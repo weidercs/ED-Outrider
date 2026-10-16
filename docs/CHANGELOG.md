@@ -9,7 +9,8 @@ Newest first, one entry per commit.
 - Settings → In-game overlay: a **Foot** box per panel under Hide in mode (`[overlay] hide_on_foot`, none by default:
   the author has no use for Now on foot, others may), and **Hide the overlay on foot and in the DSS** (`hide_mouse_lock`,
   off): "overlays can break mouse lock in these situations on some systems".
-- Settings is 80 % of the screen's width on a big screen (it was at most 1560 px).
+- Settings is 80 % of the screen's width on a big screen (it was at most 1560 px), in two columns of sections; three
+  only from 3200 px wide (a 4K screen at 100 %; it was from 1900 px).
 
 ## 2026-10-15 · The overlay no longer breaks the game's mouse lock (DSS, on foot) on Linux (#1)
 - The author's trials (GNOME on Wayland) found it: on Linux the overlay window is now only as big as its panels

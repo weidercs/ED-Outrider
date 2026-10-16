@@ -929,7 +929,8 @@ body.nowmode header, body.nowmode main { display: none; }
   #alertDialog .setsec { break-inside: avoid; }
   #alertDialog #serverSettings, #alertDialog #speechLogBox { column-span: all; }
 }
-@media (min-width: 1900px) { #alertDialog .setbody { columns: 3 520px; } }
+/* three columns only on a 4K screen (the author, 2026-10-15: two on a 2560 px one) */
+@media (min-width: 3200px) { #alertDialog .setbody { columns: 3 520px; } }
 /* Materials: where to find FSD-injection materials, and beside it the mining sites (one above the other when narrow) */
 #matTables { display: flex; flex-wrap: wrap; gap: 0 28px; align-items: flex-start; }
 /* Cargo (the Materials tab): the ship's and carrier's holds, the Sell / Buy answers beside them */
