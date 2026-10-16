@@ -176,7 +176,9 @@ that column as text). Up to 10,000 bookmarks a file. The Android app has no Impo
 On a window of at least about 900 × 600 the page fits the window: the header stays put and each list scrolls
 in its own box. **▴** folds the tiles into one line (remembered on this device; Settings → Display can fold
 them only on a small window, and untick the tiles this device leaves out, at least one staying). A table too wide for its box
-switches to short forms ("HMC", "G star"; hover for the full text) rather than scroll sideways.
+switches to short forms ("HMC", "G star"; hover for the full text) rather than scroll sideways, then drops its least
+useful columns; Nearby's status and notable tags go under the system's name and its bodies only when that is still
+not enough, and then on every row.
 
 **Themes.** ⚙ Settings → Display → **Theme on this browser** dresses the page in one of the tablet's themes: LCARS,
 Elite, Babylon 5 (Earthforce, Narn, Minbari, Centauri, Vorlon, Shadows), Sith, Rebel Alliance or Dark, each with its colours, its

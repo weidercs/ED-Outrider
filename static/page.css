@@ -716,11 +716,13 @@ body.app #hereMain.halves > #hereSchematic { border-top: 2px solid var(--line); 
 }
 
 /* Compact tables (fitTable in page.js): a table wider than its box shows its short forms (.compact), then tighter ones
-   with low-value columns dropped or merged (.compact2). .lf full form, .sf short form, .sf1/.sf2 one level only,
-   .c1hide/.c2hide hidden from that level on. A table that fits shows none of this: it looks as it always did. */
+   with low-value columns dropped or merged (.compact2), and a last step (.compact3) for a table that merges columns only
+   once dropping some was not enough (Nearby). .lf full form, .sf short form, .sf1/.sf2 one level only (.sf3: compact3),
+   .c1hide/.c2hide/.c3hide hidden from that level on. A table that fits shows none of this: it looks as it always did. */
 table:not(.compact) .sf, table:not(.compact) .sf1, table:not(.compact) .sf2,
 table.compact .lf, table.compact .c1hide, table.compact:not(.compact2) .sf2,
-table.compact2 .sf1, table.compact2 .c2hide { display: none; }
+table.compact2 .sf1, table.compact2 .c2hide,
+table:not(.compact3) .sf3, table.compact3 .c3hide { display: none; }
 table.compact th, table.compact td { padding-left: 5px; padding-right: 5px; }
 table.compact th { letter-spacing: 0; }
 table.compact .badge { padding: 1px 5px; }

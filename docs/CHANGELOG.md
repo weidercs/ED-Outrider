@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-15 · Nearby keeps its status and notable columns until they really do not fit
+- In a narrow pane (the Overview's half) Nearby went from its short forms straight to compact2, which drops Jumps and
+  Known and puts the status pills and notable tags under the name and the bodies all at once, leaving much of the row
+  empty (the author). A fourth fit level, `compact3` (`COMPACT_LEVELS`; `.c3hide` / `.sf3`): Nearby's compact2 now only
+  drops Jumps and Known, and compact3 moves the pills and tags, for the whole table, never row by row. Other tables have
+  no compact3 forms, so they look as before.
+
 ## 2026-10-15 · The landing pad's delay after a docking grant is a setting
 - Kurbo26 (discussion #3): 5 s suits him, but with EDCopilot some stations' controllers needed up to 13 s. **Settings →
   Voice → Say your landing pad [5] s after docking is granted** (`[speech] pad_delay`, 0 to 20, `PAD_DELAY_MAX`):

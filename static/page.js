@@ -1888,8 +1888,9 @@ function paneTop(...ids) { for (const id of ids) { const p = document.getElement
 const VIEW_PANE = {overview: "nearPane", near: "nearPane", here: "hereMain", bio: "bioPane", bm: "bmPane", search: "searchPane",
                    hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane", cmdr: "cmdrPane"};
 // ---- Compact tables: a table wider than its box (its pane, the Overview's split, a phone) switches to its short forms
-// (compact: level 1), then to tighter ones that also drop or merge low-value columns (compact2: level 2), and back once
-// there is room again. Decided by fit, not by screen size, so a wide pane looks exactly as it always did.
+// (compact: level 1), then to tighter ones that also drop or merge low-value columns (compact2: level 2; compact3: level
+// 3, a last step for a table that merges columns only when dropping some was not enough: Nearby, the author 2026-10-15),
+// and back once there is room again. Decided by fit, not by screen size, so a wide pane looks exactly as it always did.
 // The width compared is the table's min-content width (what it needs at the least, wrapping cells wrapped), measured
 // with each level's forms in turn; going back to a longer form needs COMPACT_SLACK px to spare, so a scrollbar that
 // comes and goes with the row heights cannot make it flap.
@@ -1901,12 +1902,13 @@ const FIT_TABLES = ["nearTable", "hereTable", "firstsTable", "leftTable", "bioTa
 const FIT_HOSTS = ["cmdrBody"];
 const COMPACT_SLACK = 24;
 // widths[l]: the table's width with level l's forms (measured in order; later ones may be missing); current: its level now
+const COMPACT_LEVELS = 4;   // 0 (as drawn), compact, compact2, compact3
 function compactLevel(widths, avail, current) {
-  for (let l = 0; l < 3 && widths[l] != null; l++) if (widths[l] <= avail - (l < current ? COMPACT_SLACK : 0)) return l;
-  return widths.length >= 3 ? 2 : -1;   // -1: measure the next level
+  for (let l = 0; l < COMPACT_LEVELS && widths[l] != null; l++) if (widths[l] <= avail - (l < current ? COMPACT_SLACK : 0)) return l;
+  return widths.length >= COMPACT_LEVELS ? COMPACT_LEVELS - 1 : -1;   // -1: measure the next level
 }
-const tableLevel = t => t.classList.contains("compact2") ? 2 : t.classList.contains("compact") ? 1 : 0;
-const setTableLevel = (t, l) => { t.classList.toggle("compact", l >= 1); t.classList.toggle("compact2", l >= 2); };
+const tableLevel = t => t.classList.contains("compact3") ? 3 : t.classList.contains("compact2") ? 2 : t.classList.contains("compact") ? 1 : 0;
+const setTableLevel = (t, l) => { t.classList.toggle("compact", l >= 1); t.classList.toggle("compact2", l >= 2); t.classList.toggle("compact3", l >= 3); };
 // the room a table has: its parent's content box (the pane in app mode, the page or the Overview's split otherwise)
 function tableRoom(t) {
   const p = t.parentElement; if (!p) return 0;
@@ -1918,13 +1920,13 @@ function fitTable(t) {
   const avail = tableRoom(t);
   if (!(avail > 0)) return;
   // nothing to do unless the room, the table's size, its contents or its own classes (lostcols) changed
-  const sig = [avail, t.offsetWidth, t.rows.length, t.textContent.length, t.className.replace(/\s*\bcompact2?\b/g, "")].join("|");
+  const sig = [avail, t.offsetWidth, t.rows.length, t.textContent.length, t.className.replace(/\s*\bcompact[23]?\b/g, "")].join("|");
   if (t._fitSig === sig) return;
   const cur = tableLevel(t), pane = t.closest(".pane"), keep = [pane && pane.scrollTop, pane && pane.scrollLeft, t.scrollLeft, window.scrollY];
   const widths = [];
   let lvl = -1;
   t.style.width = "min-content";
-  for (let l = 0; l < 3 && lvl < 0; l++) {
+  for (let l = 0; l < COMPACT_LEVELS && lvl < 0; l++) {
     setTableLevel(t, l);
     widths.push(Math.ceil(Math.max(t.scrollWidth, t.offsetWidth)));
     lvl = compactLevel(widths, avail, cur);
@@ -1935,7 +1937,7 @@ function fitTable(t) {
   if (pane) { if (pane.scrollTop !== keep[0]) pane.scrollTop = keep[0]; if (pane.scrollLeft !== keep[1]) pane.scrollLeft = keep[1]; }
   if (t.scrollLeft !== keep[2]) t.scrollLeft = keep[2];
   if (!pane && window.scrollY !== keep[3] && window.scrollTo) window.scrollTo(window.scrollX, keep[3]);
-  t._fitSig = [tableRoom(t), t.offsetWidth, t.rows.length, t.textContent.length, t.className.replace(/\s*\bcompact2?\b/g, "")].join("|");
+  t._fitSig = [tableRoom(t), t.offsetWidth, t.rows.length, t.textContent.length, t.className.replace(/\s*\bcompact[23]?\b/g, "")].join("|");
 }
 let fitQueued = false;
 function fitTables() { fitQueued = false; FIT_TABLES.forEach(id => fitTable(document.getElementById(id))); }
@@ -3354,7 +3356,8 @@ function render() {
                  data.target && sysId(s) === sysId(data.target) && "target"]
       .filter(Boolean).join(" ");
     const known = s.body_count ? `${s.bodies_known}/${s.body_count}` : (s.bodies_known || "");
-    // compact2 merges: the status badges go under the name, the notable tags under the bodies
+    // compact3 merges (compact2 drops Jumps and Known first): the status badges go under the name, the notable tags under
+    // the bodies
     const status = statusPill(s) + (s.mapped ? statusBadge("s-mapped", `${s.mapped} mapped`, "DSS-mapped bodies, from your own journal", `🗺${s.mapped}`) : "") +
       (s.source === "own" ? statusBadge("s-own", "yours only", s.in_spansh === false ? "Spansh doesn't have this system; data is from your own scans"
                                                                                       : "data is from your own scans (Spansh's answer did not cover this system)") : "") +
@@ -3363,13 +3366,13 @@ function render() {
     return `<tr class="${cls}" data-id="${esc(s.id)}">
       <td class="bmcell">${bmIcon(s.id, s.name, bms)}</td>
       <td class="name" data-name="${esc(s.name)}" title="click to copy">${aimCol ? `<span class="nearaim">${nearAimBtn(s)}</span>` : ""}${isPrev
-        ? `<span class="prevmark" title="you just came from here">↩</span>` : ""}${nameWords(s.name)}${firstsIcon(s.firsts)}<div class="sf2 sub2">${status}</div></td>
+        ? `<span class="prevmark" title="you just came from here">↩</span>` : ""}${nameWords(s.name)}${firstsIcon(s.firsts)}<div class="sf3 sub2">${status}</div></td>
       <td class="num dist"${far && !elsewhere ? ` title="beyond your max jump range"` : ""}>${s.distance.toFixed(2)}</td>
       <td class="num fromcol"${far ? ` title="beyond your max jump range"` : ""}>${elsewhere && ly != null ? ly.toFixed(2) : ""}</td>
       <td class="num hide-sm c2hide">${jumps == null ? "" : jumps === 1 ? "1" : `<span class="unk">${jumps}</span>`}</td>
-      <td class="c2hide">${status}</td>
-      <td>${star(s)}</td><td class="bodies" data-pop data-id="${esc(s.id)}">${bodies(s)}${nb ? `<div class="sf2 sub2 notable">${nb}</div>` : ""}</td>
-      <td class="notable c2hide">${nb}</td><td class="num hide-sm" title="${valueTitle(s)}">${valueCell(s)}</td><td class="num hide-sm c2hide">${known}</td></tr>`;
+      <td class="c3hide">${status}</td>
+      <td>${star(s)}</td><td class="bodies" data-pop data-id="${esc(s.id)}">${bodies(s)}${nb ? `<div class="sf3 sub2 notable">${nb}</div>` : ""}</td>
+      <td class="notable c3hide">${nb}</td><td class="num hide-sm" title="${valueTitle(s)}">${valueCell(s)}</td><td class="num hide-sm c2hide">${known}</td></tr>`;
   }).join("") || `<tr><td colspan="11" class="unk">${emptyMessage(rows)}</td></tr>`;
   refocus("rows", fkRows);
   renderBoxelMode();

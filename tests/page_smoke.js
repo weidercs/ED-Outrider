@@ -3713,9 +3713,10 @@ const releasePayloads = async () => {
     await w.eval(`(async () => { pinnedSystem = null; hereKey = null; await loadHere(); })()`);
     const got = JSON.parse(w.eval(`(() => {
       const o = {};
-      o.pure = [compactLevel([500], 600, 0), compactLevel([700, 550], 600, 0), compactLevel([700, 650, 620], 600, 0),
+      o.pure = [compactLevel([500], 600, 0), compactLevel([700, 550], 600, 0), compactLevel([700, 650, 620, 610], 600, 0),
                 compactLevel([590, 500], 600, 1), compactLevel([570], 600, 1), compactLevel([700, 590, 400], 600, 2),
-                compactLevel([700, 570], 600, 2), compactLevel([700], 600, 0)];
+                compactLevel([700, 570], 600, 2), compactLevel([700], 600, 0), compactLevel([700, 650, 620], 600, 0),
+                compactLevel([700, 650, 590, 400], 600, 0)];
       const S = {planet: ["High metal content world", "Rocky Ice world", "Rocky ice body", "Metal-rich body", "Earth-like world", "Water world",
                           "Ammonia world", "Icy body", "Rocky body", "Class III gas giant", "Helium-rich gas giant", "Gas giant with water-based life"],
                  star: ["G (White-Yellow) Star", "M (Red dwarf) Star", "K (Yellow-Orange giant) Star", "A (Blue-White super giant) Star",
@@ -3741,12 +3742,12 @@ const releasePayloads = async () => {
       const p = nt.parentElement; let avail = 600;
       p.style.padding = "0px";
       Object.defineProperty(p, "clientWidth", {get: () => avail, configurable: true});
-      const natural = () => nt.classList.contains("compact2") ? 500 : nt.classList.contains("compact") ? 700 : 900;
+      const natural = () => nt.classList.contains("compact3") ? 400 : nt.classList.contains("compact2") ? 500 : nt.classList.contains("compact") ? 700 : 900;
       const wide = () => nt.style.width === "min-content" ? natural() : Math.max(avail, natural());
       Object.defineProperty(nt, "offsetWidth", {get: wide, configurable: true});
       Object.defineProperty(nt, "scrollWidth", {get: wide, configurable: true});
       nt.getClientRects = () => [1];
-      const lvl = () => nt.classList.contains("compact2") ? 2 : nt.classList.contains("compact") ? 1 : 0;
+      const lvl = () => nt.classList.contains("compact3") ? 3 : nt.classList.contains("compact2") ? 2 : nt.classList.contains("compact") ? 1 : 0;
       const step = a => { avail = a; fitTable(nt); return lvl(); };
       o.fit = [step(600), step(800), step(1000), step(910), step(890), step(910), step(990)];
       o.inline = nt.style.width;
@@ -3755,6 +3756,12 @@ const releasePayloads = async () => {
       const cell = nt.querySelector("tbody .lf"), disp = e => getComputedStyle(e).display;
       o.cssCompact = cell ? [disp(cell), disp(cell.nextElementSibling)] : null;
       o.c2 = disp(nt.querySelector("thead th.c2hide"));
+      // the author, 2026-10-15: Nearby drops Jumps and Known first (compact2), its status and notable columns still
+      // their own; only when that is not enough (compact3) do they go under the name and the bodies, on every row
+      const th = t => [...nt.querySelectorAll("thead th")].find(e => e.textContent.trim().startsWith(t));
+      const merged = () => [...nt.querySelectorAll("tbody td.name .sf3")].map(disp);
+      o.c3 = [step(550), disp(th("Status")), disp(th("Notable")), disp(th("Known")), merged().every(d => d === "none")];
+      o.c3.push(step(450), disp(th("Status")), disp(th("Notable")), merged().length > 0 && merged().every(d => d !== "none"));
       step(1000);
       o.cssFull = cell ? [disp(cell), disp(cell.nextElementSibling)] : null;
       delete p.clientWidth; delete nt.offsetWidth; delete nt.scrollWidth; delete nt.getClientRects; p.style.padding = "";
@@ -3764,7 +3771,7 @@ const releasePayloads = async () => {
       render();
       return JSON.stringify(o);
     })()`));
-    const want = {pure: [0, 1, 2, 1, 0, 2, 1, -1],
+    const want = {pure: [0, 1, 3, 1, 0, 2, 1, -1, -1, 2],
       short: {planet: ["HMC", "Rocky ice", "Rocky ice", "Metal-rich", "ELW", "WW", "AW", "Icy", "Rocky", "GG III", "He-rich GG", "GG water life"],
               star: ["G star", "M star", "K giant", "A supergiant", "WD DA", "Neutron", "BH", "T Tauri", "L star", "WNC"],
               atmosphere: ["CO₂", "Thin CO₂", "Hot thin SO₂", "Neon-rich", "none", "thin ammonia"],
@@ -3772,7 +3779,8 @@ const releasePayloads = async () => {
       heads: ["Unsold", "ls", "Star"], same: "Dist", nearSf: true,
       pill: `<span class="badge s-explored" title=""><span class="lf">fully scanned</span><span class="sf" title="fully scanned">✓</span></span>`,
       here: ["High metal content world", "High metal content world"], headSf: ["Tag", "Seen", "FSS", "DSS", "Lost", "Unsold"],
-      fit: [2, 1, 0, 0, 1, 1, 0], inline: "", cssCompact: ["none", "inline"], c2: "none", cssFull: ["inline", "none"], hidden: ""};
+      fit: [2, 1, 0, 0, 1, 1, 0], inline: "", cssCompact: ["none", "inline"], c2: "none",
+      c3: [2, "table-cell", "table-cell", "none", true, 3, "none", "none", true], cssFull: ["inline", "none"], hidden: ""};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodCT = !bad.length && errors.length === before;
     allOk = allOk && goodCT;
