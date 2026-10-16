@@ -41,6 +41,7 @@ const TB = {group: null, beforeMap: null, mapWas: false, bannerTimer: null, bann
             themes: ["lcars", "elite", "babylon5", "narn", "minbari", "centauri", "vorlon", "shadow", "sith", "alliance", "dark"], railPending: {}, railEdit: null};
 // this fork's views, on their own line (upstream's above stays as it is): Ship before First logged, GalNet last
 TB.groups.records.splice(TB.groups.records.indexOf("cmdr"), 0, "ship"); TB.groups.records.push("galnet");
+TB.groups.navigate.push("locate");   // the fork's Locate, after Plot Route
 // Where you are, as the exact id64 string (position.id). The JSON number position.id64 loses the last digits above
 // 2^53, so string comparisons with the server's exact ids (arrival, Here, moments) must use this.
 const posId = () => data && data.position ? data.position.id ?? String(data.position.id64) : null;
@@ -1790,7 +1791,7 @@ function star(s) {
 
 // the tablet keeps its own page (a desktop browser opening /tablet to try it must not lose its view) and has no Overview
 // in the nav's order (tests/test_tablet.py checks it against page.html's tb-page buttons and TB.groups)
-const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "hist", "log", "mat", "ship", "cmdr", "firsts", "galnet"];
+const TABLET_VIEWS = ["now", "near", "here", "bio", "bm", "search", "map", "hwy", "locate", "hist", "log", "mat", "ship", "cmdr", "firsts", "galnet"];
 let view = TABLET ? store.get("tabletView", "now") : store.get("view", "near");
 if (view === "rich" || view === "navroute") view = "hwy";   // Road to Riches had a tab of its own for a day (PR #1): it is a route type of Plot Route now
 if (TABLET && !TABLET_VIEWS.includes(view)) view = "now";
@@ -1888,7 +1889,7 @@ function keepPanes(fn) {
 function paneTop(...ids) { for (const id of ids) { const p = document.getElementById(id); if (p) p.scrollTop = 0; delete paneScroll[id]; } }
 // each view's main pane: Page Up/Down and Home/End scroll it while nothing that scrolls or types has the focus
 const VIEW_PANE = {overview: "nearPane", near: "nearPane", here: "hereMain", bio: "bioPane", bm: "bmPane", search: "searchPane",
-                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane", galnet: "gnPane", ship: "shipPane", cmdr: "cmdrPane"};
+                   hist: "histPane", log: "logPane", mat: "matPane", firsts: "firstsPane", hwy: "hwyPane", galnet: "gnPane", ship: "shipPane", cmdr: "cmdrPane", locate: "locatePane"};
 // ---- Compact tables: a table wider than its box (its pane, the Overview's split, a phone) switches to its short forms
 // (compact: level 1), then to tighter ones that also drop or merge low-value columns (compact2: level 2; compact3: level
 // 3, a last step for a table that merges columns only when dropping some was not enough: Nearby, the author 2026-10-15),
@@ -3237,6 +3238,7 @@ function render() {
   document.getElementById("cmdrView").hidden = view !== "cmdr";
   if (view === "cmdr") loadCmdr();
   if (view === "galnet") loadGalnet();
+  if (typeof forkLocateShow === "function") forkLocateShow(view === "locate");   // this fork's Locate tab
   if (view === "firsts") { loadFirsts(); loadLeft(); }
   document.documentElement.style.setProperty("--head-h", document.querySelector("header").offsetHeight + "px");
   document.getElementById("hereView").classList.toggle("detail", !!selectedBody);

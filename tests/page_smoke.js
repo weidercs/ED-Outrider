@@ -129,7 +129,7 @@ const releasePayloads = async () => {
   console.log(ok ? "OK" : "FAIL", "| header |", d.querySelector("#sub").textContent.slice(0, 80), "| errors:", errors);
   // every view: [button, element that must end up with content]
   const views = [["overview", "#ovPanes"], ["near", "#rows"], ["here", "#hereRows"], ["bio", "#bioRows"], ["bm", "#bmTable"],
-                 ["search", "#searchForm"], ["hist", "#histRows"], ["log", "#logRows"], ["mat", "#matGrid"], ["firsts", "#firstsRows"], ["galnet", "#gnList"], ["hwy", "#hwyHead"], ["now", "#nowView"]];
+                 ["search", "#searchForm"], ["hist", "#histRows"], ["log", "#logRows"], ["mat", "#matGrid"], ["firsts", "#firstsRows"], ["galnet", "#gnList"], ["hwy", "#hwyHead"], ["locate", "#locateBody"], ["now", "#nowView"]];
   let allOk = ok;
   for (const [v, sel] of views) {
     const btn = d.querySelector(`[data-view="${v}"]`);
@@ -3718,7 +3718,7 @@ const releasePayloads = async () => {
     })()`));
     const want = {pure: [true, true, false, false, false, true], sizes: [true, false, false, true], now: false, back: true, body: "hidden", tabbable: true,
       panes: ["overview:auto:sticky", "near:auto:sticky", "here:auto:sticky", "bio:auto:sticky", "bm:auto:sticky", "search:auto:sticky",
-              "hist:auto:sticky", "log:auto:sticky", "mat:auto:-", "firsts:auto:sticky", "hwy:auto:sticky", "galnet:auto:-", "ship:auto:-", "cmdr:auto:-"],
+              "hist:auto:sticky", "log:auto:sticky", "mat:auto:-", "firsts:auto:sticky", "hwy:auto:sticky", "galnet:auto:-", "ship:auto:-", "cmdr:auto:-", "locate:auto:-"],
       ov: {map: true, inline: "", nearPane: "auto", here: "auto"}, ovPage: true, jump: 100 + (930 - 700), keep: 1100, more: [0, 1], pgdn: [360, true], winScrolls: 0,
       fold: {tiles: true, line: true, stored: "true", exported: true, btn: "▾", name: true, urgent: ["⛽ N%", "unsold N"]},
       unfold: {tiles: true, line: true, stored: "false", mode: "\"six\""}};
@@ -5015,9 +5015,9 @@ const releasePayloads = async () => {
     got.status = [td.getElementById("tabSysV").textContent.length > 1, /t|—/.test(td.getElementById("tabFuelV").textContent)];
     // every page from the nav: its group opens, its view fills, nothing throws
     const fills = {now: "#nowView", near: "#rows", here: "#hereRows", bio: "#bioRows", bm: "#bmTable", search: "#searchForm", map: "#mapView",
-                   hwy: "#hwyHead", hist: "#histRows", log: "#logRows", mat: "#matGrid", firsts: "#firstsRows", galnet: "#gnList", ship: "#shipBody"};
+                   hwy: "#hwyHead", hist: "#histRows", log: "#logRows", mat: "#matGrid", firsts: "#firstsRows", galnet: "#gnList", ship: "#shipBody", locate: "#locateBody"};
     got.pages = [];
-    for (const [g, vs] of Object.entries({explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy"], records: ["hist", "log", "mat", "ship", "firsts", "galnet"]})) {
+    for (const [g, vs] of Object.entries({explore: ["now", "near", "here", "bio"], navigate: ["bm", "search", "map", "hwy", "locate"], records: ["hist", "log", "mat", "ship", "firsts", "galnet"]})) {
       td.querySelector(`#tabNav [data-group="${g}"]`).click();
       for (const v of vs) {
         const before = terr.length;
@@ -9344,6 +9344,82 @@ const releasePayloads = async () => {
     allOk = allOk && goodFX;
     console.log(goodFX ? "OK" : "FAIL", "| fork engineering |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
       : "parts and grades narrow the Engineers list, Load my ship, Plan the trip, Clear filters, on upstream's rows", errors.slice(before));
+  }
+  // Locate (this fork, static/fork.js, GET /api/locate): the tiles ask for the nearest places, the rows draw with Copy and
+  // Plot route, large pad only goes into the question, Mining asks for the mineral picked, Commodities and Where it sells
+  // hand over to the Materials view's lookup
+  {
+    const w = dom.window, d = w.document, before = errors.length, got = {}, asked = [], looks = [], copied = [];
+    w.__lcAsked = asked; w.__lcLooks = looks; w.__lcCopied = copied;
+    w.eval(`window.__lcApi = apiJson; window.__lcLook = startLook; window.__lcCopy = copyText;
+      copyText = (t, what) => __lcCopied.push(t);
+      startLook = q => __lcLooks.push([q.commodity, q.mode, q.from]);
+      apiJson = async (u, o) => {
+        const s = String(u);
+        if (!s.startsWith("api/locate")) return __lcApi(u, o);
+        __lcAsked.push(s);
+        if (s.includes("what=mining")) return {title: "Painite hotspots", from: "Sol", mineral: "Painite", rows: [
+          {body: "B 5", system: "Bee", id64: "12", distance: 9.04, ls: 1200, ring: "B 5 A Ring", ring_type: "Metallic", count: 2, others: [["Platinum", 1]]}]};
+        if (s.includes("what=black")) return {error: "Spansh could not be asked (OSError)"};
+        return {title: "Interstellar Factors", from: "Sol", rows: [
+          {name: "Daedalus", system: "Sol", id64: "10477373803", distance: 0, ls: 300, pad: "L", type: "Orbis Starport", age: 7200},
+          {name: "Far Port", system: "Wolf 359", id64: "99", distance: 7.8, ls: 12, pad: "M", type: "Outpost", age: null}]};
+      };
+      LC.what = null; LC.answer = null; LC.large = false; LC.mineral = "Painite"; LC.commodity = "";`);
+    const text = el => el ? el.textContent.replace(/\s+/g, " ").trim() : "", body = () => d.getElementById("locateBody");
+    const rows = () => [...body().querySelectorAll(".lctable tbody tr")].map(t => [...t.cells].slice(0, 5).map(text).join("|"));
+    try {
+      d.querySelector('[data-view="locate"]').click();
+      await sleep(100);
+      got.tiles = [!d.getElementById("locateView").hidden, body().querySelectorAll("[data-lctile], .lctile").length];
+      body().querySelector('[data-lcwhat="factors"]').click();
+      await sleep(60);
+      got.factors = [text(body().querySelector(".hwyttl")), rows(), body().querySelectorAll("[data-plotto]").length, !!body().querySelector('.lctile.on[data-lcwhat="factors"]')];
+      body().querySelector("[data-lccopy]").click();
+      got.copied = copied[0];
+      const large = d.getElementById("lcLarge"); large.checked = true; large.dispatchEvent(new w.Event("change", {bubbles: true}));
+      await sleep(60);
+      body().querySelector('[data-lcwhat="black"]').click();
+      await sleep(60);
+      got.black = text(body().querySelector("#lcResults"));
+      const l2 = d.getElementById("lcLarge"); l2.checked = false; l2.dispatchEvent(new w.Event("change", {bubbles: true}));
+      await sleep(60);
+      body().querySelector('[data-lcwhat="mining"]').click();
+      await sleep(60);
+      got.mining = [text(body().querySelector(".hwyttl")), rows()];
+      body().querySelector("[data-lcsell]").click();
+      await sleep(60);
+      got.sell = [w.eval("view"), JSON.stringify(looks)];
+      d.querySelector('[data-view="locate"]').click();
+      await sleep(60);
+      body().querySelector('[data-lcwhat="commodities"]').click();
+      await sleep(30);
+      d.getElementById("lcCommodity").value = "Gold";
+      body().querySelector('[data-lclook="buy"]').click();
+      await sleep(30);
+      got.look = [w.eval("view"), JSON.stringify(looks[1])];
+    } finally {
+      w.eval(`apiJson = __lcApi; startLook = __lcLook; copyText = __lcCopy; LC.what = null; LC.answer = null; LC.large = false;
+        localStorage.removeItem("lcPrefs")`);
+      d.querySelector('[data-view="overview"]').click();
+    }
+    await sleep(60);
+    const want = {
+      tiles: [true, 12],
+      factors: ["Interstellar Factors nearest Sol first · 2 found", ["Daedalus Orbis Starport|Sol|0.0 ly|300 ls|L", "Far Port Outpost|Wolf 359|7.8 ly|12 ls|M"], 2, true],
+      copied: "Sol",
+      black: "Spansh could not be asked (OSError)",
+      mining: ["Painite hotspots nearest Sol first · 1 found", ["B 5 A Ring Metallic|Bee|9.0 ly|1,200 ls|Painite ×2 · Platinum ×1"]],
+      sell: ["mat", JSON.stringify([["Painite", "sell", "here"]])],
+      look: ["mat", JSON.stringify(["Gold", "buy", "here"])],
+    };
+    const wantAsked = ["api/locate?what=factors&pad=any", "api/locate?what=factors&pad=L", "api/locate?what=black&pad=L", "api/locate?what=black&pad=any", "api/locate?what=mining&pad=any&mineral=Painite"];
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    if (JSON.stringify(asked) !== JSON.stringify(wantAsked)) bad.push("asked");
+    const goodLC = !bad.length && errors.length === before;
+    allOk = allOk && goodLC;
+    console.log(goodLC ? "OK" : "FAIL", "| fork locate |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
+      : "tiles, nearest rows with Copy and Plot route, large pad, mining hotspots, the lookup hand-over", errors.slice(before));
   }
   // The route lists' discoverer names (this fork, static/fork.js): after the Known mark, only where EDSM credits one
   {

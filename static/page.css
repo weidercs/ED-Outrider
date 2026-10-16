@@ -1511,3 +1511,12 @@ table.ovlay input[type=number]::-webkit-inner-spin-button, table.ovlay input[typ
 /* S47: Fill gaps in EDSM's flight log (Settings -> Uploads) */
 .bfill { margin: 4px 0 10px; } .bfill > summary { cursor: pointer; font-weight: 600; }
 .bfill .bfrow { margin: 4px 0; } .bfill .bfrow input { width: 11.5em; } .bfill button.try { margin-left: 4px; }
+/* this fork: the Locate tab (static/fork.js) */
+#locateView { margin-top: 12px; }
+.lctiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(11em, 1fr)); gap: 6px; margin: 6px 0 10px; }
+.lctile { background: var(--panel); color: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 10px 8px; font: inherit; cursor: pointer; text-align: center; }
+.lctile:hover { border-color: var(--info); } .lctile.on { background: var(--accent, #4a7); color: var(--bg); border-color: var(--accent, #4a7); }
+.lcctl { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 0 0 8px; }
+.lctable { border-collapse: collapse; margin-top: 4px; } .lctable td, .lctable th { padding: 3px 12px 3px 0; text-align: left; border-top: 1px solid var(--line); }
+.lctable th { color: var(--muted); font-weight: 600; border-top: 0; } .lctable .num { text-align: right; white-space: nowrap; } .lcact { white-space: nowrap; }
+#locateView .short { color: var(--bad); }

@@ -205,6 +205,7 @@ import outrider.mcp        # the MCP bridge's [mcp] settings (the bridge itself 
 import outrider.uploads    # EDDN / EDSM uploads (opt-in): the session, the live gate, the outbox
 import outrider.galnet     # the fork's GalNet News: Frontier's feed as articles, and the systems they mention
 import outrider.engineers  # the fork's engineers beside the CMDR tab: systems, distances, Load my ship, the trip
+import outrider.locate     # the fork's Locate tab: the nearest places for a need (Spansh's searches)
 import outrider.navroute   # the fork's Game Route list: the game's own route, jump by jump (pure)
 import outrider.shipinfo   # the fork's Ship view: the Loadout as figures and modules with their engineering
 import outrider.biohunt    # the fork's Unscanned (bio) plotter: mass codes, the odds, the pick of each hop (pure)
@@ -20111,6 +20112,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/nearest", nearest_view)
     app.router.add_get("/api/ship", ship_view)
     outrider.engineers.add_routes(app, state, lambda: LIVE_DIRS)   # this fork's engineers: /api/engineers*
+    outrider.locate.add_routes(app, state, lambda: (SPANSH_STATION_SEARCH, SPANSH_BODY_SEARCH))   # this fork's Locate: /api/locate
     app.router.add_get("/api/navroute", navroute_view)
     app.router.add_get("/api/galnet", galnet_view)
     app.router.add_get("/api/galnet/systems", galnet_systems_view)

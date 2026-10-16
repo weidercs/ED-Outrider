@@ -67,12 +67,14 @@ class Tablet(unittest.TestCase):
         pages = re.findall(r'<button type="button" class="tb-page" data-view="(\w+)"', nav)
         views = re.findall(r'"(\w+)"', re.search(r"const TABLET_VIEWS = \[(.*?)\];", js).group(1))
         groups = {g: re.findall(r'"(\w+)"', v) for g, v in re.findall(r'(\w+): \[([^\]]*)\]', re.search(r"groups: \{(.*?)\}", js).group(1))}
-        # this fork: page.js adds its Ship and GalNet pages to the records group on a line of their own
+        # this fork: page.js adds its Ship and GalNet pages (and Locate, below) to the records group on a line of their own
         if 'TB.groups.records.splice(TB.groups.records.indexOf("cmdr"), 0, "ship")' in js:
             groups["records"].insert(groups["records"].index("cmdr"), "ship")
         if 'TB.groups.records.push("galnet")' in js:
             groups["records"].append("galnet")
-        self.assertEqual(len(pages), 13 + 2)   # this fork: Ship and GalNet
+        if 'TB.groups.navigate.push("locate")' in js:   # and its Locate after Plot Route
+            groups["navigate"].append("locate")
+        self.assertEqual(len(pages), 13 + 3)   # this fork: Ship, GalNet and Locate
         self.assertEqual(views, pages)
         for p in pages:
             self.assertEqual(sum(p in v for v in groups.values()), 1, p)

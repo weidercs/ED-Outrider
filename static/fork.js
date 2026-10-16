@@ -245,3 +245,97 @@ function hwyDiscovererHtml(name) {
   return name ? ` <span class="hwydisc" title="first discovered by CMDR ${esc(name)} (EDSM's record)">${esc(name)}</span>` : "";
 }
 
+
+// ---- Locate (this fork; GET /api/locate, outrider/locate.py): EDCoPilot's Location search, its tiles here. Each asks
+// Spansh for the nearest places with what it names; Commodities (and where a mined mineral sells) hands over to the
+// Materials view's Sell / Buy lookup (startLook). forkLocateShow is page.js's one-line hook in render() ----
+const LC_TILES = [["factors", "Interstellar Factors", "pay off bounties and fines away from where you got them"],
+  ["raw", "Raw material trader", "trade raw materials"], ["encoded", "Encoded material trader", "trade encoded data"],
+  ["manufactured", "Manufactured material trader", "trade manufactured materials"],
+  ["mining", "Mining", "ring hotspots of a mineral, nearest first, and where it sells"],
+  ["commodities", "Commodities", "where to buy or sell a commodity (the Materials view's lookup)"],
+  ["outfitting", "Ship outfitting", "stations with outfitting"], ["shipyard", "Shipyards", "stations with a shipyard"],
+  ["repair", "Best local repair", "the nearest stations that repair"], ["black", "Black markets", "sell stolen goods"],
+  ["guardian", "Guardian technology broker", "Guardian modules, weapons and fighters"], ["human", "Human technology broker", "human tech: AX weapons and the like"]];
+const LC_MINERALS = ["Alexandrite", "Benitoite", "Bromellite", "Grandidierite", "Low Temperature Diamonds", "Monazite", "Musgravite",
+  "Painite", "Platinum", "Rhodplumsite", "Serendibite", "Tritium", "Void Opals", "Osmium", "Gold", "Silver", "Palladium", "Samarium", "Praseodymium"];
+const LC = {what: null, answer: null, busy: false, large: false, mineral: "Painite", commodity: ""};
+try { const s = JSON.parse(localStorage.getItem("lcPrefs") || "null");
+      if (s) { LC.large = !!s.large; if (LC_MINERALS.includes(s.mineral)) LC.mineral = s.mineral; } } catch {}
+const lcSave = () => { try { localStorage.setItem("lcPrefs", JSON.stringify({large: LC.large, mineral: LC.mineral})); } catch {} };
+function forkLocateShow(on) {
+  const v = document.getElementById("locateView");
+  if (!v) return;
+  v.hidden = !on;
+  if (on) lcRender();
+}
+// a report's age in words (Spansh's updated_at, as seconds): "40 min", "3 h", "12 d"
+const lcAge = s => s == null ? "?" : s < 3600 ? `${Math.max(1, Math.round(s / 60))} min` : s < 172800 ? `${Math.round(s / 3600)} h` : `${Math.round(s / 86400)} d`;
+const lcLy = v => v == null ? "?" : `${Number(v).toLocaleString("en-US", {maximumFractionDigits: 1, minimumFractionDigits: v < 100 ? 1 : 0})} ly`;
+const lcLs = v => v == null ? "" : `${Number(v).toLocaleString("en-US")} ls`;
+const lcActions = r => `<button type="button" class="mini" data-lccopy="${esc(r.system)}" title="copy the system's name">Copy</button>` +
+  sysAimBtn(r.system, r.id64) + plotBtn(r.system);
+function lcRowsHtml(a) {
+  if (!a.rows.length) return `<div class="unk">Spansh knows none within reach (1,000 ly).</div>`;
+  if (a.mineral) return `<table class="lctable"><thead><tr><th>Ring</th><th>System</th><th class="num">Distance</th><th class="num">From star</th><th>Hotspots</th><th></th></tr></thead><tbody>` +
+    a.rows.map(r => `<tr><td><b>${esc(r.ring || r.body)}</b> <span class="unk">${esc(r.ring_type || "")}</span></td><td>${esc(r.system)}</td>` +
+      `<td class="num">${lcLy(r.distance)}</td><td class="num">${lcLs(r.ls)}</td>` +
+      `<td>${esc(a.mineral)} ×${r.count}${r.others.length ? ` <span class="unk">· ${esc(r.others.map(([n, c]) => `${n} ×${c}`).join(", "))}</span>` : ""}</td>` +
+      `<td class="lcact">${lcActions(r)}</td></tr>`).join("") + `</tbody></table>`;
+  return `<table class="lctable"><thead><tr><th>Station</th><th>System</th><th class="num">Distance</th><th class="num">From star</th><th>Pad</th><th class="num">Reported</th><th></th></tr></thead><tbody>` +
+    a.rows.map(r => `<tr><td><b>${esc(r.name)}</b> <span class="unk">${esc(r.type || "")}</span></td><td>${esc(r.system)}</td>` +
+      `<td class="num">${lcLy(r.distance)}</td><td class="num">${lcLs(r.ls)}</td><td>${esc(r.pad)}</td>` +
+      `<td class="num" title="how long ago a player's game last reported the station to Spansh">${lcAge(r.age)} ago</td>` +
+      `<td class="lcact">${lcActions(r)}</td></tr>`).join("") + `</tbody></table>`;
+}
+function lcRender() {
+  const el = document.getElementById("locateBody");
+  if (!el) return;
+  const tiles = LC_TILES.map(([k, t, h]) => `<button type="button" class="lctile${LC.what === k ? " on" : ""}" data-lcwhat="${k}" title="${esc(h)}">${esc(t)}</button>`).join("");
+  let ctl = "";
+  if (LC.what === "mining") ctl = `<label>Mineral <select id="lcMineral">${LC_MINERALS.map(m => `<option${m === LC.mineral ? " selected" : ""}>${esc(m)}</option>`).join("")}</select></label>` +
+    ` <button type="button" class="mini" data-lcgo>Find hotspots</button> <button type="button" class="mini" data-lcsell title="where ${esc(LC.mineral)} sells best near you (the Materials view's lookup)">Where it sells</button>`;
+  else if (LC.what === "commodities") ctl = `<label>Commodity <input type="search" id="lcCommodity" value="${esc(LC.commodity)}" placeholder="e.g. Tritium" autocapitalize="off" spellcheck="false"></label>` +
+    ` <button type="button" class="mini" data-lclook="buy">Where to buy</button> <button type="button" class="mini" data-lclook="sell">Where to sell</button>` +
+    ` <span class="unk">opens the Materials view's lookup</span>`;
+  const a = LC.answer;
+  const res = LC.busy ? `<div class="unk">Asking Spansh…</div>` : !a || LC.what === "commodities" ? "" : a.error ? `<div class="short">${esc(a.error)}</div>` :
+    `<div class="hwyttl">${esc(a.title)} <span class="unk">nearest ${esc(a.from || "you")} first · ${a.rows.length} found</span></div>` + lcRowsHtml(a);
+  el.innerHTML = `<div class="srow"><b>Location search</b> <label class="unk" title="only stations with a large landing pad"><input type="checkbox" id="lcLarge"${LC.large ? " checked" : ""}> large pad only</label></div>` +
+    `<div class="lctiles">${tiles}</div>${ctl ? `<div class="lcctl">${ctl}</div>` : ""}<div id="lcResults">${res}</div>`;
+}
+async function lcFind() {
+  const what = LC.what;
+  if (!what || what === "commodities") return;
+  const q = new URLSearchParams({what, pad: LC.large ? "L" : "any"});
+  if (what === "mining") q.set("mineral", LC.mineral);
+  LC.busy = true; LC.answer = null; lcRender();
+  const g = newRequest("locate");
+  let r;
+  try { r = await apiJson(`api/locate?${q}`); } catch (err) { r = {error: err.message}; }
+  if (!isNewest("locate", g)) return;
+  LC.busy = false; LC.answer = r; lcRender();
+}
+function lcLook(commodity, mode) {
+  if (!commodity) { const i = document.getElementById("lcCommodity"); return i && i.focus(); }
+  const v = document.querySelector('[data-view="mat"]');
+  if (v && view !== "mat") v.click();
+  startLook({commodity, label: commodity, mode, tons: 1, from: "here", key: null});
+}
+document.addEventListener("click", e => {
+  const t = e.target.closest && e.target.closest("[data-lcwhat], [data-lcgo], [data-lcsell], [data-lclook], [data-lccopy]");
+  if (!t) return;
+  const ds = t.dataset;
+  if (ds.lccopy) return copyText(ds.lccopy);
+  if (ds.lcwhat) { LC.what = ds.lcwhat; LC.answer = null; lcRender(); return lcFind(); }
+  if ("lcgo" in ds) return lcFind();
+  if ("lcsell" in ds) return lcLook(LC.mineral, "sell");
+  if (ds.lclook) { const i = document.getElementById("lcCommodity"); LC.commodity = i ? i.value.trim() : LC.commodity; return lcLook(LC.commodity, ds.lclook); }
+});
+document.addEventListener("change", e => {
+  if (e.target.id === "lcLarge") { LC.large = e.target.checked; lcSave(); if (LC.what && LC.what !== "mining" && LC.what !== "commodities") lcFind(); }
+  if (e.target.id === "lcMineral") { LC.mineral = e.target.value; lcSave(); if (LC.what === "mining") lcFind(); }
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.id === "lcCommodity") { e.preventDefault(); LC.commodity = e.target.value.trim(); lcLook(LC.commodity, "buy"); }
+});
