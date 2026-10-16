@@ -2,6 +2,19 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · A Scoundrel personality
+- `resources/personalities/scoundrel.json` ("Scoundrel"): every alert, ~50 clean and ~50 swearing versions each (5,948
+  lines), from the author's brief:
+  - **The character:** an adventure-seeking loudmouth, a smuggler, small-time thief and grifter, never a killer,
+    more interested in credits than anything. It shows little respect, treats you as its buddy, and is serious for
+    a moment in danger (Sir), where the advice is to run.
+  - **Stories:** petty-crime tall tales (Robigo, Sothis, black markets, the cops at Lave) and PG-13 innuendo (the
+    Hutton twins). It never mentions its own anatomy or assumes yours, so any voice fits.
+  - **Swearing:** none in the clean list; every word on about half the swearing list's lines.
+  - **Address:** buddy, pal or friend.
+- Han Solo's lines the author approved, each twice: "Never tell me the odds!", "I've got a bad feeling about this.",
+  "It's not my fault!", "Don't get cocky.", "Laugh it up."
+
 ## 2026-10-16 · The install guide: updating a plain install
 - docs/guide/install.md "Updating": what an update never touches (`data/`, which holds the EDSM and Inara keys, and
   `ed_outrider.toml`), and the steps for a `git clone` and for a downloaded ZIP (a new folder of the old name, `data` and

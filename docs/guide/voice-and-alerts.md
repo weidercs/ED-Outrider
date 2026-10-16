@@ -164,7 +164,8 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
   exploration and eager for action, full of tall tales; it calls you Commander or Sir), and the southern pair **Good Ol'
   Boy** and **Southern Belle** (warm, playful, slow to anger, full of family sayings, the old days and food; buddy and
   partner, or sugar and darlin'), and **Klingon** (loud, honour-bound, exploration as the hunt; it calls you Captain,
-  Sir, Commander or My Lord); tick any mix.
+  Sir, Commander or My Lord), and **Scoundrel** (a cocky smuggler who cares about credits, calls you buddy and pal,
+  and tells stories about the Hutton twins); tick any mix.
   **With profanity** uses the swearing versions the share of the time you set (50% by default). **One personality per system** holds one character a system.
 - **Danger alerts always down to business** (on by default): danger is said plainly, never sworn.
 - **Your names.** Commander names are often unpronounceable, so the voice calls you by the names in
