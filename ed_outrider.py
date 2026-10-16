@@ -1627,12 +1627,61 @@ def reread_message(old, rescan=False):
             + "). This can take a few minutes.")
 
 
+# columns this version adds outside SCHEMA (open_db's own ALTERs): its own, not a newer Outrider's
+OWN_EXTRA_COLUMNS = {"spansh_systems": ("x", "y", "z")}
+
+
+def fit_newer_tables(db, log=print):
+    """This fork: tables a newer Outrider gave columns this one does not know (it ran on this database once, then an
+    older version was put back) are rebuilt to this version's columns, their rows kept in the columns both know. Else
+    every insert that fills a row by position fails (sqlite3: "table sale_events has 13 columns but 9 values were
+    supplied") and Outrider cannot start. A newer Outrider adds its columns back when it next opens the database, and
+    re-reads the journals to fill them. Tables only the newer version has are left alone. [table names]."""
+    schema = SCHEMA + outrider.uploads.SCHEMA
+    fitted = []
+    for m in re.finditer(r"CREATE TABLE IF NOT EXISTS (\w+) \((.*?)\);", schema, re.S):
+        table, body = m.group(1), m.group(2)
+        mine = []
+        for col in re.split(r",\s*(?![^()]*\))", body):
+            col = re.sub(r"--[^\n]*", "", col).strip()
+            name = col.split()[0] if col else ""
+            if name and name.upper() not in ("PRIMARY", "UNIQUE", "CHECK", "FOREIGN"):
+                mine.append(name)
+        have = [r["name"] for r in db.execute(f"PRAGMA table_info({table})")]
+        mine += OWN_EXTRA_COLUMNS.get(table, ())
+        extra = [c for c in have if c not in mine]
+        if not extra:
+            continue
+        keep = ", ".join(c for c in have if c in mine)
+        try:
+            db.execute("SAVEPOINT fit_newer")
+            db.execute(f"ALTER TABLE {table} RENAME TO {table}__newer")
+            db.execute(m.group(0).replace("IF NOT EXISTS ", "", 1))
+            db.execute(f"INSERT OR IGNORE INTO {table} ({keep}) SELECT {keep} FROM {table}__newer")
+            db.execute(f"DROP TABLE {table}__newer")
+            db.execute("RELEASE fit_newer")
+        except sqlite3.Error:
+            db.execute("ROLLBACK TO fit_newer")
+            db.execute("RELEASE fit_newer")
+            raise
+        fitted.append(table)
+        log(f"database: {table} had columns from a newer Outrider ({', '.join(extra)}): rebuilt for this version, its rows kept")
+    if fitted:
+        db.commit()
+        db.executescript(schema)   # the indexes the rebuilt tables lost
+    return fitted
+
+
 def open_db(path, rescan=False, on_reread=None):
     db = sqlite3.connect(path)
     db.row_factory = sqlite3.Row
     db.executescript(SCHEMA + outrider.uploads.SCHEMA)
     migrate_sale_events(db)
     migrate_bio_sales(db)
+    # this fork: a database a newer Outrider wrote, after an older one was put back (after the migrations, which
+    # turn this version's own older shapes into its current ones; whatever the stored reader version says: a
+    # start that failed on such a table has already stamped it with this one's)
+    fit_newer_tables(db)
     # Columns added to an existing table since the database was created: add them.
     for m in re.finditer(r"CREATE TABLE IF NOT EXISTS (\w+) \((.*?)\);", SCHEMA + outrider.uploads.SCHEMA, re.S):
         table, body = m.group(1), m.group(2)

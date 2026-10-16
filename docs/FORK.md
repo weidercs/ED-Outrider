@@ -152,6 +152,13 @@ Beside upstream's ([DESIGN_NOTES.md](DESIGN_NOTES.md)):
 
 Newest first. Upstream's is [CHANGELOG.md](CHANGELOG.md).
 
+## 2026-10-15 · This fork: a database a newer Outrider wrote starts again
+- After the newer upstream code had run once on the player's database (reader version 54) and tweak-update was
+  taken back out (49), Outrider stopped at start: "table sale_events has 13 columns but 9 values were supplied".
+  `open_db` now fits such a database (`fit_newer_tables`, only when its stored reader version is newer, after the
+  old-shape migrations): a table with columns this version does not know is rebuilt to its own columns, the rows kept
+  in the columns both know; tables only the newer version has are left alone. Test: `tests/test_fork_fixes.py`.
+
 ## 2026-10-15 · This fork: upstream's tweak-update taken back out
 - At the player's wish, the merge of upstream's `tweak-update` (2026.10.23) is reverted (a revert commit: the
   history is kept, nothing is force-pushed). The fork is upstream as of its 2026-10-12 merge again, with the fork's
