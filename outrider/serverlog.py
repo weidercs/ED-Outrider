@@ -9,13 +9,20 @@ once `open(path)` is called (run(), after the database's folder exists), appends
 keeps appending). The overlay window's own output comes in through Outrider's (outrider/overlay_runner.py pipes it).
 Other programs Outrider runs (the players, the clipboard) still write to the terminal only.
 
+On the terminal only (the log keeps every line as printed), main() gives the Tees a `Console`: each line starts
+with the time (a line with the date first, and again when the day changes), a line's subject ("auto honk:") is
+padded so what follows lines up, and on a real terminal a long line wraps under its text. Under systemd (its
+journal adds its own times: JOURNAL_STREAM is set) the times and the date lines are left out.
+
 Secrets never reach the log: `hide(value)` (the [server] and [mcp] passwords, the AI key, the EDSM and Inara keys)
 replaces a value of SECRET_MIN characters or more wherever it appears, in the lines already kept too. The code also
 never prints them; this is the second line of defence.
 """
 import collections
 import os
+import re
 import sys
+import textwrap
 import threading
 import time
 
@@ -144,16 +151,84 @@ class ServerLog:
                     "path": self.path, "file_error": self.file_error}
 
 
+# a line's subject: a few lower-case words before its first ": " ("auto honk", "co-pilot button"); never a path, an
+# exception's name or an indented line
+SUBJECT = re.compile(r"([a-z][a-z' -]{0,18}[a-z]): (?=\S)")
+SUBJECT_WIDTH = 21   # "highway auto-target: " and the longest subject that lines up
+
+
+class Console:
+    """How the terminal shows the start of a line (the module's docstring): the time, the date when it changes, the
+    subject lined up, the wrap. One for both streams, so the date line is said once."""
+
+    def __init__(self, times=True, clock=time.time):
+        self.times, self.clock, self.day = times, clock, None
+        self.lock = threading.Lock()
+
+    def line(self, text, width=0):
+        """`text` (a line's first part, without its newline) as the terminal shows it; `width` the terminal's columns
+        to wrap to (0: no wrap)."""
+        with self.lock:
+            lt = time.localtime(self.clock())
+            head, stamp = "", ""
+            if self.times:
+                day = (lt.tm_year, lt.tm_mon, lt.tm_mday)
+                if day != self.day:
+                    self.day = day
+                    head = f"-- {time.strftime('%A', lt)} {lt.tm_mday} {time.strftime('%B %Y', lt)} --\n"
+                stamp = time.strftime("%H:%M:%S  ", lt)
+        if text[:1].isspace():   # a continuation or a traceback's line: as printed
+            return head + stamp + text
+        m = SUBJECT.match(text)
+        indent = 0
+        if m:
+            text = (m.group(1) + ":").ljust(SUBJECT_WIDTH) + text[m.end():]
+            indent = SUBJECT_WIDTH
+        if width and len(stamp) + len(text) > width and width - len(stamp) > indent + 20:
+            rows = textwrap.wrap(text, width - len(stamp), subsequent_indent=" " * indent, break_long_words=False,
+                                 break_on_hyphens=False)
+            text = ("\n" + " " * len(stamp)).join(rows) if rows else text
+        return head + stamp + text
+
+
 class Tee:
     """A stream that writes to the original first, then into the log. Anything else is the original's (encoding,
-    isatty, fileno, reconfigure...). The original may be None (pythonw on Windows has no console)."""
+    isatty, fileno, reconfigure...). The original may be None (pythonw on Windows has no console). With a `console`
+    the original gets each line as Console.line shows it; the log always gets the text as printed."""
 
-    def __init__(self, stream, log, kind):
-        self.stream, self.log, self.kind = stream, log, kind
+    def __init__(self, stream, log, kind, console=None):
+        self.stream, self.log, self.kind, self.console = stream, log, kind, console
+        self.at_start = True   # the next text written starts a line
+
+    def width(self):
+        try:
+            return os.get_terminal_size(self.stream.fileno()).columns if self.stream.isatty() else 0
+        except (AttributeError, OSError, ValueError):
+            return 0
+
+    def shown(self, text):
+        """`text` as the terminal shows it: each line's start through the console."""
+        out, pieces = [], text.split("\n")
+        for i, piece in enumerate(pieces):
+            if piece:
+                out.append(self.console.line(piece, self.width()) if self.at_start else piece)
+                self.at_start = False
+            if i < len(pieces) - 1:
+                out.append("\n")
+                self.at_start = True
+        return "".join(out)
 
     def write(self, text):
         try:
-            return self.stream.write(text) if self.stream is not None else len(text)
+            if self.stream is not None:
+                shown = text
+                if self.console is not None:
+                    try:
+                        shown = self.shown(str(text))
+                    except Exception:  # noqa: BLE001 -- the times must never break a print
+                        shown = text
+                self.stream.write(shown)
+            return len(text)
         finally:
             try:
                 self.log.feed(self.kind, str(text))
@@ -168,13 +243,14 @@ class Tee:
         return getattr(self.stream, name)
 
 
-def install(log=None):
-    """Tee sys.stdout and sys.stderr into `log` (a new ServerLog when None). Returns a function that puts them back
-    (the streams in place when it was called) and closes the file."""
+def install(log=None, console=None):
+    """Tee sys.stdout and sys.stderr into `log` (a new ServerLog when None), the terminal's lines through `console`
+    (a Console; None: as printed). Returns a function that puts them back (the streams in place when it was called)
+    and closes the file."""
     global ACTIVE
     log = log or ServerLog()
     old_out, old_err = sys.stdout, sys.stderr
-    sys.stdout, sys.stderr = Tee(old_out, log, "out"), Tee(old_err, log, "err")
+    sys.stdout, sys.stderr = Tee(old_out, log, "out", console), Tee(old_err, log, "err", console)
     ACTIVE = log
 
     def restore():

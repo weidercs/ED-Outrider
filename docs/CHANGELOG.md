@@ -2,6 +2,23 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · The terminal's lines: times first, subjects lined up, clearer start-up wording
+- **The terminal** (`outrider.serverlog.Console`, on the Tees main() already installs):
+  - each line starts with the time, and a date line comes first and again when the day changes;
+  - a line's subject ("auto honk:") is padded so what follows lines up;
+  - on a real terminal, a long line wraps under its text.
+- **Left as before:** Show log and `outrider.log` keep each line as printed, with their own times. Under systemd
+  (`JOURNAL_STREAM`), whose journal adds its own times, the times are left out.
+- **The start-up lines reworded:**
+  - the older journals on a line of their own ("imported once");
+  - "open … to watch the start-up";
+  - the systems visited with a thousands comma;
+  - "played on this PC with pw-play" under spoken alerts;
+  - the clipboard, auto-target and uploads lines in plainer words;
+  - the network note as two "network:" lines;
+  - the overlay window's own "overlay: " no longer doubled.
+  - "serving on" is unchanged: the install guide points to it.
+
 ## 2026-10-16 · Sweep fixes: personalities shown complete, chatter's clocks and ▶, every tagged species on the map
 - A Fable sweep of everything since 99759e4 (four areas, each finding verified; the overlay's came back clean).
 - **Settings → Voice → Personalities:** every shipped personality showed "(60/100 alerts)". The 40 chatter keys

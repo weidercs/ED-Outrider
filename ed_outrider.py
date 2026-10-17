@@ -13768,7 +13768,7 @@ class State:
             parts[2] += f" (DRY RUN: built and logged, nothing sent, {outrider.inara.DRY_ENV} is set)"
         elif outrider.inara.dev_mode():
             parts[2] += f" (development mode: {outrider.inara.DEV_ENV} is set)"
-        return "uploads: " + ", ".join(parts) + ("" if self.simulate else " (switched in Settings -> Uploads)")
+        return "uploads: " + ", ".join(parts) + ("" if self.simulate else " (change them in Settings -> Uploads)")
 
     def start_uploads(self):
         """The sending loops (one per service with a sender), and the lease watch, started in run()."""
@@ -20331,7 +20331,9 @@ async def run(args, st):
                               "holding Journal.*.log, usually '<Saved Games>/Frontier Developments/Elite Dangerous'), or "
                               "pass --journals PATH or set ED_JOURNALS.", action=None if docker else "open:server:journals")
     else:
-        print("journals: " + ", ".join(LIVE_DIRS) + (f"  (legacy: {', '.join(LEGACY_DIRS)})" if LEGACY_DIRS else ""))
+        print("journals: " + ", ".join(LIVE_DIRS))
+        if LEGACY_DIRS:
+            print("older journals: " + ", ".join(LEGACY_DIRS) + " (imported once)")
         for i, line in enumerate(nfs_cache_warnings(LIVE_DIRS)):
             outrider.notices.warn(f"nfs{i}", line)
     problem = listen_problem(args.host, args.port)
@@ -20370,7 +20372,7 @@ async def run(args, st):
     starting = Starting(st["password"], resolve_game_pc(st["game_pc"])[0], outrider.serverlog.ACTIVE, stop)
     starting_runner = await serve_starting(starting, hosts, args.host, args.port)
     shown = "127.0.0.1" if args.host in WILDCARD_HOSTS else _host_name(args.host)
-    print(f"starting: http://{shown}:{args.port}/ shows the progress until the page is ready")
+    print(f"starting: open http://{shown}:{args.port}/ to watch the start-up")
 
     async def stopped_starting(what):
         """A stop before the page was served: what is read is committed; the rest is read at the next start."""
@@ -20419,7 +20421,7 @@ async def run(args, st):
                     journals.last_event_ts = tail.rsplit(b'"timestamp":"', 1)[-1][:20].decode("ascii", "replace")
                     meta_set(db, "last_event_ts", journals.last_event_ts)
     n = db.execute("SELECT count(*) FROM visits").fetchone()[0]
-    print(f"journals up to date in {time.time() - t:.1f}s: {n} systems visited")
+    print(f"journals: up to date in {time.time() - t:.1f} s, {n:,} systems visited")
     if journals.pos:
         print(f"current system: {journals.pos['name']}")
     elif LIVE_DIRS:
@@ -20474,7 +20476,7 @@ async def run(args, st):
               "playing on this PC are off")
     state.player = outrider.tts.LinePlayer(st["server_player"])
     state.sounds.own_dir = st["sound_dir"] or None
-    print("playing on this PC (the page's tick): " + (state.player.name or (
+    print("spoken alerts: played on this PC with " + (state.player.name or (
         "off ([speech] server_player)" if state.player.choice == "off" else
         f"{st['server_player']} not found" if state.player.choice != "auto" else
         "no player found (pw-play, paplay, aplay or ffplay)")))
@@ -20495,7 +20497,7 @@ async def run(args, st):
     if state.autohonk["enabled"]:
         state.honker.open()
     print("auto honk: " + (state.honker.status if state.autohonk["enabled"] else "off")
-          + (" (the D-Scanner must be on primary fire)" if state.honker.ready else ""))
+          + ("; the D-Scanner must be on primary fire" if state.honker.ready else ""))
     button_task = None
     if st["copilot"]["enabled"]:   # read-only: never grabs the device, never presses anything
         cp = st["copilot"]
@@ -20524,14 +20526,14 @@ async def run(args, st):
         state.highway_cfg["autotarget"] = False
     if state.highway_cfg["autotarget"] and state.honker.available and not state.highway_cfg["autotarget_dry_run"]:
         state.honker.open("target")
-    print("highway clipboard: " + (f"{state.clipboard.tool} (the next system is copied on arriving at a route system)"
+    print("highway clipboard: " + (f"{state.clipboard.tool} (copies the next system when you arrive at a route system)"
                                    if state.clipboard.tool and state.clipboard.enabled else
                                    "off ([highway] clipboard)" if not state.clipboard.enabled else
                                    "neither wl-copy nor xclip found"))
     print("highway auto-target: " + ("off" if not state.highway_cfg["autotarget"] else state.autotarget_info()["status"]))
     if state.game_window is not None and state.targeter.available:
         fw = state.game_window.why_not()
-        print("auto-target: " + ("brings the game to the front itself before its keys" if fw is None
+        print("auto-target: " + ("brings the game window to the front before pressing keys" if fw is None
                                  else f"cannot bring the game to the front ({fw}): click into the game during the countdown"))
     bg = state.highway_background()
     if bg["name"]:
@@ -20539,7 +20541,7 @@ async def run(args, st):
               (f" cannot be shown: {bg['why']}" if bg["why"] else ""))
     state.speech =outrider.speech.SpeechLines(st["speech_file"])
     sp = state.speech.info()
-    print(f"spoken alerts: wording from {sp['file']}" if sp["version"] else f"spoken alerts: {sp['error']}")
+    print(f"spoken alerts: lines from {sp['file']}" if sp["version"] else f"spoken alerts: {sp['error']}")
     if not sp["version"]:
         notices.set("speech", f"Spoken alerts: {sp['error']}", action="open:log")
     for msg in sp["problems"]:
@@ -20588,17 +20590,17 @@ async def run(args, st):
             outrider.notices.warn("overlay_bind", f"cannot listen on 127.0.0.1:{args.port} for the in-game overlay window: "
                                   f"{e.strerror or e}")
     # a wildcard address is not a place a browser can go (and not a name the Host check answers): loopback is (shown)
-    print(f"serving on http://{shown}:{args.port}/  (Ctrl-C to stop)")
+    print(f"serving on http://{shown}:{args.port}/ (Ctrl-C to stop)")
     # the automatic backup that covers crashes (no Shutdown event, so no quit backup): at start, when due
     if backup_due(meta_get(db, "last_backup"), BACKUP_EVERY_DAYS):
         print(f"backup: the last one is older than {BACKUP_EVERY_DAYS:g} day{'' if BACKUP_EVERY_DAYS == 1 else 's'}, "
               f"backing up to {BACKUP_DIR}")
         state.start_backup(auto=True)
     if args.host not in ("127.0.0.1", "localhost", "::1"):
-        print("note: the page is reachable from other machines on your network" + (
-            " (they sign in with [server] password)" if state.password else " (no password set: see below)"))
-        print("  it answers to any IP address, and by name only to these (add others to [server] allowed_hosts): "
-              + ", ".join(sorted(h for h in hosts if h.endswith(f":{args.port}"))))
+        print("network: other machines on your network can open the page" + (
+            " (they sign in with [server] password)" if state.password else " (no password set: see the warning below)"))
+        print("network: it answers to any IP address, and by name to " + ", ".join(sorted(h for h in hosts if h.endswith(f":{args.port}")))
+              + " (add others to [server] allowed_hosts)")
     for i, line in enumerate(exposure_warnings(args.host, state.password, st["allowed_hosts"])):
         outrider.notices.warn(f"network{i}", line, action="open:server")
     # stop as on Ctrl-C when asked to (SIGTERM: docker stop, systemd, verify.sh; set up above): the same cleanup below,
@@ -20728,8 +20730,10 @@ def main(argv=None):
     serving = not (args.write_config or args.list_backups or args.restore is not None or args.install_service
                    or args.uninstall_service)
     # Outrider's own log (S5b): the server's lines from here on, for Show log and <db dir>/outrider.log (opened in
-    # run()); put back when main() ends, so a test calling it leaves nothing behind
-    restore_streams = outrider.serverlog.install() if serving else None
+    # run()); put back when main() ends, so a test calling it leaves nothing behind. The terminal's lines start with
+    # the time, their subjects lined up (outrider.serverlog.Console; no times under systemd, whose journal has its own)
+    console = outrider.serverlog.Console(times=not os.environ.get("JOURNAL_STREAM"))
+    restore_streams = outrider.serverlog.install(console=console) if serving else None
     restart = None
     try:
         restart = main_with(args, serving)

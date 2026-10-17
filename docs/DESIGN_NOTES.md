@@ -1305,6 +1305,11 @@ upstream project's choices, not rules of the game.
   else, since a planetary port's concourse also sets on-foot-on-planet. Two stations of one personality ("as the XO" counts as the XO's) or of one voice
   and person never talk to each other, or it would sound like one person talking to themselves. The topics are mostly
   the stations' own work (`PERSONAL_SHARE` 0.25).
+- **The terminal's times are the terminal's only** (`outrider.serverlog.Console`): Show log and `outrider.log` keep
+  each line as printed (they carry their own times), so a line matched in a test or a guide reads the same there. The
+  subject is padded only for a few lower-case words before the first ": " (never a path or an exception's name). Long
+  lines wrap only on a real terminal: a pipe (Docker's log, a file) keeps whole lines for grep. Under systemd
+  (JOURNAL_STREAM set) the times go, since the journal adds its own.
 
 ## Known limits
 
