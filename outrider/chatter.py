@@ -19,6 +19,10 @@ F_HAS_LAT_LONG, F_IN_DANGER, F_INTERDICTED = 1 << 21, 1 << 22, 1 << 23
 F_IN_MAIN_SHIP, F_IN_SRV, F_FSD_JUMP = 1 << 24, 1 << 26, 1 << 30
 F2_ON_FOOT, F2_IN_TAXI, F2_IN_MULTICREW, F2_ON_FOOT_IN_STATION, F2_ON_FOOT_ON_PLANET = 1 << 0, 1 << 1, 1 << 2, 1 << 3, 1 << 4
 F2_LOW_OXYGEN, F2_LOW_HEALTH, F2_VERY_COLD, F2_VERY_HOT = 1 << 6, 1 << 7, 1 << 10, 1 << 11
+F2_ON_FOOT_IN_HANGAR, F2_ON_FOOT_SOCIAL_SPACE = 1 << 13, 1 << 14
+# on foot in a station, a hangar or a social space counts as docked, as for the rest of the server (ON_FOOT_DOCKED in
+# ed_outrider.py): a planetary port's concourse also sets on-foot-on-planet, and is no place for surface chatter
+F2_ON_FOOT_DOCKED = F2_ON_FOOT_IN_STATION | F2_ON_FOOT_IN_HANGAR | F2_ON_FOOT_SOCIAL_SPACE
 F2_HYPERDRIVE_CHARGING = 1 << 19
 GUI_BUSY = {6: "the galaxy map", 7: "the system map", 8: "the orrery", 9: "the FSS", 10: "the DSS", 11: "the codex"}
 
@@ -28,7 +32,7 @@ def where(flags, flags2=0, gui_focus=0):
     on a planet's surface), else None; why_not says what keeps it quiet when you are there (danger, the FSD, a screen
     the game has open), else None. Unsold data never does (the author always carries a lot)."""
     f, f2 = flags or 0, flags2 or 0
-    if f2 & (F2_IN_TAXI | F2_IN_MULTICREW) or f & F_DOCKED or f2 & F2_ON_FOOT_IN_STATION:
+    if f2 & (F2_IN_TAXI | F2_IN_MULTICREW | F2_ON_FOOT_DOCKED) or f & F_DOCKED:
         return None, None
     if f & F_SUPERCRUISE and f & F_IN_MAIN_SHIP:
         place = "space"
@@ -44,7 +48,9 @@ def where(flags, flags2=0, gui_focus=0):
         return place, "low fuel"
     if f & (F_FSD_CHARGING | F_FSD_JUMP) or f2 & F2_HYPERDRIVE_CHARGING:
         return place, "the FSD"
-    if f2 & (F2_LOW_OXYGEN | F2_LOW_HEALTH | F2_VERY_COLD | F2_VERY_HOT):
+    # the suit's oxygen or health only: very cold and very hot are common on the worlds you sample, and once the
+    # temperature hurts, low health says so (the author, 2026-10-16)
+    if f2 & (F2_LOW_OXYGEN | F2_LOW_HEALTH):
         return place, "your suit"
     if (gui_focus or 0) in GUI_BUSY:
         return place, GUI_BUSY[gui_focus]

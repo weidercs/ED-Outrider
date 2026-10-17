@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Space chatter on a planet: the temperature alone never stops it, a planetary port's concourse does
+- The suit's very cold and very hot no longer keep chatter quiet: they are common on the worlds you sample, and once
+  the temperature hurts, low health (still a blocker, with low oxygen) says so.
+- On foot in a hangar or a social space now counts as docked for chatter, as it does for the rest of the server
+  (`ON_FOOT_DOCKED`): a planetary port's concourse also sets on-foot-on-planet, so chatter could have started there,
+  talking about the ship "up there".
+
 ## 2026-10-16 · Space chatter, the code (#15; the lines come later)
 - **Settings → Voice → Space chatter** (off by default):
   - Talk in quiet moments, and how often (rare, normal, chatty).

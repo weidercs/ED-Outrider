@@ -324,7 +324,7 @@ someone says something: in supercruise, or while you are on foot or in the SRV o
 - **Not yet:** the switch and the timing are in, but the chatter lines themselves come in a later update. Until then
   **▶ Try chatter** says so.
 - **When:** never while you are docked or on foot in a station, in a taxi or multicrew, in danger, overheating, low on fuel, charging the
-  FSD, with your suit in trouble, or with a map, the FSS, the DSS or the codex open. The data you carry never stops
+  FSD, low on oxygen or health on foot, or with a map, the FSS, the DSS or the codex open. The data you carry never stops
   it. It waits a minute after you enter supercruise or step out on a planet. It never talks over anything said or
   waiting to be said, and an alert always comes first.
 - **How often** (rare, normal or chatty) sets the quiet before it talks: no alert for 15, 7 or 4 minutes, and 15 to

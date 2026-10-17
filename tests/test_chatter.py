@@ -20,6 +20,9 @@ class Where(unittest.TestCase):
         self.assertEqual(C.where(C.F_IN_SRV | C.F_HAS_LAT_LONG), ("planet", None))
         for flags, flags2 in ((C.F_IN_MAIN_SHIP, 0), (C.F_DOCKED | C.F_IN_MAIN_SHIP, 0), (C.F_LANDED | C.F_IN_MAIN_SHIP, 0),
                               (0, C.F2_ON_FOOT | C.F2_ON_FOOT_IN_STATION), (SC, C.F2_IN_TAXI), (SC, C.F2_IN_MULTICREW),
+                              # a planetary port's hangar and concourse set on-foot-on-planet too: docked, not the surface
+                              (0, C.F2_ON_FOOT | C.F2_ON_FOOT_ON_PLANET | C.F2_ON_FOOT_IN_HANGAR),
+                              (0, C.F2_ON_FOOT | C.F2_ON_FOOT_ON_PLANET | C.F2_ON_FOOT_SOCIAL_SPACE),
                               (0, 0), (None, None)):
             self.assertEqual(C.where(flags, flags2), (None, None), (flags, flags2))
 
@@ -30,8 +33,10 @@ class Where(unittest.TestCase):
         for bit, why in cases.items():
             self.assertEqual(C.where(SC | bit), ("space", why), why)
         foot = C.F2_ON_FOOT | C.F2_ON_FOOT_ON_PLANET
-        for bit in (C.F2_LOW_OXYGEN, C.F2_LOW_HEALTH, C.F2_VERY_COLD, C.F2_VERY_HOT):
+        for bit in (C.F2_LOW_OXYGEN, C.F2_LOW_HEALTH):
             self.assertEqual(C.where(0, foot | bit), ("planet", "your suit"))
+        for bit in (C.F2_VERY_COLD, C.F2_VERY_HOT):   # common on the worlds you sample: the temperature alone never
+            self.assertEqual(C.where(0, foot | bit), ("planet", None))
         self.assertEqual(C.where(SC, C.F2_HYPERDRIVE_CHARGING), ("space", "the FSD"))
         for gui, words in C.GUI_BUSY.items():
             self.assertEqual(C.where(SC, 0, gui), ("space", words))

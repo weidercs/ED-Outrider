@@ -1300,7 +1300,9 @@ upstream project's choices, not rules of the game.
   if an alert came in after it started. Its lines live in the speech files beside the alerts' (keys `chatter_*` and
   `chat_<topic>_ask/answer`), so personality files, bans and the checks work on them unchanged; a chatter line with
   a value it cannot fill is never said (`lineStrict`), unlike an alert's last resort. Unsold data is never a blocker
-  (the author always carries a lot). Two stations of one personality ("as the XO" counts as the XO's) or of one voice
+  (the author always carries a lot), nor is the suit's very cold or very hot, common on the worlds you sample
+  (low health says when the temperature hurts); on foot in a hangar or a social space is docked, as everywhere
+  else, since a planetary port's concourse also sets on-foot-on-planet. Two stations of one personality ("as the XO" counts as the XO's) or of one voice
   and person never talk to each other, or it would sound like one person talking to themselves. The topics are mostly
   the stations' own work (`PERSONAL_SHARE` 0.25).
 
