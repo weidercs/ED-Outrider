@@ -165,8 +165,13 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
   Boy** and **Southern Belle** (warm, playful, slow to anger, full of family sayings, the old days and food; buddy and
   partner, or sugar and darlin'), and **Klingon** (loud, honour-bound, exploration as the hunt; it calls you Captain,
   Sir, Commander or My Lord), and **Scoundrel** (a cocky smuggler who cares about credits, calls you buddy and pal,
-  and tells stories about the Hutton twins); tick any mix.
-  **With profanity** uses the swearing versions the share of the time you set (50% by default). **One personality per system** holds one character a system.
+  and tells stories about the Hutton twins).
+- **Main personality** (beside **Main voice**) picks one of them. Its last entry, **A mix…**, shows a box per
+  personality: tick several and the lines come from all of them, and **One personality per system** holds one
+  character a system. With the crew off, the main voice and personality say every alert; with it on, they are the
+  XO's (see The crew below).
+- **With profanity** uses the swearing versions the share of the time you set (50% by default). It names the
+  personalities that never swear ("all but Down to business, Vulcan").
 - **Danger alerts always down to business** (on by default): danger is said plainly, never sworn.
 - **Your names.** Commander names are often unpronounceable, so the voice calls you by the names in
   **Call me** (default "Boss, Hefay, Sir"); a personality with forms of address of its own (a naval one's "Captain")

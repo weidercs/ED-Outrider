@@ -622,15 +622,22 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <th class="acrew" hidden title="the crew member who says it (Settings → Voice → Crew)">crew</th></tr></thead><tbody id="alertOpts"></tbody></table>
       <div class="hint">Alerts only fire for something out of the ordinary. The tab title also carries the current state, so a background tab still tells you something.</div>
     </details>
-    <details class="setsec" data-sec-key="voice" data-chip="Voice"><summary>Voice <span id="ttsEngine" class="unk"></span> <span class="sum-note">the voice, its personality, pace and volume, which screen speaks</span></summary>
+    <details class="setsec" data-sec-key="voice" data-chip="Voice" id="voiceSettings"><summary>Voice <span id="ttsEngine" class="unk"></span> <span class="sum-note">the voice, its personality, pace and volume, which screen speaks</span></summary>
       <label data-find="defaults.voice defaults.voice_fallback" class="mod">Main voice<b id="ttsXo" hidden> = XO</b> <select id="ttsVoice"></select>
         <span id="ttsSpkWrap" hidden>speaker <select id="ttsSpk" aria-label="speaker"></select></span>
-        <span id="ttsStatus" class="hint"></span>
-        <span id="ttsXoHint" class="hint" hidden>the XO's voice: answers, status reports, the co-pilot, and the stand-in for everyone</span></label>
+        <span id="ttsStatus" class="hint"></span></label>
+      <label data-find="defaults.speech_styles" class="mod">Main personality<b id="ttsXoP" hidden> = XO</b>
+        <select id="speechMain" aria-label="main personality"></select></label>
+      <div class="hint" id="mainHint"></div>
       <div class="hint" id="ttsHint"></div>
       <div class="mod"><button type="button" class="try" id="labOpen">🎙 Voice lab…</button>
         <span class="hint">hear voices, their speakers and every alert's lines before you choose; download more voices</span></div>
-      <div data-find="defaults.speech_styles defaults.speech_profanity defaults.speech_profanity_pct" class="mod inlineopts">Personality: <span id="speechStyles" class="sstyles"></span>
+      <div id="speechMixBox" class="mod" hidden>
+        <div class="inlineopts">In the mix: <span id="speechStyles" class="sstyles"></span></div>
+        <label><input type="checkbox" id="speechShift"> One personality per system
+          <span class="hint">the personality (and its own voice) changes at each arrival and at game start, not at every line; with one personality ticked it changes nothing</span></label>
+      </div>
+      <div data-find="defaults.speech_profanity defaults.speech_profanity_pct" class="mod inlineopts">
         <span class="profrow"><label><input type="checkbox" id="speechProfanity"> with profanity <span id="speechProfanityWho" class="unk"></span></label>
         <label title="how often a line comes from the swearing versions instead of the clean ones"><input type="number" id="speechProfanityPct" min="0" max="100" step="5" style="width:4.5em">% of the time</label></span></div>
       <div id="vmBox" class="vmbox" data-find-block="voices kept loaded" hidden>
@@ -671,8 +678,6 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <span class="hint">each personality in a voice of its own, or as another person of a several-person voice (the voice lab's Give to this personality does the same); Outrider keeps them for every browser and the tablet</span>
         <table id="styleVoices" class="stylevoices"><thead><tr><th>Personality</th><th>Voice</th><th>Speaker</th><th></th><th></th></tr></thead><tbody></tbody></table>
         <span id="styleVoicesMsg" class="hint" role="status"></span></div>
-      <label class="mod"><input type="checkbox" id="speechShift"> One personality per system
-        <span class="hint">the personality (and its own voice) changes at each arrival and at game start, not at every line; with one personality ticked it changes nothing</span></label>
       <label data-find="defaults.speech_danger_business" class="mod"><input type="checkbox" id="speechDangerBusiness"> Danger alerts always down to business
         <span class="hint">hull, heat, interdiction, low fuel or an unscoopable star, your carrier leaving without you, the ship-loss debrief: only the business lines, never swearing</span></label>
       <div class="mod inlineopts">This screen speaks: <select id="speakMode">

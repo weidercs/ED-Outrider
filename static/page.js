@@ -3,7 +3,7 @@
 // the config file's [defaults] (data.defaults) where the page asks for one. Only SETTINGS_KEYS are shared:
 // per-device ones (the view, layouts, the search form, which screen speaks) never are. ed_outrider.py has the
 // same list (BROWSER_SETTINGS).
-const SETTINGS_KEYS = ["alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechNames", "chatterNames", "speechSpeed",
+const SETTINGS_KEYS = ["alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechMix", "speechNames", "chatterNames", "speechSpeed",
   "speechProfanity", "speechProfanityPct", "speechDangerBusiness", "speechShift", "sayBio", "sayGeo", "sayHazard",
   "sayMapped", "honkAnnounce", "sound", "unsoldCfg", "highlightCfg", "bioMinCfg", "maxBonus", "codexNewCounts",
   "highG", "streakCfg", "skipFloor", "sort", "sorts", "showVisited", "showExplored", "oneJump", "map",
@@ -2571,6 +2571,9 @@ const speechDangerBusiness = () => !!(store.get("speechDangerBusiness", null) ??
 // until the next one, so a character (and its own voice) holds through a system. In memory only: a reload draws
 // afresh on its first line. Danger lines still come from business when that box is ticked.
 const speechShift = () => !!store.get("speechShift", false);
+// Main personality's "A mix…" (the author, 2026-10-16): the ticked personalities shown and used together; never set,
+// it follows what is ticked (exactly one: that one alone), so a browser set up before the dropdown keeps its mix
+const speechMix = () => store.get("speechMix", null) ?? (speechStyles().length !== 1);
 let shiftStyle = null;
 function pickShift() {
   const lines = Object.values(speechLib.lines || {});
@@ -9369,9 +9372,23 @@ function drawSpeechStyles() {
   const pct = document.getElementById("speechProfanityPct");
   if (document.activeElement !== pct) pct.value = speechProfanePct();
   pct.disabled = !swear.length || !speechProfane();
-  document.getElementById("speechProfanityWho").textContent = swear.length ? `(${swear.join(", ")})` : "";
+  // by name, and the shorter way round (the author, 2026-10-16): "(all but Down to business, Vulcan)"
+  const label = k => { const v = (speechLib.styles || {})[k]; return typeof v === "string" ? v : (v && v.label) || k; };
+  const clean = styles.map(([k]) => k).filter(k => !swear.includes(k));
+  document.getElementById("speechProfanityWho").textContent = !swear.length ? "" : !clean.length ? "(all)"
+    : swear.length >= clean.length ? `(all but ${clean.map(label).join(", ")})` : `(${swear.map(label).join(", ")})`;
   document.getElementById("speechDangerBusiness").checked = speechDangerBusiness();
   document.getElementById("speechShift").checked = speechShift();
+  // Main personality: one of them, or "A mix…" (the boxes above and One personality per system)
+  const main = document.getElementById("speechMain"), names = Object.fromEntries(styles);
+  const single = !speechMix() && on.length === 1 && on[0] in names;
+  const optHtml = styles.map(([k, v]) => { const sv = styleVoice(k), own = sv.voice || sv.speaker != null;
+    return `<option value="${esc(k)}">${esc(typeof v === "string" ? v : (v && v.label) || k)}${own ? ` (${esc(voiceWords(sv))})` : ""}</option>`; }).join("")
+    + `<option value="__mix">A mix…</option>`;
+  if (main.dataset.drawn !== optHtml) { main.innerHTML = optHtml; main.dataset.drawn = optHtml; }
+  if (document.activeElement !== main) main.value = single ? on[0] : "__mix";
+  document.getElementById("speechMixBox").hidden = single;
+  drawMainHint();
   drawStyleVoices();
   if (crewUi) drawCrew();   // the XO's personality is the ones ticked
   const err = speechLib.error || (speechLib.problems || []).slice(0, 3).join("; ");
@@ -9401,6 +9418,21 @@ namesBox.onchange = () => { store.set("speechNames", namesBox.value.trim() ? nam
 drawSpeechStyles();
 document.getElementById("speechDangerBusiness").onchange = e => store.set("speechDangerBusiness", e.target.checked);
 document.getElementById("speechShift").onchange = e => { store.set("speechShift", e.target.checked); shiftStyle = null; drawSpeechStyles(); };
+document.getElementById("speechMain").onchange = e => {
+  const v = e.target.value;
+  if (v === "__mix") store.set("speechMix", true);
+  else { store.set("speechStyles", [v]); store.set("speechMix", false); }
+  shiftStyle = null; e.target.blur(); drawSpeechStyles();
+};
+// under Main voice and Main personality: what they are for, with the crew on (the XO's) and off (every alert)
+function drawMainHint() {
+  document.getElementById("mainHint").textContent = data && data.crew && data.crew.on   // (crewOn: defined further down)
+    ? "The XO's voice and personality: voice answers, status reports, the co-pilot and the hush, every crew member left " +
+      "\"as the XO\", and the stand-in for any crew member whose voice cannot speak. With the crew off (Split the alerts " +
+      "among a crew, below), this voice and personality say every alert."
+    : "This voice and personality say every alert, as well as voice answers, status reports and the co-pilot. To give " +
+      "alerts to other voices, tick Split the alerts among a crew below: these then become the XO's.";
+}
 document.getElementById("speakMode").onchange = e => { store.set("speakMode", e.target.value); drawSpeaker(); };
 document.getElementById("serverPlay").onchange = e => { store.set("speakOnServer", e.target.checked); drawServerPlay(); drawSoundBtn(); };
 document.getElementById("speakerClaim").onclick = () => claimSpeaker(true);
@@ -9926,8 +9958,9 @@ function drawCrew(force = false) {
   document.getElementById("crewBox").hidden = !c || !roles.length;
   document.getElementById("crewOn").checked = crewOn();
   document.getElementById("crewDanger").checked = crewDangerOn();
-  for (const id of ["crewDangerWrap", "crewAudition", "crewLinesAudition", "crewTable", "crewXoNote", "ttsXo", "ttsXoHint", "styleVoicesCrew"])
+  for (const id of ["crewDangerWrap", "crewAudition", "crewLinesAudition", "crewTable", "crewXoNote", "ttsXo", "ttsXoP", "styleVoicesCrew"])
     document.getElementById(id).hidden = !on;
+  drawMainHint();
   drawAlertCrew(force);
   if (!on) { crewDrawn = ""; return; }
   const t = (data && data.tts) || {}, voices = t.voices || [], styles = Object.keys(speechLib.styles || {});

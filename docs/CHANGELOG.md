@@ -2,6 +2,17 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Settings → Voice: Main personality beside Main voice, profanity's "all but", the section full width
+- **Main personality = XO:** a dropdown under Main voice picks one personality. Its last entry, **A mix…**, shows the
+  boxes and One personality per system (moved up from further down).
+  - A new shared setting, `speechMix`, is in both SETTINGS_KEYS and BROWSER_SETTINGS. Never set, it follows what is
+    ticked: exactly one shows the dropdown, several show the mix, so no browser's setup changes.
+- **An explanation under the two:** with the crew on, they are the XO's (answers, reports, the co-pilot, members "as
+  the XO", the stand-in); with it off, they say every alert.
+- **With profanity:** it names the personalities by their names, the short way round: "(all but Down to business,
+  Vulcan)", or the ones that swear when they are fewer.
+- **Voice spans the columns** on a big screen, as Server settings and Spoken lines do.
+
 ## 2026-10-16 · Space chatter: two stations that sound alike never talk, by what is heard
 - **The comparison:** two stations are kept apart by the voice and person you really hear (`chatVoiceKey`), not by
   the settings as written. These now count as the same person:

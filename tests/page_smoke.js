@@ -9000,6 +9000,50 @@ const releasePayloads = async () => {
     console.log(goodTL ? "OK" : "FAIL", "| header tiles shown |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "Settings → Display ticks the tiles this device shows: left out of the row and the one line, a column each, at least one stays, the fold modes kept", errors.slice(before));
   }
+  // Main personality (the author, 2026-10-16): beside Main voice, one personality or "A mix…" (the boxes and One
+  // personality per system); a browser with one ticked gets the dropdown, with several the mix; the explanation says
+  // what they are for with the crew on and off; with profanity names the personalities that never swear, the short way
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, got = {};
+    const sel = d.getElementById("speechMain"), box = d.getElementById("speechMixBox"), hint = d.getElementById("mainHint");
+    const pick = v => { sel.value = v; sel.dispatchEvent(new w.Event("change", {bubbles: true})); };
+    w.eval(`window.__mp = {lib: speechLib, crew: data.crew, store: ["speechStyles", "speechMix", "speechShift"].map(k => [k, localStorage.getItem(k)])};
+      speechLib = Object.assign({}, speechLib, {styles: {business: "Down to business", sarcastic: "Sarcastic", vulcan: {label: "Vulcan"}, klingon: "Klingon"},
+        lines: {hull: {business: ["b"], sarcastic: ["s"], sarcastic_profane: ["s!"], vulcan: ["v"], klingon: ["k"], klingon_profane: ["k!"]}}});
+      localStorage.removeItem("speechMix"); localStorage.setItem("speechStyles", '["sarcastic"]'); data.crew = Object.assign({}, data.crew, {on: false});
+      drawSpeechStyles(); drawMainHint();`);
+    try {
+      const opts = [...sel.options].map(o => o.value);
+      got.one = [opts, sel.value, box.hidden];
+      w.eval(`localStorage.setItem("speechStyles", '["business","sarcastic"]'); drawSpeechStyles()`);
+      got.several = [sel.value, box.hidden];
+      pick("vulcan");
+      got.picked = [w.eval(`JSON.stringify([store.get("speechStyles"), store.get("speechMix")])`), box.hidden];
+      pick("__mix");
+      got.mix = [w.eval(`JSON.stringify([store.get("speechStyles"), store.get("speechMix")])`), box.hidden, sel.value,
+                 box.querySelector('[data-sstyle="vulcan"]').checked, !!box.querySelector("#speechShift")];
+      got.swear = d.getElementById("speechProfanityWho").textContent;
+      w.eval(`speechLib.styles.calm = "Calm"; drawSpeechStyles()`);
+      got.swearFew = d.getElementById("speechProfanityWho").textContent;
+      got.hintOff = [hint.textContent.startsWith("This voice and personality say every alert"), d.getElementById("ttsXoP").hidden];
+      w.eval(`data.crew = Object.assign({}, data.crew, {on: true}); drawMainHint()`);
+      got.hintOn = /^The XO's voice and personality: .*With the crew off .* say every alert\.$/.test(hint.textContent);
+    } finally {
+      w.eval(`const k = window.__mp; speechLib = k.lib; data.crew = k.crew;
+        for (const [key, v] of k.store) { if (v === null) localStorage.removeItem(key); else localStorage.setItem(key, v); }
+        drawSpeechStyles(); drawMainHint(); delete window.__mp;`);
+      await releasePayloads();
+    }
+    const want = {one: [["business", "sarcastic", "vulcan", "klingon", "__mix"], "sarcastic", true], several: ["__mix", false],
+      picked: [JSON.stringify([["vulcan"], false]), true], mix: [JSON.stringify([["vulcan"], true]), false, "__mix", true, true],
+      swear: "(all but Down to business, Vulcan)", swearFew: "(Sarcastic, Klingon)", hintOff: [true, true], hintOn: true};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodMP = !bad.length && errors.length === before;
+    allOk = allOk && goodMP;
+    console.log(goodMP ? "OK" : "FAIL", "| main personality |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "one personality or A mix… (its boxes and one per system), a mix kept for a browser with several ticked, the explanation with the crew on and off, profanity's \"all but\"", errors.slice(before));
+  }
   // Space chatter (#15): who may talk to whom (never two stations of one personality, or of one voice and person; a
   // personal topic about a quarter of the time), a dialogue said in order with names in the captions (or not, with the
   // toggle off) and dropped after an alert, a monologue in space and on a planet (landed or in orbit), a line missing a
