@@ -2,6 +2,21 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-17 · A Fable review of every spoken line: 464 lines replaced
+- **What was read:** all 70,258 lines, both alerts and chatter, for all eleven personalities. The review ran as 43
+  chunks, each read by a Fable reviewer against its personality's style sheet, then checked by a second Fable
+  reader that kept only real problems with better replacements.
+- **What came of it:** 551 lines flagged, 464 confirmed.
+  - **226 wrong:** the line said something false for its alert. Examples: "critical" for a hull at just under half,
+    "the codex will confirm" a green gas giant (it has no entry), "mapping complete" for an anomaly found by the FSS,
+    "frame shift complete" inside the tunnel, "leaving the no fire zone" at undock.
+  - **198 quality:** a placeholder that reads badly when filled ("Tank at about 6 jumps"), a bare count, an image
+    that does not parse.
+  - **37 tone:** two Southern Belle lines assumed the player's gender ("worth her salt").
+  - **3 content:** a disability jibe, a crude sexual idiom, an unintended double meaning.
+- **How they went in:** each replacement went in only where the line was unchanged, its placeholders were allowed and
+  a clean list stayed clean. Every personality's own validator and the chatter validator still pass.
+
 ## 2026-10-17 · Space chatter: five chattiness steps with their timings, the section on one line
 - **How often:** Rare, Occasional, Normal, Chatty, Non-stop (`outrider.chatter.LEVELS`: 15, 10, 7, 4, 2 minutes).
   Each option says its timing ("Chatty: every 4 to 8 min"); a test keeps the options in step with LEVELS and
