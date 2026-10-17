@@ -9877,10 +9877,7 @@ function drawChatter() {
   on.checked = !!c.on;
   if (document.activeElement !== lv) lv.value = c.level || "normal";
   document.getElementById("chatNames").checked = chatterNames();
-  const roles = document.getElementById("chatRoles"), html = crewOn() ? "Stations that take part: " + crewRoles().map(r =>
-    `<label><input type="checkbox" data-chatrole="${esc(r.id)}"${(c.off || []).includes(r.id) ? "" : " checked"}> ${esc(r.short || r.id)}</label>`).join(" ") : "";
-  roles.hidden = !html;
-  if (roles.dataset.drawn !== html) { roles.innerHTML = html; roles.dataset.drawn = html; }
+  if (crewUi) drawCrew();   // the Crew table's Chatter column (who takes part)
 }
 async function chatPost(body) {
   const m = document.getElementById("chatMsg");
@@ -9894,7 +9891,6 @@ async function chatPost(body) {
 }
 document.getElementById("chatOn").onchange = e => chatPost({on: e.target.checked});
 document.getElementById("chatLevel").onchange = e => { e.target.blur(); chatPost({level: e.target.value}); };
-document.getElementById("chatRoles").onchange = e => { const r = e.target.dataset.chatrole; if (r) chatPost({role: r, takes_part: e.target.checked}); };
 document.getElementById("chatNames").onchange = e => { store.set("chatterNames", e.target.checked); };
 document.getElementById("chatTry").onclick = () => {
   const r = chatterNow({force: true}), m = document.getElementById("chatMsg");
@@ -9966,7 +9962,8 @@ function drawCrew(force = false) {
   if (!on) { crewDrawn = ""; return; }
   const t = (data && data.tts) || {}, voices = t.voices || [], styles = Object.keys(speechLib.styles || {});
   const tb = document.querySelector("#crewTable tbody");
-  const key = JSON.stringify([c, roles, voices, t.voice, t.speaker, t.speakers, styles, speechStyles()]);
+  const ch = (data && data.chatter) || {on: false, off: []};
+  const key = JSON.stringify([c, roles, voices, t.voice, t.speaker, t.speakers, styles, speechStyles(), ch.on, ch.off]);
   const busy = tb.contains(document.activeElement) && /^(SELECT|INPUT)$/.test(document.activeElement.tagName);
   if (!force && (key === crewDrawn || busy)) return;
   crewDrawn = key;
@@ -9987,6 +9984,8 @@ function drawCrew(force = false) {
       `<td><input type="text" data-cname maxlength="40" placeholder="no name" aria-label="${nm}: name" value="${esc(m.name || "")}"></td>` +
       `<td>${pers}</td><td>${voice}</td>` +
       `<td><select data-cspk data-sfone aria-label="${nm}: speaker" hidden></select><span data-cnospk class="unk">—</span></td>` +
+      `<td class="cchat${ch.on ? "" : " quiet"}"><label title="${nm} takes part in space chatter${ch.on ? "" : " (Space chatter is off, above)"}">` +
+      `<input type="checkbox" data-cchat aria-label="${nm}: takes part in space chatter"${(ch.off || []).includes(r.id) ? "" : " checked"}> talks</label></td>` +
       `<td class="cfor">${crewSpeaksFor(r.id)}</td>` +
       `<td><button type="button" class="try" data-cplay title="one of ${nm}'s lines, in its voice and personality (here, in this browser)">▶</button></td>` +
       `<td>${xo ? "" : `<button type="button" class="try" data-creset title='back to "as the XO" (its name kept)'${m.personality || m.voice ? "" : " disabled"}>↺</button>`}</td></tr>`;
@@ -10111,6 +10110,7 @@ crewUi = true;
     if (e.target.matches("[data-cname]")) crewPost({role, name: e.target.value});
     else if (e.target.matches("[data-cpers]")) crewPost({role, personality: e.target.value || null});
     else if (e.target.matches("[data-cvoice]")) crewPost({role, voice: e.target.value || null});
+    else if (e.target.matches("[data-cchat]")) chatPost({role, takes_part: e.target.checked});
     else if (e.target.matches("[data-cspk]")) {
       const spk = Number(e.target.value);
       if (!xo) speakerPicked[m.voice] = spk;

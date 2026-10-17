@@ -807,9 +807,9 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <h4 class="vmhead">Space chatter</h4>
         <label class="mod"><input type="checkbox" id="chatOn"> Talk in quiet moments
           <span class="hint">in supercruise, or while you are on foot or in the SRV on a planet, after a while with no alert; never in
-          danger, during a jump, or with the FSS, the DSS or a map open. With the crew on, its stations talk among themselves now and then</span></label>
+          danger, during a jump, or with the FSS, the DSS or a map open. With the crew on, its stations talk among themselves now and then
+          (the Crew table's Chatter column, below, picks which)</span></label>
         <label class="mod">How often <select id="chatLevel" aria-label="how often"><option value="rare">rare</option><option value="normal">normal</option><option value="chatty">chatty</option></select></label>
-        <div id="chatRoles" class="mod inlineopts" hidden></div>
         <label class="mod"><input type="checkbox" id="chatNames"> Say who is talking in the captions</label>
         <div class="mod"><button type="button" class="try" id="chatTry">▶ Try chatter</button> <span id="chatMsg" class="hint" role="status"></span></div>
       </div>
@@ -820,7 +820,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           <button type="button" class="try" id="crewAudition" hidden title="each crew member says one of its own lines in its own voice and personality (here, in this browser)">▶ Audition: by crew</button>
           <button type="button" class="try" id="crewLinesAudition" hidden title="one line naming another crew member for each alert that has them, in each personality, with the names given here (made-up ones for a member without); here, in this browser">▶ Audition: crew lines</button>
           <span class="hint">each alert said by a crew member in its own personality and voice, so you know who is talking (and what about) before the sentence ends; who says which alert is in Settings → Alerts; off: one voice for everything</span></div>
-        <table id="crewTable" class="crewtable" hidden><thead><tr><th>Role</th><th>Name</th><th>Personality</th><th>Voice</th><th>Speaker</th><th class="cfor">Speaks for</th><th></th><th></th></tr></thead><tbody></tbody></table>
+        <table id="crewTable" class="crewtable" hidden><thead><tr><th>Role</th><th>Name</th><th>Personality</th><th>Voice</th><th>Speaker</th><th title="takes part in space chatter (Space chatter, above)">Chatter</th><th class="cfor">Speaks for</th><th></th><th></th></tr></thead><tbody></tbody></table>
         <div id="crewXoNote" class="crewnote" hidden>The XO is your main voice: every crew member left "as the XO" speaks in it, and the XO steps in for any crew member whose voice cannot speak (not installed, failed to load), so no line is ever lost. A name is said when another crew member mentions that member ("ask Mira"); without one, its role ("ask the Engineer").</div>
         <span id="crewMsg" class="hint" role="status"></span>
       </div>

@@ -1015,7 +1015,10 @@ body.nowmode header, body.nowmode main { display: none; }
 .vmpre { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 2px 0; } .vmpre .hint { margin: 0 0 0 4px; }
 /* a member per row as a grid, so the table fits the dialog's column: its selects on the first line, Speaks for under them */
 .crewtable { width: 100%; margin: 6px 0 2px; font-size: 13px; border-collapse: collapse; }
-.crewtable tr { display: grid; grid-template-columns: 8.5em 6.5em minmax(0, 1fr) minmax(0, 1.3fr) 6.5em 2.2em 2.2em;
+/* the personality and voice no wider than their longest names need (the author, 2026-10-16: full width stretched them),
+   and the Chatter column: whether the station takes part in space chatter */
+.crewtable tr { display: grid; grid-template-columns: 8.5em 6.5em minmax(0, 15em) minmax(0, 17em) 6.5em 4.5em 2.2em 2.2em;
+  justify-content: start;
   column-gap: 6px; align-items: center; padding: 3px 4px; border-bottom: 1px solid var(--line); }
 .crewtable th, .crewtable td { padding: 0; text-align: left; font-weight: 400; min-width: 0; white-space: normal; border: 0; }
 .crewtable thead th { color: var(--muted); font-size: 12px; }
@@ -1031,6 +1034,8 @@ body.nowmode header, body.nowmode main { display: none; }
 .crewtable select { width: 100%; max-width: 100%; }
 .crewtable button { padding: 1px 6px; }
 .crewtable .asxo { font-style: italic; color: var(--muted); }
+.crewtable td.cchat label { display: inline-flex; align-items: center; gap: 4px; }
+.crewtable td.cchat.quiet { opacity: .55; }   /* space chatter off: kept, but nobody talks */
 .crewnote { margin: 6px 0 2px; padding: 5px 10px; border-left: 3px solid var(--info); color: var(--info); font-size: 12px;
   background: color-mix(in srgb, var(--info) 6%, transparent); }
 #alertDialog .alerttable td.acrew { text-align: left; width: 1%; }

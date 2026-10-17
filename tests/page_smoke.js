@@ -9156,14 +9156,17 @@ const releasePayloads = async () => {
         // rare's long gap, then chatty picked: chatty's gap (4 to 8 minutes) at once, not after the next line (sweep 2026-10-16)
         c.level = "rare"; due(); CHAT.lastAt = t - 10 * 60000; CHAT.gap = 25 * 60000; c.level = "chatty"; out.level = chatterTick(t); c.level = "normal";
         __spoken.length = 0; return JSON.stringify(out); })()`));
-      // Settings: drawn from data.chatter, the switches post
+      // Settings: drawn from data.chatter, the switches post; who takes part is the Crew table's Chatter column (the
+      // author, 2026-10-16: on the crew's own lines), dimmed while chatter is off
       w.eval(`data.crew.on = true; data.chatter = Object.assign({}, data.chatter, {on: true, level: "chatty", off: ["comms"]}); drawChatter()`);
-      const box = d.getElementById("chatRoles"), cb = r => box.querySelector(`[data-chatrole="${r}"]`);
+      const box = d.getElementById("crewTable"), cb = r => box.querySelector(`tr[data-crole="${r}"] [data-cchat]`);
       got.drawn = [d.getElementById("chatOn").checked, d.getElementById("chatLevel").value, box.hidden,
-                   box.querySelectorAll("[data-chatrole]").length, cb("comms").checked, cb("tactical").checked, d.getElementById("chatNames").checked];
+                   box.querySelectorAll("[data-cchat]").length, cb("comms").checked, cb("tactical").checked, d.getElementById("chatNames").checked,
+                   !d.getElementById("chatRoles"), cb("tactical").closest("td").classList.contains("quiet")];
       const change = el => el.dispatchEvent(new w.Event("change", {bubbles: true}));
       d.getElementById("chatOn").checked = false; change(d.getElementById("chatOn"));
       await sleep(50);
+      got.quiet = cb("tactical").closest("td").classList.contains("quiet");
       cb("tactical").checked = false; change(cb("tactical"));
       await sleep(50);
       d.getElementById("chatNames").checked = true; change(d.getElementById("chatNames"));
@@ -9200,7 +9203,7 @@ const releasePayloads = async () => {
       orbit: [["The ship is up there over B 7.", "chatter", null, null]],
       lab: ["Quiet in Drojau LL-O b26-3.", "Mira, fuel?"],
       ticks: {off: false, grace: false, skew: false, alert: false, gap: false, fss: false, queued: false, rare: false, due: true, spoken: 1, next: false, gapRange: true, level: true},
-      drawn: [true, "chatty", false, 9, false, true, false],
+      drawn: [true, "chatty", false, 9, false, true, false, true, false], quiet: true,
       posted: [[{on: false}, {role: "tactical", takes_part: false}], JSON.stringify(["comms", "tactical"]), false, true, true],
       crewOff: true,
       try: [[["Quiet in Sol.", "manual", null, null]], ""],

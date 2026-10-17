@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-17 · The crew table: narrower Personality and Voice, a Chatter column
+- **Narrower columns:** Personality and Voice are capped (15em and 17em) instead of stretching across the full-width
+  Voice section.
+- **A Chatter column:** each station's "takes part in space chatter" box is on its own crew line, dimmed while Space
+  chatter is off.
+- **A fix:** Space chatter's "Stations that take part" list is gone. It was drawn with the voice status, which could
+  come before the crew's roles arrived, so it showed its heading with no boxes. The crew table redraws when the lines
+  load.
+
 ## 2026-10-16 · Settings: Main voice and personality on one line, Voice beside the other wide sections
 - **One line:** Main voice and Main personality share a line (wrapping on a narrow screen), the explanation under
   them.

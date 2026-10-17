@@ -225,8 +225,8 @@ the sentence ends:
 
 - **The table.** A row per crew member: an optional **Name** (shown in Settings and the voice lab, and said when another
   crew member mentions it: see Crew lines below), its
-  **Personality** (whose lines it says) and **Voice** (and **Speaker**, for a voice of many people), what it **speaks
-  for**, **▶** to hear one of its lines and **↺** to put it back to "as the XO". The XO row is the main voice and the
+  **Personality** (whose lines it says) and **Voice** (and **Speaker**, for a voice of many people), **Chatter** (whether it
+  takes part in Space chatter, below), what it **speaks for**, **▶** to hear one of its lines and **↺** to put it back to "as the XO". The XO row is the main voice and the
   personalities you ticked: changing its voice changes the main voice.
 - **The XO stands in.** A new crew starts with everyone "as the XO", so switching it on changes nothing you hear until
   you give a member a voice of its own. A member left "as the personality" speaks in that personality's voice
@@ -337,8 +337,7 @@ someone says something: in supercruise, or while you are on foot or in the SRV o
 - **With the crew on,** the stations talk among themselves. Now and then one asks another about its work (fuel, the
   route, the stars, the money, the life you sample...) or, about a quarter of the time, something personal, and
   gets an answer, sometimes with a last word back. Two stations of the same personality, or with the same voice,
-  never talk to each other. They call each other by name when you gave one, else by station. **Stations that take
-  part** leaves any of them out.
+  never talk to each other. They call each other by name when you gave one, else by station. The Crew table's **Chatter** column leaves any of them out.
 - **Say who is talking in the captions** (per browser) puts "Engineer (Mira):" before each line.
 - If an alert comes in mid-conversation, the rest of the conversation is dropped. Chatter lines can be banned in
   Spoken lines like any other.
