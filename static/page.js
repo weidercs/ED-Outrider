@@ -1988,7 +1988,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["scoopstop", "fuel scooping stopped early (not above 90%, nor when you jump)", null],
   ["supercharge", "the frame shift drive supercharged in a neutron star or white dwarf cone", null],
   ["exo", "Expressway to Exomastery (a route plotted in Plot Route): on arriving at a route system, the species still to sample there and the best of them, and once they are sampled the next stop, and route complete", null],
-  ["riches", "Road to Riches and the Earth-like and ammonia world routes (plotted in Plot Route), and a sweep (plotted from ticks in Left behind, My firsts or Bookmarks): on arriving at a route system, the bodies still worth scanning or mapping there (a sweep: none) and the next stop, and route complete", null],
+  ["riches", "Road to Riches and the Earth-like, ammonia and terraformable world routes (plotted in Plot Route), and a sweep (plotted from ticks in Left behind, My firsts or Bookmarks): on arriving at a route system, the bodies still worth scanning or mapping there (a sweep: none) and the next stop, and route complete", null],
   ["trade", "a trade route (plotted in Plot Route): on arriving at a stop, what to sell and buy there; once that is done, the hop's profit and the next stop; and route complete", null],
   ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
   ["refuelshort", "a Highway route plotted with the exact plotter: the fuel aboard won't reach the next refuel stop (once per system; at a refuel stop itself the route's line only shows how much to scoop)", "alert"],
@@ -6803,6 +6803,8 @@ const SURVEY = {
         form: ["radius", "max_results", "max_distance", "avoid_thargoids", "loop"]},
   aw: {glyph: "🧪", name: "Ammonia worlds", what: "ammonia route", a: "an ammonia world route", work: "bodies", left: ["body", "bodies", "to do here"],
        form: ["radius", "max_results", "max_distance", "avoid_thargoids", "loop"]},
+  tf: {glyph: "🪨", name: "Terraformable worlds", what: "terraformable route", a: "a terraformable world route", work: "bodies", left: ["body", "bodies", "to do here"],
+      form: ["radius", "max_results", "max_distance", "avoid_thargoids", "loop"]},
   sweep: {glyph: "🧹", name: "Sweep", what: "sweep", a: "a sweep", work: null, left: ["stop", "stops", "here"], form: null},
   trade: {glyph: "💱", name: "Trade route", what: "trade route", a: "a trade route", work: "trade", left: ["trade", "trades", "to make here"], form: null},
 };

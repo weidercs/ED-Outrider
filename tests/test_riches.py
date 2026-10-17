@@ -626,6 +626,12 @@ class SurveyKinds(unittest.TestCase):
         aw = riches.survey_rows("aw", fx["aw"]["result"])
         self.assertEqual([len(r["bodies"]) for r in aw], [0, 2, 1, 1, 1])
         self.assertEqual({b["subtype"] for r in aw for b in r["bodies"]}, {"Ammonia world"})
+        # #18 (2026-10-17): the terraformable route, both body types over Spansh's SCAN-value floor: terraformables only
+        self.assertEqual(fx["tf"]["parameters"], {"body_types": ["Rocky body", "High metal content world"], "min_value": "100000"})
+        tf = riches.survey_rows("tf", fx["tf"]["result"])
+        self.assertEqual([len(r["bodies"]) for r in tf], [0, 4, 4, 5, 4])
+        self.assertTrue(all(b["scan"] >= 100000 for r in tf for b in r["bodies"]))
+        self.assertEqual({b["subtype"] for r in tf for b in r["bodies"]}, {"High metal content world", "Rocky body"})
 
     def test_plot_worlds(self):
         """S52: an Earth-like world route plots through Road to Riches' endpoint with Spansh's own page's fields
@@ -668,6 +674,27 @@ class SurveyKinds(unittest.TestCase):
         parts = ov.route_parts({"kind": "riches", "summary": dict(self.state.survey_summary(), complete=False, next=None,
                                                                     left_here=2)})
         self.assertEqual("".join(t for t, _c in parts), "🌍 To Gamma Rich · 2 bodies to do here")
+
+    def test_plot_terraformable(self):
+        """#18 (the author, 2026-10-17): the terraformable route asks Road to Riches for both rocky and high metal content
+        worlds with a 100,000 floor (Spansh tests it against the scan value: plain HMC scan under 20 thousand,
+        terraformables over 120), whatever min_value the form sends; it is followed with its own words."""
+        self.jump(-100, 1001, "Alpha Rich", 0)
+        sp = self.spansh([(200, {"job": "t1", "status": "queued"}), (200, {"job": "t1", "status": "ok", "result": RESULT})])
+
+        async def go():
+            with unittest.mock.patch.object(ed_outrider, "HIGHWAY_POLL_S", 0.01):
+                out = self.state.riches_start_plot({"kind": "tf", "range": 50, "radius": 40, "min_value": 5})
+                await self.state.riches_task
+            return out
+        self.assertEqual(asyncio.run(go())[1], 202)
+        self.assertEqual(self.state.riches_plotting["state"], "done", self.state.riches_plotting.get("error"))
+        method, url, fields = sp.session.calls[0]
+        self.assertEqual((method, url, fields["min_value"]), ("POST", ed_outrider.SPANSH_RICHES, "100000"))
+        sent = fields["body_types"]
+        self.assertEqual(sorted(sent if isinstance(sent, list) else [sent]), ["High metal content world", "Rocky body"])
+        self.assertEqual((self.state.riches_state()[0]["kind"], self.state.riches_view()["route"]["mapping"]), ("tf", True))
+        self.assertEqual(riches.survey_kind("tf").complete, "Terraformable route complete.")
 
     def test_tourist_rows(self):
         """P2 (U2): the tourist router's answer: its system_jumps in the order to fly them, each with the jumps from the

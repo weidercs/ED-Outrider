@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-17 · A Terraformable worlds route (🪨, NEXT-VERSION #18)
+- **What:** Plot Route has a seventh plotter, Terraformable, beside Earth-like and Ammonia. It is the Road to Riches
+  router asked for rocky and high metal content worlds, kind `tf` in `outrider.riches.SURVEY_KINDS` and in page.js
+  SURVEY.
+- **The floor:** Spansh's own Rocky/HMC page sends min_value 1, which answers every plain rocky body (2 thousand
+  mapped) and plain HMC (50 thousand) too. Probing showed Spansh tests min_value against the scan value, so a floor of
+  100,000 keeps the terraformables alone (scans of 127 to 186 thousand, maps of 460 thousand or more). At 300,000 it
+  answered nothing.
+- **Tests:** the probed answer is a fixture (`tests/fixtures/spansh_body_types.json` "tf"), with a test for the plot's
+  fields.
+- **Also:** `scripts/route_probe.py` no longer probes when imported.
+
 ## 2026-10-17 · A Fable review of every spoken line: 464 lines replaced
 - **What was read:** all 70,258 lines, both alerts and chatter, for all eleven personalities. The review ran as 43
   chunks, each read by a Fable reviewer against its personality's style sheet, then checked by a second Fable

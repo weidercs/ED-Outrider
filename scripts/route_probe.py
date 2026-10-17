@@ -75,4 +75,5 @@ def main():
     sys.exit("elw, aw or tourist")
 
 
-main()
+if __name__ == "__main__":   # imported (a one-off check), it probes nothing
+    main()
