@@ -2,6 +2,26 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-17 · Space chatter's lines: all eleven personalities (11,443 lines)
+- **What each personality has** (in `resources/speech.json` for Down to business, Sarcastic and Sweet, and in each
+  file in `resources/personalities/`):
+  - talking alone: about 60 lines in supercruise, 30 on a planet with the ship landed nearby, 30 with it in orbit
+    (the author: double the first plan);
+  - about 20 last words after an answer;
+  - a dozen questions and a dozen answers for each of the 18 topics;
+  - a swearing version of every list for the nine that swear.
+- **How they were written:** a writer per personality and group, from each personality's style sheet, checked by a
+  validator:
+  - the placeholders each key fills, with no `{ship_dist}` in orbit, no `{name}` in crew-to-crew talk, and `{to}` in
+    questions and answers;
+  - the line counts, duplicates across keys, and anything Piper cannot say;
+  - each personality's own rules (Vulcan's style, Klingon spellings, the southern pair's avoided words, the
+    Scoundrel's limits, the swearing rates);
+  - no swearing line a near-copy of a clean one: nine parts were sent back for fresh lines.
+- **Switched on:** `outrider.chatter.LINES_WRITTEN` is True, so the shipped-lines tests require the lines. The crew
+  lines test knows chatter's sizes. Each chatter key in `speech.json` has its "when".
+- **The guide:** what chatter says, instead of "not yet".
+
 ## 2026-10-17 · The crew table: narrower Personality and Voice, a Chatter column
 - **Narrower columns:** Personality and Voice are capped (15em and 17em) instead of stretching across the full-width
   Voice section.

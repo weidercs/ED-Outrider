@@ -591,6 +591,9 @@ class CrewLines(unittest.TestCase):
                 want = 12 if key == "autotarget_nothing" and lst.endswith("_profane") else short.get(key, 50)
                 if key in ("fuel_short", "fuel_last_scoop") and lst != "business":
                     want = 15
+                if key in S.CHATTER_KEYS:   # space chatter's own sizes (2026-10-17): 60 alone in space, 30 on a planet,
+                    want = {"chatter_space": 55, "chatter_planet_landed": 27, "chatter_planet_orbit": 27,   # 20 last words,
+                            "chatter_react": 18}.get(key, 11)                                              # a dozen asks
                 self.assertGreaterEqual(len(plain), want, f"{key}/{lst}")
                 crew = [v for v in vs if S.crew_named(v)]
                 if crew:

@@ -126,9 +126,9 @@ SAMPLES = {
     "chatter_react": {"to": "Mira"},
     **{f"chat_{t[0]}_{w}": {"to": "Mira"} for t in TOPICS for w in ("ask", "answer")},
 }
-# The lines are written per personality in a later batch (the author listens to the personalities first): until then
-# the speech files have none, the page says so, and the shipped-lines test does not ask for them.
-LINES_WRITTEN = False
+# The lines are in the speech files (written 2026-10-17 for all eleven personalities): the shipped-lines test asks for
+# them, and a personality's coverage counts them. False again would make them optional (a key added before its lines).
+LINES_WRITTEN = True
 
 
 def page_info():

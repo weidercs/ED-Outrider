@@ -9198,7 +9198,7 @@ const releasePayloads = async () => {
       alive: [true, false],
       noNames: ["Mira, fuel?", "Plenty, Ada.", "Thanks, Mira."],
       space: [true, [["Quiet in Sol.", "chatter", null, null]]],
-      strict: ["no chatter lines yet: they come in a later update", []],
+      strict: [served.chatter.written ? "nothing to say right now" : "no chatter lines yet: they come in a later update", []],
       landed: [["The ship is 300 m away on B 7.", "chatter", null, null]],
       orbit: [["The ship is up there over B 7.", "chatter", null, null]],
       lab: ["Quiet in Drojau LL-O b26-3.", "Mira, fuel?"],
@@ -9207,7 +9207,7 @@ const releasePayloads = async () => {
       posted: [[{on: false}, {role: "tactical", takes_part: false}], JSON.stringify(["comms", "tactical"]), false, true, true],
       crewOff: true,
       try: [[["Quiet in Sol.", "manual", null, null]], ""],
-      tryEmpty: "no chatter lines yet: they come in a later update",
+      tryEmpty: served.chatter.written ? "nothing to say right now" : "no chatter lines yet: they come in a later update",
     };
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodCH = !bad.length && errors.length === before;

@@ -3255,6 +3255,740 @@
     "{name}. Curious. You have stopped, and yet there is more. {text}",
     "{text} Noted, {name}."
    ]
+  },
+  "chatter_space": {
+   "vulcan": [
+    "The silence of supercruise is most agreeable, {name}. I find I have nothing to add to it.",
+    "I have calculated how many more times you will say we are nearly there. The figure is not encouraging.",
+    "Humans describe this as the long haul. I believe they mean it as a complaint. I find it restful.",
+    "Fascinating. Every star out here has burned for millions of years without once requiring our attention.",
+    "On Vulcan, a journey of this length would be considered a fine opportunity for meditation. I am taking it.",
+    "I estimate a ninety-one point three percent probability that you are about to hum, Captain. I would ask you to reconsider.",
+    "You have been looking at the same star for some time, {name}. It has not moved. I checked.",
+    "Surak taught that wasted motion is wasted thought. I mention this for no particular reason, Captain.",
+    "Space is not empty. It is merely sparsely furnished. I find the arrangement efficient.",
+    "I believe the human expression is that we are in the middle of nowhere. That is inaccurate. Nowhere has no middle.",
+    "The hull hums at a frequency I find soothing. I would not describe this as an emotion. It is an observation.",
+    "I have been reviewing the logs. Your spelling has improved, Captain. Slightly.",
+    "A Vulcan crew would find this journey restful. A human crew, I am told, finds it boring. I note the difference without comment.",
+    "Boredom is an emotion. I do not experience it. I am, however, acutely aware of the time.",
+    "Captain, you once asked whether I ever get lonely out here. I have now considered the question. No.",
+    "Logic dictates that the stars will still be there when we arrive. There is no need to hurry. I say this knowing you will hurry.",
+    "I have counted the stars visible from this seat. It passed the time. I would not recommend it to a human.",
+    "Humans say no news is good news. Out here there is no news at all. By that reasoning, we are doing exceptionally well.",
+    "The Vulcan Science Academy would be most interested in this region. They would also have questions about our methods, {name}.",
+    "I find the human habit of talking to the ship curious. It does not answer. I have tested this.",
+    "If you are wondering, {name}, I am not bored. I am conserving conversation.",
+    "We have travelled a considerable distance together. I believe a human would say we have bonded. I would say we have logged hours.",
+    "In my experience, the longest part of any journey is the part a human spends asking how much longer.",
+    "I have grown accustomed to {ship}. A human would call it affection. I call it familiarity with the controls.",
+    "The galaxy holds four hundred billion stars, give or take. We have visited a statistically insignificant number. I find that encouraging. There is much to do.",
+    "Meditation is difficult in supercruise. The stars keep moving. I have adapted by closing my eyes.",
+    "I have noticed that humans fill silence with words. I have also noticed that I am now doing the same. Regrettable.",
+    "Captain, I will not say that I enjoy these quiet stretches. I will say that I do not object to them. You may draw your own conclusions.",
+    "There is a human saying that the journey is the destination. It is illogical. It is also, out here, oddly accurate.",
+    "I once explained Vulcan poetry to a human pilot. She fell asleep. In fairness, so does much of the audience on Vulcan.",
+    "My people value patience above most virtues. This posting is testing that value thoroughly.",
+    "Fascinating. The light reaching us now left its star before your species learned to write. It has been travelling longer than we have. Barely.",
+    "Humans hum when they think no one is listening. I am always listening. I thought you should know, {name}.",
+    "I have been asked whether Vulcans dream. We do. Mine are mostly about stellar classification.",
+    "Supercruise is the most efficient way to watch nothing happen. I find it instructive.",
+    "If I were inclined to complain, {name}, this would be the moment. I am not. I wanted you to notice.",
+    "I am told that humans sing on long voyages. I would ask that we preserve the tradition of not doing so.",
+    "A star is merely a very large, very patient fusion reaction. I find I respect it.",
+    "On Vulcan we have a word for this kind of stillness. It does not translate. The closest human word is nice, which is inadequate.",
+    "I have checked the navigation figures twice. Not because I doubted them. I wished to be certain of my certainty.",
+    "I am told humans find the black frightening. I find it tidy.",
+    "Captain, I have composed a list of suggested improvements to your flying. It is short. I left out the longer list.",
+    "Logic suggests we will arrive somewhere eventually. That is the nature of travelling. I find it comforting, in a mathematical way.",
+    "The human phrase is to kill time. I prefer to let it pass unharmed.",
+    "I do not require conversation, {name}. But if you wish to talk, I am prepared to listen. Briefly.",
+    "There is a pleasing order to the way the stars wheel past. Humans see chaos. I see arithmetic.",
+    "I estimate a seventy-eight point four percent chance that you will open the galaxy map within ten minutes. I will not be offended either way.",
+    "I have learned a human idiom for this: smooth sailing. We are not sailing. It is nonetheless smooth.",
+    "Minutes in supercruise: {minutes}. I am keeping count so that you need not.",
+    "Elapsed supercruise time, in minutes: {minutes}. The stars have not noticed. Neither, I suspect, have you.",
+    "Minutes in supercruise so far: {minutes}. I have used them to meditate. You have used them, I suspect, differently.",
+    "Jumps this session: {jumps}. I note it for the log. Also because you will ask later.",
+    "Our tally of jumps this session stands at {jumps}. An efficient figure, by human standards.",
+    "Jumps so far: {jumps}. I have reviewed each one. I have opinions, which I will keep to myself.",
+    "Systems first discovered this session: {firsts}. The Vulcan Science Academy would call that a respectable contribution.",
+    "First discoveries this session: {firsts}. Your name will be on them, {name}. I have made my peace with that.",
+    "Our count of first discoveries stands at {firsts}. Somewhere, a cartographer is about to have a busy afternoon.",
+    "{system}. A name only a catalogue could love. I find it rather elegant.",
+    "The name {here} was assigned by a catalogue, not a poet. I find that honest.",
+    "Statistically, most systems like {system} are unremarkable. I say most.",
+    "If anyone asks where we were today, {name}, I will tell them {here}. They will not have heard of it. Few have.",
+    "Few beings have ever spoken the name {system} aloud. I have now done so. It was not difficult."
+   ]
+  },
+  "chatter_planet_orbit": {
+   "vulcan": [
+    "The ship is holding orbit above {body}, {name}. I am watching. From a considerable height.",
+    "Orbit is stable. I will be here when you call. That is, after all, the arrangement.",
+    "From up here, {body} looks peaceful. I trust it is behaving the same way at ground level.",
+    "I have used the time in orbit to meditate. The view is excellent for it. You should try it, Captain. From up here.",
+    "The ship does not like orbiting without its captain. I am anthropomorphising. It is a human habit. Apparently contagious.",
+    "Should you require the ship, call. I will bring it down. Carefully. More carefully than some.",
+    "{body} turns beneath us at its own pace. It has never once hurried. I find that admirable.",
+    "On Vulcan we would call this a vigil. Humans would call it waiting. The difference is in the posture.",
+    "I can see the terminator line moving across {body}. Not a machine. The boundary of night. I mention this for clarity.",
+    "I am told humans fear being left behind. I want to be clear, {name}. I am not leaving.",
+    "Everything up here is quiet. I suspect you are having the more interesting time. I do not envy it.",
+    "The orbit is very orderly. One revolution after another. There is something to be learned from that, Captain.",
+    "I estimate a sixty-one point seven percent chance that you will call for the ship sooner than you planned. I am ready either way.",
+    "{body} is a fine world to look at from a distance. I am exercising that option.",
+    "Down there, you are making history, {name}. Up here, I am making notes.",
+    "I have been studying the surface of {body} from orbit. It is large. Please do not get lost on it.",
+    "The silence up here is complete. I would describe it as pleasant, if Vulcans used that word. We do. Sparingly.",
+    "A human pilot once told me that orbit is just falling and missing. That is accurate. I find it unsettling that it is accurate.",
+    "I have no complaints, Captain. I wish that noted, as it is rare.",
+    "The ship is in good hands while you are down there. Mine. I thought you would want to know whose.",
+    "I have tried looking for you from up here, {name}. You are very small. This is not a criticism.",
+    "When you are ready to leave {body}, call the ship. I would suggest doing so before you run out of daylight, or patience.",
+    "The human saying is out of sight, out of mind. You are out of sight. You remain, regrettably, on my mind.",
+    "Orbiting is the most logical way to wait. The ship does all the work and none of the complaining.",
+    "I find planets more agreeable from orbit. They are less dusty, and they keep their weather to themselves.",
+    "{body} has a curious surface from up here. I would value your report from closer in. In detail. Please.",
+    "There is no need to hurry, Captain. I will not say there is no need to return.",
+    "Fascinating. From orbit, the whole of {body} fits in the window. From the surface, I imagine it does not.",
+    "If you find something remarkable down there, tell me first. I will try to be suitably impressed.",
+    "I have prepared the ship for your return. That took four minutes. I have been waiting for the remainder."
+   ]
+  },
+  "chatter_planet_landed": {
+   "vulcan": [
+    "The ship is secure, {name}. I am monitoring the surface from here. Take your time. Within reason.",
+    "You are {ship_dist} away, Captain. I mention it so that you remember where the ship is.",
+    "{ship_dist} back to the ship. A short distance, by Vulcan standards. Vulcan standards are high.",
+    "I believe the human custom is to leave a light on for those who are out. I have left several.",
+    "I have been watching the horizon of {body}. Nothing has moved. I find that reassuring.",
+    "{body} is quiet. So is the ship. I am making use of both.",
+    "If you are collecting samples out there, Captain, please label them. Last time I was left to guess.",
+    "I am responsible for the ship. You are responsible for yourself. I have, however, kept an eye on both.",
+    "Humans enjoy exploring new worlds in person. I enjoy the silence while they do it.",
+    "You are {ship_dist} from the ship, {name}. Logic suggests you will want to come back eventually.",
+    "I have used your absence to tidy the cockpit. I will not describe what I found.",
+    "On Vulcan, explorers crossed the Forge on foot for days. This is much shorter. I find it adequate.",
+    "The ship sits {ship_dist} away, not moving, as landed ships tend to do. I say this for completeness.",
+    "{body} has been here for billions of years. I suspect it will tolerate us for another hour.",
+    "I have been tracking you from the ship. Your route is not efficient. It is, I concede, thorough.",
+    "Take whatever time you need out there. I will be here. Meditating. Not waiting.",
+    "Out there on {body}, every metre is a first for someone. Today it is you. Try to make them careful metres.",
+    "The ship and I are in agreement, Captain. We will wait. Neither of us is pleased about it, but neither of us will say so.",
+    "Most of this world has never seen a visitor. It has not, to my knowledge, missed one.",
+    "{ship_dist} to the ship, {name}. An easy distance. I note it because humans have a habit of forgetting where they parked.",
+    "The surface readings are unremarkable from here. You may find otherwise. That is, I suppose, the point of going.",
+    "I have prepared a list of questions about what you find out there. It is long. I have been here a while.",
+    "Fascinating. You voluntarily left a pressurised ship for the surface of {body}. I will add it to my study of humans.",
+    "It is very quiet in the ship without you, Captain. I am not complaining. I am reporting.",
+    "There is a human expression: a watched pot never boils. I am watching the ship. It has not boiled. The expression holds.",
+    "I have kept the ship ready to lift. I do not expect trouble. I simply prefer to be prepared.",
+    "When you return, I would appreciate it if you left the surface outside. Dust gets into everything.",
+    "You have been out there a while, {name}. I do not worry. I calculate. The calculations are fine.",
+    "From the ship, {body} looks entirely uneventful. I would like it to stay that way until you are back aboard.",
+    "Should you need the ship, it is {ship_dist} away and exactly where you left it. Ships are reliable in that respect."
+   ]
+  },
+  "chatter_react": {
+   "vulcan": [
+    "Noted.",
+    "Fascinating. Thank you, {to}.",
+    "That is more information than I required. I will retain it anyway.",
+    "Logical. Unexpectedly so.",
+    "I see. I will need time to decide whether that was a joke.",
+    "Thank you, {to}. That was illuminating. Mostly.",
+    "Indeed.",
+    "Curious. I will think on it, {to}.",
+    "Your answer has been logged. I did not say where.",
+    "I believe the human response is that is good to know. It is. Moderately.",
+    "Most illogical, {to}. I find I approve.",
+    "Acknowledged. I will not ask again. Probably.",
+    "That is not the answer I calculated. I will revise my calculations, {to}.",
+    "An efficient answer. Thank you.",
+    "Intriguing. I have more questions. I will save them for a longer watch.",
+    "Highly illogical. Thank you for sharing it, {to}.",
+    "I concur. That is rare. Please do not grow used to it.",
+    "Hm. I will add that to my study of the crew.",
+    "I had hoped for fewer emotions in that answer, {to}. Still, it was informative.",
+    "Understood. I will meditate on it. Later. Possibly at length."
+   ]
+  },
+  "chat_fuel_ask": {
+   "vulcan": [
+    "{to}, what is the state of the fuel tank? I prefer to ask before the question becomes urgent.",
+    "{to}. A query regarding fuel. Is the scoop performing within tolerance?",
+    "How efficient was the last scoop, {to}? I am curious whether we approached the star at the optimal distance.",
+    "{to}, I would like your assessment of our fuel reserves. Approximate figures are acceptable. Barely.",
+    "Tell me, {to}, do you find scooping fuel from a star as remarkable as I do? I find it remarkable. Quietly.",
+    "{to}, the Captain approaches stars more closely than is strictly necessary when scooping. Has the scoop raised any objection?",
+    "Is there any reason for concern about fuel, {to}? I ask in the absence of any reason. It is a habit.",
+    "{to}, how many jumps would you estimate remain in the tank? I will not hold you to the figure. I will merely note it.",
+    "I have a question about the fuel scoop, {to}. Specifically, whether it has ever been cleaned.",
+    "The fuel is not low, {to}, yet I find myself thinking about it. Is that a human trait I have acquired, or an engineering one?",
+    "Which star class do you prefer for scooping? I have a preference, but I would hear yours first.",
+    "What is our fuel consumption per jump at present? Logic suggests we should know it, and I do not."
+   ]
+  },
+  "chat_fuel_answer": {
+   "vulcan": [
+    "The tank is adequate. Adequate is a word I use when I would prefer more, but logic does not require more.",
+    "The scoop is functioning within tolerance. I calibrated it during the last quiet hour. There have been many quiet hours.",
+    "Fuel is sufficient, {to}. The Captain scoops at every opportunity. It is the one human habit I endorse without reservation.",
+    "I have checked the fuel twice this watch. Once would have sufficed. The second check was for my own peace of mind, which is regrettable.",
+    "We drink from stars, {to}. My people would call it efficient. I call it efficient as well. We are not a poetic species.",
+    "The scoop is in good order. The Captain's approach angles are less so, but the scoop does not complain. I have learned from it.",
+    "Insufficient data for a precise figure, but the tank is in no danger. If it were, I would have said so. Insistently.",
+    "{to}, the fuel situation is stable. I find stability restful. I am told humans find it boring.",
+    "The scoopable stars are K, G, B, F, O, A and M. Humans remember them as a word. I simply remember them.",
+    "I would rate our fuel management as satisfactory. That is high praise. Do not repeat it to the Captain.",
+    "The fuel lines are clean, the scoop is aligned and the tank is sealed, {to}. I have nothing further to report, which is the most efficient kind of report.",
+    "I have estimated our fuel use per jump to three decimal places. You did not ask for the decimals, {to}. You have them regardless."
+   ]
+  },
+  "chat_route_ask": {
+   "vulcan": [
+    "{to}, where are we going? I ask out of professional interest, not impatience. Vulcans are not impatient.",
+    "What is the next jump, {to}? I would like to prepare. Mentally. That is the only preparation required.",
+    "{to}, has the Captain plotted a route, or are we once again choosing the nearest unvisited star?",
+    "Is there a destination, {to}, or merely a direction?",
+    "{to}, how far ahead is the route plotted? I find open-ended plans difficult to approve of.",
+    "I would value your opinion on the route, {to}. Is it efficient, or is it the Captain's?",
+    "{to}, do you know where we are going, or does only the Captain know? Or does no one?",
+    "Is there a logical reason for our heading, {to}? I have tried to deduce one.",
+    "{to}, what lies along the route ahead? Anything of scientific value would be welcome.",
+    "Tell me about the next system, {to}. I have found it useful to know where I am before I arrive.",
+    "Where does the route take us next? I have a wager with myself. Vulcans do not wager, so it is a hypothesis.",
+    "How many jumps until we stop somewhere worth stopping? I phrase it neutrally, for the record."
+   ]
+  },
+  "chat_route_answer": {
+   "vulcan": [
+    "We are heading toward the nearest system no one has visited. It is the Captain's method. It is not a method, but it is consistent.",
+    "The route is plotted a few jumps ahead. Beyond that, the Captain prefers to decide. I would prefer the Captain did not.",
+    "{to}, I expect the next star to be of no particular distinction. I say so in advance, so that I may be neutrally surprised.",
+    "We have a heading. Whether we have a destination is a philosophical question, and I am a navigator.",
+    "I have plotted four alternative routes, {to}. The Captain will select a fifth. This is the established pattern.",
+    "The route is efficient. I designed it. If it changes, the change will not be mine.",
+    "Logic dictates the shortest path. The Captain dictates the interesting one. I plot both, and file the shorter one for reference.",
+    "{to}, we are going outward. On Vulcan we would call that a direction. Here, it appears to be a plan.",
+    "The next jumps are within range and, as far as the charts know, unremarkable. Unremarkable routes are my preferred kind.",
+    "I keep the route in the nav computer and a second copy in my head. The computer has never needed the second copy. Yet.",
+    "Our heading is sound, {to}. I checked it twice. The second check was unnecessary, which I find reassuring.",
+    "We go where the stars are unnamed, {to}. It is the Captain's preference. I have come to find it acceptable. Largely."
+   ]
+  },
+  "chat_drive_ask": {
+   "vulcan": [
+    "{to}, how is the frame shift drive performing? I noticed nothing unusual, which is why I ask.",
+    "What is our jump range at present, {to}? I would like a precise figure. I always would.",
+    "{to}, could the drive be tuned for more range? I am not complaining. I am inquiring about improvement.",
+    "Is the drive running warm, {to}, or is that simply the way it sounds?",
+    "{to}, do you ever listen to the drive spool and find it soothing? I do not. I merely ask.",
+    "How long since the drive was last serviced, {to}? Logic suggests it is time to ask.",
+    "{to}, what would it take to add another light year to our range? Hypothetically.",
+    "Is the drive engineered to its limit, {to}, or merely to the limit of the Captain's patience?",
+    "{to}, our supercruise speed seems adequate. Is adequate the best we can achieve?",
+    "Tell me about the drive, {to}. I find its workings more interesting than most conversation.",
+    "Does the drive require anything of us? I prefer to know before it is required urgently.",
+    "How does this drive compare with the others you have worked on? Be honest. I will be."
+   ]
+  },
+  "chat_drive_answer": {
+   "vulcan": [
+    "The drive is performing within specification. I would tell you if it were not, at length.",
+    "{to}, the frame shift drive is engineered close to its limit. The remaining gains are small. I pursue them anyway.",
+    "Jump range is satisfactory. It could be greater. Everything could be greater. Logic accepts limits; engineers rarely do.",
+    "I recalibrated the drive's power distribution during the last long stretch of supercruise. The improvement is measurable. Barely, but measurable.",
+    "The drive is sound, {to}. It hums at a frequency I find agreeable. Do not read anything into the word agreeable.",
+    "Our drive is reliable. Reliability is underrated by humans, who prefer speed. We have both, within reason.",
+    "{to}, the drive is fine. I have checked it, rechecked it and meditated on it. In that order.",
+    "Supercruise speed is governed by gravity wells and physics, not by me. I have petitioned neither.",
+    "The frame shift drive folds space so that we may cross it. It is an elegant solution. I would have designed it with fewer moving parts.",
+    "There is no fault with the drive. There is a faint vibration on spool-up that I have chosen to classify as character.",
+    "I could extend the range further, {to}, at the cost of cargo, shields and comfort. The Captain has expressed opinions on comfort.",
+    "The drive receives more of my attention than anything else aboard. It has never once asked how I am. A satisfactory arrangement."
+   ]
+  },
+  "chat_ship_ask": {
+   "vulcan": [
+    "{to}, what is the condition of the ship? A summary will do. A detailed summary.",
+    "Are there any modules that require attention, {to}? I would rather hear of them now than later.",
+    "{to}, how is the hull holding up after all this time?",
+    "Is {ship} in good order, {to}? I ask because it is my duty, and because I am curious.",
+    "{to}, do we have the materials for any repairs we may need? I would like to plan for contingencies.",
+    "What would you change about this ship, {to}, if the Captain allowed it?",
+    "{to}, the ship seems quiet. Is quiet a good sign, in your professional opinion?",
+    "How long could {ship} go without a station, {to}? Theoretically.",
+    "{to}, is there anything aboard that is broken and that no one has told me about?",
+    "Your assessment of the ship's modules, {to}. Be precise. I find precision restful.",
+    "Is the ship as sound as it sounds? I have heard a creak I cannot account for.",
+    "What is the weakest part of this ship? I have a theory, but I would rather hear yours."
+   ]
+  },
+  "chat_ship_answer": {
+   "vulcan": [
+    "The ship is in good order. I have a list of small defects. It is a long list of small defects, which is not the same as a problem.",
+    "Hull integrity is acceptable, {to}. Acceptable is my highest rating. I do not award it lightly.",
+    "All modules are functioning. Some are functioning with more enthusiasm than others, if enthusiasm can be ascribed to machinery. It cannot.",
+    "The ship creaks. It is thermal expansion. I have catalogued every creak aboard. There are forty-one. I find them familiar.",
+    "{to}, the ship is sound. I would stake my reputation on it. Vulcans do not stake things, but the expression seemed appropriate.",
+    "We carry a repair unit. I trust it. I also watch it. Trust and observation are not mutually exclusive.",
+    "If I could change one thing aboard, it would be the coffee machine. I do not drink coffee. The machine is simply inefficient.",
+    "The ship has been well maintained, {to}. By me. I mention it only for the completeness of the record.",
+    "Nothing is broken. A great many things are wearing, which is what things do. I monitor the rate.",
+    "The power plant runs cool and the distributor is balanced. If the ship had feelings, I would describe them as content. It does not.",
+    "The modules are within tolerance, {to}. I have arranged the maintenance schedule by priority, and then alphabetically, for tidiness.",
+    "This ship has carried us further than its designers intended. That is a credit to them, and to maintenance. Mostly maintenance."
+   ]
+  },
+  "chat_biology_ask": {
+   "vulcan": [
+    "{to}, what have you learned from the samples so far? I am interested. Genuinely.",
+    "Have you found anything alive out here that surprised you, {to}?",
+    "{to}, which organism do you find most fascinating? I have my own answer, but I would hear yours.",
+    "How do you decide what to sample, {to}? I assume there is a logic to it.",
+    "{to}, do you ever wonder how life took hold on worlds this hostile?",
+    "Is exobiology as rewarding as the Captain seems to believe, {to}?",
+    "{to}, what is the strangest thing you have ever sampled?",
+    "Tell me about the genetic sampler, {to}. Is it as delicate as it looks?",
+    "{to}, how many species are there still to catalogue, would you estimate?",
+    "What do you look for first on a new world, {to}? Atmosphere? Gravity? Intuition?",
+    "Is there life we have missed? I ask because I suspect the answer is yes.",
+    "What does a bacterium on a frozen moon teach us? I ask philosophically. And practically."
+   ]
+  },
+  "chat_biology_answer": {
+   "vulcan": [
+    "Life persists in places where logic says it should not. That is the most fascinating thing I know.",
+    "{to}, every organism I sample is an argument against the improbable. I have not yet won the argument.",
+    "I hold the bacteria in high regard. They are simple, efficient and ask nothing of anyone. I admire that.",
+    "I sample methodically. Three samples per species, each at a proper distance from the last. The Captain occasionally forgets the distance. I do not.",
+    "{to}, I once spent an hour observing a single frond. It did not move. It was the most productive hour of that week.",
+    "Exobiology rewards patience, {to}. Fortunately, patience is a Vulcan's principal asset.",
+    "The genetic sampler is precise and fragile. It is very much like me, except that I do not need recharging.",
+    "There is life on worlds where the temperature would kill a human in seconds. The life does not seem to mind. It is very dignified about it.",
+    "On Vulcan, we study life to understand ourselves. Out here, I study it to understand how much we do not know. The quantity is considerable.",
+    "{to}, we have catalogued a fraction of what exists. The fraction is small. I find that encouraging rather than discouraging.",
+    "I have learned that the most unremarkable lichen can be the rarest. Appearances mislead. That is true of lichen and of crews.",
+    "Each species has adapted to its world with perfect logic, and not one of them was ever told to. I would find that humbling, if Vulcans were humbled."
+   ]
+  },
+  "chat_stars_ask": {
+   "vulcan": [
+    "{to}, what is the most unusual star you have ever studied?",
+    "Is there anything scientifically remarkable nearby, {to}? I would not want to pass it unnoticed.",
+    "{to}, do you have a favourite class of star? I suspect you do, and that you will deny it.",
+    "What do you make of the planets we have passed, {to}? Any of note?",
+    "{to}, which is stranger, a neutron star or a black hole? I seek a ranking.",
+    "Have you ever seen something out here you could not explain, {to}?",
+    "{to}, why are there so many brown dwarfs? It seems an inefficient use of matter.",
+    "Tell me something about the galaxy I do not know, {to}. I will judge whether it qualifies.",
+    "{to}, what would you study, given unlimited time out here?",
+    "Is a ringed world as rare as it looks, {to}, or merely as beautiful? I ask for a friend. That is a human idiom. I have no such friend.",
+    "What is the most beautiful thing you have catalogued? I ask in a purely aesthetic sense.",
+    "Why do humans name stars after themselves? I ask in your capacity as a scientist."
+   ]
+  },
+  "chat_stars_answer": {
+   "vulcan": [
+    "Most stars are red dwarfs. They are small, cool and will outlive everything else. There is a lesson in that, though I would not presume to teach it.",
+    "{to}, a neutron star can spin hundreds of times a second and does not complain. I find it exemplary.",
+    "Every planet is a record of its own formation. I read them as others read novels. With more attention, and less sentiment.",
+    "I have catalogued many ringed worlds. They remain aesthetically pleasing. I am permitted aesthetics. I do not indulge in them often.",
+    "The galaxy is roughly one hundred thousand light years across. We have seen a fraction of it. I find the fraction motivating.",
+    "{to}, I have observed nothing I could not explain. I have observed several things I have not yet explained. The distinction is important.",
+    "Brown dwarfs are failed stars. I prefer to call them stars that chose moderation.",
+    "A black hole is not strange. It is simply consistent. It takes what it can reach and lets nothing go. Humans call that greed. Physics calls it gravity.",
+    "Fascinating is a word I reserve for the deserving. The galaxy has used up a remarkable amount of my reserve, {to}.",
+    "The Vulcan Science Academy would envy our data. They would not say so. Neither would I, had I not just said so.",
+    "Every star we pass was burning for millions of years before anyone looked at it. I find that a useful corrective to self-importance. Human self-importance in particular.",
+    "{to}, the strangest thing out here is not a star. It is that anything exists to look at one. That is my considered view."
+   ]
+  },
+  "chat_money_ask": {
+   "vulcan": [
+    "{to}, what is the exploration data we carry worth, approximately? I find approximate figures uncomfortable, but I will accept one.",
+    "How are our finances, {to}? I ask out of duty. Vulcans have no great interest in money.",
+    "{to}, when do you expect we will sell our data? A rough estimate is acceptable.",
+    "Is it logical to carry unsold data through a long voyage, {to}? I seek your professional view.",
+    "{to}, what would a first discovery out here fetch at Universal Cartographics?",
+    "Do you keep a ledger, {to}? I assume you do. I would be disappointed otherwise.",
+    "{to}, is exploration profitable, or merely satisfying? I am trying to understand the Captain's motive.",
+    "What is the most valuable thing we have ever scanned, {to}?",
+    "{to}, how do you account for the risk of losing unsold data? In your books, I mean.",
+    "Tell me, {to}, are we rich? I ask in the human sense, which I understand to be relative.",
+    "What does a terraformable world sell for these days? I ask out of curiosity, not avarice.",
+    "How do you value a discovery? By credits, or by being first? I suspect the Captain values the second."
+   ]
+  },
+  "chat_money_answer": {
+   "vulcan": [
+    "Our data has value. I will not state a figure I cannot verify. I will say it is a figure I would prefer not to lose.",
+    "{to}, our finances are sound. I keep the books in three formats. Two of them are redundant. I keep them anyway.",
+    "The data will be sold when the Captain decides to return. I have calculated when that will be. I have also calculated how often I am wrong about the Captain.",
+    "Exploration data gains nothing by waiting, and risks a great deal. I have mentioned this. It is in the log. Twice.",
+    "Credits are a means, not an end. I tell myself this while counting them, which I do frequently.",
+    "{to}, being first to discover a world adds to its value. It also adds to the Captain's mood, which has its own value, though I cannot invoice it.",
+    "Terraformable and earth-like worlds pay best. I note them carefully. I do not celebrate them. I note them carefully twice.",
+    "I keep a ledger, {to}. It balances. I find a balanced ledger more calming than meditation. I would not admit that on Vulcan.",
+    "Universal Cartographics pays well for what is new. Much of what we scan out here qualifies. I log every item.",
+    "Wealth is relative. Relative to a miner, we do well. Relative to a trader, I prefer not to make the comparison.",
+    "The money is adequate, {to}. Adequate is sufficient. Sufficient is all logic requires. The Captain requires slightly more.",
+    "A wise investor diversifies. An explorer carries everything in one ship. I have noted the difference, without emphasis."
+   ]
+  },
+  "chat_mining_ask": {
+   "vulcan": [
+    "{to}, would mining be a logical use of our time out here? I ask without bias.",
+    "What is the most valuable ore you have ever pulled from a rock, {to}?",
+    "{to}, are the mining tools in good condition? I would not wish to see them neglected.",
+    "How do you choose which asteroid to break open, {to}? It seems arbitrary from here.",
+    "{to}, do you miss the rings? I assume miners grow attached to them, though I cannot confirm it.",
+    "Is mining as tedious as it appears, {to}, or is there something I am failing to see?",
+    "{to}, what is the best ring you have ever worked? I ask for planning purposes.",
+    "Tell me about core mining, {to}. I have heard it is loud. Literally.",
+    "{to}, could we mine our way out of a shortage of credits, if one arose?",
+    "What do you think of the mining rigs, {to}? I have heard competing views.",
+    "Is there ore worth taking out here, or is mining a pastime for the bubble? I seek an expert opinion.",
+    "How many tons could we carry, if we filled the hold with ore? I am estimating. Poorly, by my standards."
+   ]
+  },
+  "chat_mining_answer": {
+   "vulcan": [
+    "Mining is patience applied to rock. I have both in sufficient quantity.",
+    "{to}, the best ore I ever extracted was painite, from a ring I will not name. Miners do not share coordinates. That is not secrecy. It is logic.",
+    "The tools are maintained. The limpets are counted. I count them again each watch. They have never once been miscounted.",
+    "I choose asteroids by their composition, their density and their position. Humans call it instinct. It is arithmetic.",
+    "{to}, core mining involves charges, fractures and a controlled detonation. It is the only time I raise my voice. I do not raise it much.",
+    "Mining is not tedious. It is repetitive. The two are often confused by those who do not mine.",
+    "A pristine metallic ring is the ideal. It is rare. Most ideal things are.",
+    "There is ore almost everywhere, {to}. Markets are rarer. Out here, logic usually suggests we leave it where it lies.",
+    "I once spent eleven hours in one ring. The yield was excellent. The conversation, in the absence of anyone, was also excellent.",
+    "The rigs are tools, {to}. I do not grow attached to tools. I clean them, oil them and speak to them occasionally, for calibration purposes.",
+    "Mining could cover our expenses, if necessary. It is rarely necessary. That does not stop me thinking about it.",
+    "Rocks do not lie. They are what their spectra say they are. I find their company restful."
+   ]
+  },
+  "chat_threats_ask": {
+   "vulcan": [
+    "{to}, how would you rate our readiness, should someone attempt an interdiction?",
+    "Do you expect pirates where we fly, {to}? I ask for statistical reasons.",
+    "{to}, what is our plan if we are interdicted? I would like to hear it in advance.",
+    "Are the shields in a state you would trust, {to}?",
+    "{to}, have you ever lost a ship? I ask in order to understand your caution.",
+    "What is the greatest danger to this ship, {to}? Excluding the Captain's landings.",
+    "{to}, do you find the quiet out here reassuring, or suspicious?",
+    "How would you fare against a pirate in a heavier ship, {to}? Honestly.",
+    "{to}, is it logical to fly without weapons, as explorers often do?",
+    "Tell me what keeps you watchful, {to}, when nothing is happening.",
+    "Are we safe? I mean statistically. I am aware that no one is safe absolutely.",
+    "What would a Thargoid make of us, do you think? I ask theoretically, and with no wish to test it."
+   ]
+  },
+  "chat_threats_answer": {
+   "vulcan": [
+    "Our readiness is adequate. Our best defence is the frame shift drive. Running is not cowardice. It is arithmetic.",
+    "{to}, an interdiction is a negotiation. I prefer to end it by leaving. The other party rarely agrees, but they are rarely consulted.",
+    "The shields are sound. I test them in my head several times each watch. The test is theoretical. The shields have not objected.",
+    "Pirates prefer busy lanes and slow cargo haulers. We are rarely either. I find that statistically comforting.",
+    "{to}, the greatest danger out here is not pirates. It is a planet surface approached too quickly. I have mentioned this to the Captain.",
+    "I remain watchful because nothing is happening. Nothing is precisely the condition in which things begin to happen.",
+    "There is a saying that the unprepared are merely unlucky in advance. It is not a Vulcan saying. I invented it just now. It is still true.",
+    "{to}, I do not trust quiet. I do not distrust it either. I observe it.",
+    "Explorers fly light, and light ships run well. If I must choose between a gun and a faster escape, logic chooses the escape.",
+    "I have run every interdiction scenario I can imagine. The Captain survives most of them. I have recommended improvements for the rest.",
+    "There are no threats on my scanners at present. If there were, I would tell you calmly. You would still know.",
+    "Thargoids are beyond my tactical capability, {to}. I respect anything beyond my capability. There is not much of it."
+   ]
+  },
+  "chat_traffic_ask": {
+   "vulcan": [
+    "{to}, have you heard anything on comms worth repeating? I set a high bar.",
+    "Is there any traffic out here at all, {to}, or are we alone with the static?",
+    "{to}, what do you make of the other commanders you hear? I find them varied.",
+    "How do you filter the noise, {to}? I imagine a great deal of it is illogical.",
+    "{to}, do station controllers ever say anything interesting? I ask in hope rather than expectation.",
+    "Have you ever enjoyed a conversation with another commander, {to}? I am trying to understand the appeal.",
+    "{to}, what is the most illogical thing you have heard on an open channel?",
+    "Do you miss the chatter of a busy station, {to}? I do not. I am asking about you.",
+    "{to}, how long since we last heard a voice that was not one of ours?",
+    "Is anyone out here listening, {to}? I ask for operational reasons, and from curiosity.",
+    "What is the etiquette for hailing a stranger in deep space? I suspect there is none.",
+    "Is comms quieter than usual? I have no baseline. I am hoping you do."
+   ]
+  },
+  "chat_traffic_answer": {
+   "vulcan": [
+    "The channels are quiet. Quiet channels are my preferred channels. I have tuned them to be quieter still.",
+    "{to}, most traffic is docking requests and complaints about docking requests. I have catalogued both. The complaints are more numerous.",
+    "Station controllers are efficient. I respect them. They do not respect me in return, but they do not respect anyone.",
+    "Other commanders say a great deal and convey very little. I translate it, internally, into the three things they actually mean.",
+    "I listen to the static between stations, {to}. It is the background of the universe. It is more articulate than some commanders.",
+    "Open channels contain a great many exclamation marks, if spoken words may be said to contain them. They may.",
+    "I once heard a commander sing for forty minutes on an open channel. I listened to all of it. For research.",
+    "{to}, there is no etiquette for hailing strangers out here. I have drafted one. No one has adopted it.",
+    "Comms are clear. If anyone speaks, I will hear it. If they speak illogically, I will hear that too.",
+    "The galaxy is very large and the radio is very small. Mostly I hear ourselves. I find our signal tolerable.",
+    "I do not miss station traffic, {to}. I miss its structure. There is a difference, and I prefer to keep it.",
+    "Humans fill silence with talk. I fill it with listening. One of us is efficient. I will not say which."
+   ]
+  },
+  "chat_the_captain_ask": {
+   "vulcan": [
+    "{to}, what is your assessment of the Captain's flying? Be candid. I will be.",
+    "Does the Captain ever explain decisions, {to}, or must we deduce them?",
+    "{to}, how would you describe the Captain's command style? Diplomatically, if you must.",
+    "Is the Captain a good pilot, {to}? I have formed a view and would like to compare it.",
+    "{to}, why does the Captain land so close to the edge of things? I have never received a satisfactory answer.",
+    "Do you trust the Captain's instincts, {to}? I ask because I am learning to, against my training.",
+    "{to}, what was the Captain's best decision since you came aboard?",
+    "How do you manage the Captain's moods, {to}? I simply wait for them to pass, like weather.",
+    "{to}, has the Captain ever taken your advice? I am collecting data.",
+    "Would you follow the Captain anywhere, {to}? I ask hypothetically. I already have.",
+    "What does the Captain see in all this empty space? I have looked. It is empty.",
+    "Is the Captain illogical, or merely human? I have not been able to separate the two."
+   ]
+  },
+  "chat_the_captain_answer": {
+   "vulcan": [
+    "The Captain flies with more intuition than procedure. It works more often than it should. I have stopped expressing surprise. Mostly.",
+    "{to}, the Captain's decisions are sound in outcome and baffling in method. I record the method in case it can be taught. It cannot.",
+    "I have served under more logical commanders. They were not always better. I have not told the Captain this, and I would ask that you do not.",
+    "The Captain listens to my advice, considers it carefully, and then does something else. It is a consistent process.",
+    "{to}, I estimate a ninety-four percent probability that the Captain will choose the nearest unvisited star next. The remaining six percent is the Captain's sense of humour.",
+    "The Captain's landings are confident. Confidence and precision are not the same thing, but they are occasionally neighbours.",
+    "I trust the Captain. I did not intend to. It happened gradually, like erosion.",
+    "{to}, the Captain once ignored my recommendation and was proven right. I have not forgotten. I am told that is called holding a grudge. I call it keeping records.",
+    "The Captain is not logical. The Captain is effective. I have revised my priorities accordingly, with some reluctance.",
+    "The Captain's moods follow no pattern I can model. I have tried. The model is in the log, marked incomplete.",
+    "I would follow the Captain into a nebula. I would also file a report about it afterward, in triplicate.",
+    "{to}, the Captain sees something in the dark that I do not. I have concluded that it is there. I simply lack the human instrument to detect it."
+   ]
+  },
+  "chat_watch_ask": {
+   "vulcan": [
+    "{to}, how are you passing the time? I am curious what others do with quiet.",
+    "Do you find the quiet watches difficult, {to}? I ask because many do.",
+    "{to}, how long has it been since anything happened? I have the figure. I want to know if yours agrees.",
+    "What do you think about during a long watch, {to}?",
+    "{to}, is boredom an emotion? I have been considering whether I am permitted it.",
+    "Have you noticed how slowly time passes in supercruise, {to}, despite our speed?",
+    "{to}, would you care to join me in meditation? It is not mandatory. It is advisable.",
+    "Tell me something to pass the time, {to}. Something accurate, preferably.",
+    "{to}, do you count the minutes on a quiet watch? I do. I find it orderly, not tedious.",
+    "How does a crew endure this much nothing, {to}? Ours seems to manage it better than I expected.",
+    "Is it illogical to be content when nothing is happening? I am asking for myself.",
+    "What is the most efficient way to spend a quiet hour? I have a list, but I am open to revision."
+   ]
+  },
+  "chat_watch_answer": {
+   "vulcan": [
+    "I have been reviewing the ship's logs. Every entry. Some twice. It is not boredom. It is thoroughness.",
+    "{to}, I meditate during quiet watches. The silence out here is ideal for it. The rest of the crew is not.",
+    "Time passes at a constant rate. Only perception varies. I have chosen not to perceive it varying.",
+    "I have been composing a treatise on the illogic of human hobbies. It is long. I am on chapter nine.",
+    "Boredom is the absence of stimulus combined with a desire for it. I have eliminated the desire. The absence remains, peacefully.",
+    "{to}, I count stars when the watch is quiet. Not all of them. A representative sample.",
+    "I have been studying a human idiom. Killing time. It is a violent expression for something so passive.",
+    "A quiet watch is not empty. It is full of things that are not going wrong. I find that worth observing.",
+    "{to}, I spent the last hour recalculating our position by hand. The computer was correct. I was also correct. A satisfying hour.",
+    "On Vulcan, a long silence is a sign of respect. Out here, it is simply a long silence. I respect it regardless.",
+    "I have been thinking about Surak, who taught that peace begins within. The ship is very peaceful. I suspect it has been reading him.",
+    "I am content, {to}. I would not describe it as enjoyment. I would describe it as the absence of reasons for complaint, which is rarer."
+   ]
+  },
+  "chat_family_ask": {
+   "vulcan": [
+    "{to}, what was your family like? I ask for purposes of comparison.",
+    "Tell me of your family, {to}. Briefly, if that is possible.",
+    "{to}, I am curious. Were your parents logical people?",
+    "Do you have siblings, {to}? Humans seem to collect them.",
+    "{to}, who raised you? I find that the answer explains a great deal about a person.",
+    "I have been studying the crew's origins. {to}, describe your family, please.",
+    "What did your family expect you to become, {to}? And did you comply?",
+    "{to}, does your family know where you are tonight? I assume they would find it remarkable.",
+    "Humans speak of family with great feeling. I would like to hear it without the feeling. Can you manage that?",
+    "Whom do you resemble more, {to}, your mother or your father? Or neither? That is also an answer.",
+    "Did your family approve of you flying out here? I ask out of curiosity, not concern.",
+    "{to}, were you close to your family? I am told that closeness is measured in visits."
+   ]
+  },
+  "chat_family_answer": {
+   "vulcan": [
+    "My father taught astrophysics at the Vulcan Science Academy. My mother was a healer. Between them, very little went unexplained in our house.",
+    "I have one younger brother. He chose music. My father called it a regrettable lapse. I consider it statistically inevitable in any family.",
+    "Logical people, all of them, {to}. Dinner was very quiet. I did not know until I met humans that dinner could be otherwise.",
+    "We had a sehlat when I was small. It was large, it was patient, and it once sat on my brother for an afternoon. No one intervened. It seemed educational.",
+    "My mother would ask how I was. I would say adequate. She would nod. It was, I now understand, an affectionate exchange.",
+    "My father expected me to join the Academy. I did. My brother was expected to as well. He did not. Our family has found balance, {to}.",
+    "We did not embrace, {to}. We did not need to. Everyone already knew where everyone stood. Usually beside a window, reading.",
+    "My family is still on Vulcan. They believe this posting is an anthropological study. They are not entirely wrong.",
+    "I write to my mother once a month. She replies once a month. Neither of us has ever been late. I find it very comforting.",
+    "My grandmother lived to two hundred and three. She attributed it to logic and stubbornness. Mostly the second, I suspect.",
+    "My family does not express pride. They acknowledge competence. I was acknowledged twice as a child. I remember both occasions precisely.",
+    "Mine was an orderly family, {to}. Yours, I suspect, was louder. Most are, by comparison."
+   ]
+  },
+  "chat_home_ask": {
+   "vulcan": [
+    "{to}, where did you grow up?",
+    "Where is home for you, {to}? I am told humans keep several.",
+    "{to}, describe the place you were raised. Climate, gravity, anything relevant.",
+    "What was the sky like where you grew up, {to}?",
+    "{to}, do you miss your homeworld? Assuming you have one. Some people are born on stations.",
+    "Tell me about home, {to}. I find the subject reveals a great deal.",
+    "Was your home quiet, {to}, or was it like most human places?",
+    "{to}, if you could return to where you grew up tomorrow, would you? Answer honestly.",
+    "Where were you raised? I have been unable to deduce it from the accent.",
+    "{to}, what is the first thing you remember about home?",
+    "Every member of this crew comes from somewhere. Where is yours?",
+    "{to}, what did home smell like? Humans insist that is important."
+   ]
+  },
+  "chat_home_answer": {
+   "vulcan": [
+    "I grew up in ShiKahr, on Vulcan. It is hot, the gravity is high, and the air is thin. Every other world feels like a holiday.",
+    "Vulcan has a red sky and very little rain. When I first saw rain on a human world, I studied it for an hour. A human asked if I was all right. I was taking notes.",
+    "Home is ShiKahr, {to}. A city at the edge of the desert. The silence there is of very high quality.",
+    "As a child, I walked into the Forge alone, as is our custom. I came back. That is the important part of the story.",
+    "I do not miss Vulcan, {to}. Missing is an emotion. I do, however, think about it at regular intervals.",
+    "Our house faced the desert. In the evenings, my father would name the stars. I corrected him once. He was pleased. Quietly.",
+    "Vulcan is a world of stone, heat and logic. In that order, some days.",
+    "The gravity on Vulcan is greater than on most human worlds. I mention it only because humans often wonder why I never seem tired.",
+    "Where I grew up, a conversation was considered long if it exceeded four sentences. I have since adapted. Against my better judgement.",
+    "It is quiet on Vulcan, {to}. Out here, it is also quiet. Perhaps that is why I took the posting.",
+    "I remember the heat most clearly, {to}. Everywhere else is cold to me. I have stopped mentioning it. Mostly.",
+    "Home was ShiKahr. It still is, I suppose. A Vulcan does not change addresses lightly. Or often."
+   ]
+  },
+  "chat_food_ask": {
+   "vulcan": [
+    "{to}, what is the best meal you have ever eaten?",
+    "And the worst meal, {to}? I find those more instructive.",
+    "{to}, I am researching human cuisine. What would you recommend? Or warn me against?",
+    "What did you eat as a child, {to}?",
+    "Is there a dish you miss, {to}? Out here, the menu is limited.",
+    "{to}, have you ever eaten something you regretted? Describe it, please. Clinically.",
+    "What is the strangest food you have tried, {to}?",
+    "Humans place great importance on meals. Which one has been most important to you?",
+    "{to}, if you could have one meal delivered to the ship, what would it be?",
+    "Do you cook, {to}? I ask because someone aboard must, eventually.",
+    "Tell me of a memorable meal. Good or bad. I will not judge. Aloud.",
+    "{to}, what is your opinion of ship rations? I would value a second view."
+   ]
+  },
+  "chat_food_answer": {
+   "vulcan": [
+    "The best meal I remember is my mother's plomeek soup. It is simple, it is warm, and it asks nothing of the eater. I approve of it entirely.",
+    "The worst was a human birthday cake. It was very sweet, it was on fire, and everyone sang at it. I have never understood which part was the meal.",
+    "I do not eat meat, {to}. I mention it because people offer it to me anyway. Often enthusiastically.",
+    "Plomeek soup. I could describe it, but it would not help. It tastes of orderly vegetables.",
+    "On a station once, I was served something called chilli. I was told it was mild. That was not an honest statement. I have noted the cook's name.",
+    "Ship rations are nutritionally adequate, {to}. I have no further comment. That is my comment.",
+    "Food is fuel. The rest is ceremony. I will admit the ceremony is sometimes pleasant.",
+    "My brother once cooked for the family. It was an experiment. My mother, being a healer, was glad to be at the table. Professionally.",
+    "I tried chocolate once, on a human ship. I will not discuss the effects. I was told afterwards that I laughed. I have no memory of this.",
+    "The best meals are the ones that do not require conversation, {to}. On Vulcan, that is all of them.",
+    "I have no favourite food. I do have a least unfavourite. It is soup. It is usually soup.",
+    "A human once made me toast. It was burnt. She insisted that was the point. I am still considering the argument."
+   ]
+  },
+  "chat_best_day_ask": {
+   "vulcan": [
+    "{to}, what is the best day you remember?",
+    "Tell me about a good day, {to}. The best one, if you can rank them.",
+    "{to}, which day of your life would you live again, if it were possible?",
+    "Humans speak of their best days with great feeling. What was yours, {to}? The feeling is optional.",
+    "{to}, when were you happiest? I ask in a spirit of research.",
+    "What day would you call a success, {to}? I am curious how humans measure it.",
+    "{to}, has there been a day out here that you would call perfect?",
+    "I am compiling a list of good days. Do you have one to contribute?",
+    "{to}, what was the proudest day of your life? I will not tell anyone. I may log it.",
+    "Is there a day you remember more clearly than all the others, {to}?",
+    "What is the best thing that has ever happened to you? Please be specific.",
+    "{to}, describe a day you would not change. If such a thing exists."
+   ]
+  },
+  "chat_best_day_answer": {
+   "vulcan": [
+    "Vulcans do not rank days by pleasure, {to}. The most satisfactory was the day I was admitted to the Vulcan Science Academy. I did not smile. I came close.",
+    "The day I defended my research on stellar formation. Three hours of questions from the Academy. Not one went unanswered. It was, I believe, what humans call a good day.",
+    "My first view of a nebula from orbit. I was young. I stood at the window for some time. My father did not hurry me. That was unusual.",
+    "I do not have a best day. I have a most efficient day. Nothing went wrong, and I finished early. I recall it fondly. Logically fondly.",
+    "The day my brother performed his first concert. I did not understand the music. I understood that he had worked for it. That was sufficient.",
+    "A day aboard the survey vessel when every instrument agreed with every other. It has not happened since. I live in hope. That is a figure of speech.",
+    "There was a day I walked back out of the Forge. I was thirsty, sunburnt and entirely alone. I had never felt more Vulcan.",
+    "I am not certain I have had it yet, {to}. Logic suggests the best day is statistically more likely to be ahead than behind.",
+    "Today is acceptable, {to}. I would not rule it out.",
+    "The day my mother told me she was proud. She did not use the word. She said, that was correct. I understood.",
+    "My first day on this ship, {to}. I calculated it would be difficult. It was. I was correct. Being correct is very satisfying.",
+    "A quiet day in the Academy library, reading star charts no one had opened in a century. I found three errors. I corrected them. No one noticed. It was perfect."
+   ]
+  },
+  "chat_fortune_ask": {
+   "vulcan": [
+    "{to}, what would you do with a fortune?",
+    "If you were suddenly wealthy, {to}, would you stay aboard? Answer truthfully.",
+    "{to}, suppose the next sale makes you rich. What then?",
+    "What would you buy first, {to}, if money were no object?",
+    "{to}, would a fortune change you? I am told it usually does.",
+    "Humans dream of riches with remarkable frequency. What is your dream, {to}?",
+    "{to}, a hypothetical. One billion credits. Your plan, please.",
+    "If you inherited a fortune, would you spend it or keep it? I ask because humans rarely keep it.",
+    "{to}, what is the most illogical thing you would buy with a fortune? I suspect there is something.",
+    "Would you give it away, {to}? Some do. I find it curious.",
+    "What would you do if you never had to work again? I find the idea difficult to imagine.",
+    "{to}, if you struck it rich out here, where would you go?"
+   ]
+  },
+  "chat_fortune_answer": {
+   "vulcan": [
+    "I would endow a chair at the Vulcan Science Academy, {to}. For the study of stellar formation. In my name, but discreetly.",
+    "A fortune is merely stored potential. I would spend it where it does the most good. Then I would return to work. Work is where I keep my interests.",
+    "I would fund a survey of the galaxy's edge. Properly equipped. Properly crewed. With fewer arguments about where to stop.",
+    "I would give part of it to my brother. He would spend it on instruments. It would be illogical. He would be content. Both outcomes are acceptable.",
+    "I would build an observatory in the desert near ShiKahr. My father would use it. He would never thank me. He would simply use it every night.",
+    "Would a fortune change me, {to}? No. That is one of the advantages of being Vulcan.",
+    "I would remain aboard. Wealth does not alter the value of the work. It alters only the quality of the tea.",
+    "I have calculated how I would spend a billion credits. The plan is eleven pages long, {to}. Page one is a better sensor suite.",
+    "Most humans would buy a larger ship. I would buy better instruments for this one. Then I would point them at something interesting.",
+    "Riches do not interest me. Libraries do. With a fortune, the two become the same thing.",
+    "I would not tell anyone, {to}. Humans behave strangely around money. I have observed it.",
+    "Perhaps I would purchase silence. A ship of my own, no conversation, a very long route. I would, I suspect, eventually miss this crew. Briefly."
+   ]
+  },
+  "chat_before_ask": {
+   "vulcan": [
+    "{to}, what did you do before this ship?",
+    "How did you come to be aboard, {to}? I have wondered.",
+    "{to}, what was your previous posting? I assume there was one.",
+    "Before you signed on, {to}, what did you imagine this would be like?",
+    "{to}, what work did you leave behind to come out here?",
+    "Were you always going to end up in the black, {to}, or did it happen by accident?",
+    "{to}, was your last job more or less logical than this one?",
+    "What brought you this far from home? I ask because something brought me too.",
+    "{to}, tell me about your career before this crew. The relevant parts.",
+    "Did you choose this life, {to}, or did it choose you? Humans often say the second.",
+    "What would you be doing now, if you had not come aboard?",
+    "{to}, who did you work for before the captain? Was it a better arrangement?"
+   ]
+  },
+  "chat_before_answer": {
+   "vulcan": [
+    "I was a researcher at the Vulcan Science Academy, {to}. Stellar formation and cartography. Then a posting on a survey vessel. Then this ship. Each step was logical.",
+    "I spent nine years charting stars at the Academy. Eventually I wished to see one up close. That is the most emotional decision I have ever made.",
+    "Before this, I served aboard a Vulcan survey vessel. It was very quiet. Everyone was correct. I found I needed a change.",
+    "I requested this posting to study two things: the galaxy's edge, and humans. The edge is easier.",
+    "At the Academy I worked among the old star catalogues. Many of the systems we visit are entries I once read. It is like meeting correspondents.",
+    "My father hoped I would teach. I tried, {to}, for one term. My students were afraid to ask questions. I took this as a sign.",
+    "I was not idle before this ship. I have never been idle. I was simply somewhere else, being productive.",
+    "On the survey vessel, we mapped one sector in four years. Out here, with the captain, we cover far more ground. Less thoroughly. Much less.",
+    "Did I choose this life? I applied for it, {to}. Through the proper channels. Three times.",
+    "Before this ship I had never served under a human. I have now done so for some time. The experience has been educational. For both of us, I trust.",
+    "I was what humans would call an academic. I am now what humans would call an explorer. I am the same person. Only the view has changed.",
+    "My previous captain was Vulcan. Orders were brief and always logical. This is different, {to}. I am adapting. Patiently."
+   ]
   }
  }
 }

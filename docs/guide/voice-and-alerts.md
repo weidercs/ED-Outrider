@@ -326,8 +326,13 @@ the sentence ends:
 Off by default. Tick **Talk in quiet moments** in ⚙ Settings → Voice → Space chatter and, after a while with no alert,
 someone says something: in supercruise, or while you are on foot or in the SRV on a planet.
 
-- **Not yet:** the switch and the timing are in, but the chatter lines themselves come in a later update. Until then
-  **▶ Try chatter** says so.
+- **What it says:** every personality has its own. On its own, about 60 lines for supercruise (some knowing the
+  system, how long you have been in supercruise, the session's jumps and first discoveries) and 30 each for a planet
+  with the ship landed nearby or up in orbit. Between stations, a question and an answer on 18 topics, mostly their
+  own work (fuel, the route, the drive, the ship, biology, the stars, the money, mining, threats, traffic, the
+  captain, a quiet watch) and sometimes something personal (family, home, food, the best day, a fortune, life
+  before this ship), about a dozen of each per personality, with swearing versions for the personalities that swear.
+  **▶ Try chatter** says one now.
 - **When:** never while you are docked or on foot in a station, in a taxi or multicrew, in danger, overheating, low on fuel, charging the
   FSD, low on oxygen or health on foot, or with a map, the FSS, the DSS or the codex open. The data you carry never stops
   it. It waits a minute after you enter supercruise or step out on a planet. It never talks over anything said or
