@@ -1325,6 +1325,12 @@ upstream project's choices, not rules of the game.
   rather than "ready" until the journal confirms. The cooldown is CARRIER_COOLDOWN_S from that arrival: an estimate,
   since busy systems and the servers delay it and only a player docked on the carrier sees the real jump. No automatic
   clipboard: the author found it confusing when not expected.
+- **Surface pins live in the places that exist** (#16, the author: UI space matters): no tab or panel of their own.
+  A body panel's folded 📍 Pins section, the map's legend (its title holds Pin here and copy), one line in the strip /
+  Now only while a pin is active, a one-character 📍 in the body lists, Bookmarks' list only when there are pins. Keyed
+  by the system and the body's full name (the panel, the map and Status.json all have it; a body id is not always
+  known). Only the active pin is guided or spoken: the others are drawn, never said. The tick refreshes the page as the
+  guidance changes (State.pin_watch: a distance step and a 10° turn), so it moves from orbit, above the map's 1,000 m.
 
 ## Known limits
 
@@ -1398,6 +1404,8 @@ confirmed while playing. Treat reports about them as likely real.
 - `CarrierBuy`, `CarrierDecommission` and `CarrierCancelDecommission`: written to Frontier's journal manual, never seen
   in the author's journals (the carrier was bought before them).
 - Status.json Flags2 on-foot-in-station bits (3, 13, 14) counting as docked.
+- Surface pins' guidance from orbital cruise down and their arrival distances; carrier trips' following (the leg on
+  the booked jump's departure, the cooldown estimate); chat read aloud from real squadron traffic (the pace, mentions).
 - Space chatter's places and blockers (`outrider.chatter.where`): the on-foot-on-planet and SRV bits, GuiFocus
   values and the suit warnings, from Frontier's journal manual only.
 - Auto honk end to end since it reads the binding from the controls preset; the fire-group and combat-mode waits.

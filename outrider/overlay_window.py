@@ -449,6 +449,10 @@ def paint(painter, data, win_w, win_h, arrange=False, override=None, all_pct=Non
                     painter.setPen(pen(c, 2))
                     painter.drawLine(QPointF(mx - r, my - r), QPointF(mx + r, my + r))
                     painter.drawLine(QPointF(mx - r, my + r), QPointF(mx + r, my - r))
+                elif kind == "diamond":   # a surface pin (#16)
+                    painter.setPen(QPen(Qt.PenStyle.NoPen))
+                    painter.setBrush(QBrush(colour(c)))
+                    painter.drawPolygon(QPolygonF([QPointF(mx, my - r), QPointF(mx + r, my), QPointF(mx, my + r), QPointF(mx - r, my)]))
                 else:   # arrow: a triangle pointing up, turned rot degrees clockwise
                     painter.save()
                     painter.translate(mx, my)

@@ -1477,3 +1477,14 @@ table.ovlay input[type=number]::-webkit-inner-spin-button, table.ovlay input[typ
 /* S47: Fill gaps in EDSM's flight log (Settings -> Uploads) */
 .bfill { margin: 4px 0 10px; } .bfill > summary { cursor: pointer; font-weight: 600; }
 .bfill .bfrow { margin: 4px 0; } .bfill .bfrow input { width: 11.5em; } .bfill button.try { margin-left: 4px; }
+/* surface pins (#16): the active pin's line, the 📍 on a body with pins, the legend's and the body panel's rows */
+.pinline b { color: var(--accent); }
+.pinmark { font-size: 0.85em; }
+.lg-pin { cursor: pointer; }
+.lg-pin .tg.pin { color: var(--accent); }
+.lg-pin.cur b { color: var(--accent); }
+.pinrow { margin: 2px 0; }
+.pinrow a { text-decoration: none; }
+.pinadd input { margin-right: 4px; }
+.pintable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pintable td, .pintable th { padding: 2px 6px; text-align: left; }

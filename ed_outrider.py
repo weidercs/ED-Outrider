@@ -290,6 +290,9 @@ TRADE_PLOT_TIMEOUT = 600    # s: the trade planner is slow (4 hops from Sol took
 # must include the tritium stored in the hold), planned in Plot Route, followed on the Carrier tile
 SPANSH_FC = "https://spansh.co.uk/api/fleetcarrier/route"
 CARRIER_TYPES = {"fleet": (25000, 25000), "squadron": (60000, 15000)}   # capacity, mass (Spansh's own figures)
+PIN_NAME_MAX = 40         # characters of a surface pin's name (#16)
+PIN_ARRIVE_M = {"ground": 50, "ship": 250}   # m: arrived at a pin, on foot or in the SRV / in the ship
+PIN_BANDS = (10000, 1000, 100)   # m: the active pin's distance said as you pass each (after "set", before "arrived")
 CARRIER_COOLDOWN_S = 300   # s after a carrier jump before the next can be booked (a busy system's servers take longer)
 CARRIER_LEG_S = 20 * 60    # s a leg takes: the 15-minute countdown and the cooldown (the plan's estimate)
 RICHES_METHOD = "POST"      # form fields (checked against the live API 2026-10-06; scripts/riches_probe.py checks it again)
@@ -1708,6 +1711,12 @@ CREATE TABLE IF NOT EXISTS surface_rigs (
     placed_ts TEXT, picked_ts TEXT, lost INTEGER, site_lat REAL, site_lon REAL, minerals TEXT,
     tons INTEGER NOT NULL DEFAULT 0, last_ts TEXT);
 -- surface_sites: a collection with no rig marked near it (an unmarked site), kept so a good spot is not lost.
+-- surface_pins (#16, the author 2026-10-17): named points on a body (its system and full name), kept until deleted:
+-- body bookmarks with fly-to guidance. Live-only: never in RESET_JOURNAL_DATA. ord: their order on the body;
+-- reached_ts: arrived at (dimmed, reset by hand)
+CREATE TABLE IF NOT EXISTS surface_pins (
+    id INTEGER PRIMARY KEY, system INTEGER NOT NULL, body TEXT NOT NULL, sysname TEXT, name TEXT NOT NULL,
+    lat REAL NOT NULL, lon REAL NOT NULL, ord INTEGER NOT NULL DEFAULT 0, reached_ts TEXT, created_ts TEXT);
 CREATE TABLE IF NOT EXISTS surface_sites (
     id INTEGER PRIMARY KEY, system INTEGER, body_id INTEGER, body TEXT, lat REAL, lon REAL, minerals TEXT,
     tons INTEGER NOT NULL DEFAULT 0, first_ts TEXT, last_ts TEXT);
@@ -7235,6 +7244,8 @@ class State:
         self.riches_plotting = None
         self.riches_task = None
         self.carrier_trip_plotting = None   # #19: {state, from, to, started, error} of the last carrier trip plot
+        self._pin_seen = None   # #16: (the active pin's id, the distance band said last)
+        self._pin_key = None    # #16: the guidance last sent (the page hears of a change)
         self.carrier_trip_task = None
         self.dock_cache = {}   # the Nearest finder's last Spansh search and permit check (DOCK_CACHE_S)
         # uploads (EDDN, EDSM, Inara: opt-in, off by default; outrider/uploads.py): switched in Settings -> Uploads, which
@@ -7422,6 +7433,7 @@ class State:
             "ship": self.journals.ship,
             "carrier": self.carrier_summary(),
             "carrier_trip": self.carrier_trip_summary(),   # #19: a carrier trip planned in Plot Route
+            "pins": self.pins_summary(),   # #16: surface pins (body bookmarks) and the active one's guidance
             "here_star": self.here_star(),
             "codex_recent": self.codex_recent(),
             "tail_error": self.tail_error,
@@ -8149,7 +8161,10 @@ class State:
                 # SRV, on foot: always shows) and an altitude from the average radius (never shows)
                 "down": bool(h["flags"] & (FLAG_IN_SRV | FLAG_LANDED) or h["flags2"] & 1), "alt_avg": bool(h["flags"] & FLAG_ALT_AVG),
                 "sites": self.surface_sites(h["system"], h["body_id"], h), "locations": locs, "bio": self.surface_bio(h),
-                "tags": tags_shown(self.bio_tags_here(h))}
+                "tags": tags_shown(self.bio_tags_here(h)),
+                # #16: this body's pins with where each is (the map and the overlay's radar draw them; the active one
+                # guided): the payload's pins.here, also here so the overlay needs no second look
+                "pins": (self.pins_summary()["here"] or {}).get("pins") or []}
 
     def bio_tags_here(self, h):
         """Plants tagged on this body (bio_tags) for species not finished here, nearest first: {species, genus,
@@ -16218,6 +16233,161 @@ class State:
         self._rc_copied = None
         return rc
 
+    # ---- surface pins (#16, the author 2026-10-17): named points on a body kept until deleted, one active at a time
+    # (meta pin_active {system, body, id}; else the first not reached, in order), guided from orbit down ----
+    def pins_body(self, system, body):
+        return [dict(r) for r in self.db.execute("SELECT * FROM surface_pins WHERE system=? AND body=? ORDER BY ord, id",
+                                                 (system, body))]
+
+    def pin_active(self, system, body, pins=None):
+        """The pin guided to on this body: the one tapped (not yet reached), else the first not reached."""
+        pins = self.pins_body(system, body) if pins is None else pins
+        a = meta_get(self.db, "pin_active") or {}
+        if a.get("system") == system and a.get("body") == body:
+            p = next((x for x in pins if x["id"] == a.get("id") and not x["reached_ts"]), None)
+            if p:
+                return p
+        return next((x for x in pins if not x["reached_ts"]), None)
+
+    @staticmethod
+    def pin_where(h, p):
+        """{dist (m), bearing, turn (degrees, right positive; None without a heading), way} of pin p from where you are."""
+        d = surface_m(h["lat"], h["lon"], p["lat"], p["lon"], h["radius"])
+        brg = surface_bearing(h["lat"], h["lon"], p["lat"], p["lon"])
+        turn = None if h.get("heading") is None else round(((brg - h["heading"] + 540) % 360) - 180)
+        return {"dist": round(d), "bearing": round(brg) % 360, "turn": turn, "way": which_way(brg, h.get("heading"))}
+
+    def pins_summary(self):
+        """The payload's pins: counts per body of this system (short names: the 📍 in Here and Overview), and on a body
+        with a position (from orbit down), its pins with where each is, the active one marked."""
+        pos, h = self.journals.pos, self.surface_here()
+        out = {"counts": {}, "here": None}
+        if pos:
+            for r in self.db.execute("SELECT body, count(*) AS n FROM surface_pins WHERE system=? GROUP BY body", (pos["id64"],)):
+                out["counts"][short_name(pos.get("name") or "", r["body"])] = r["n"]
+        if h:
+            pins = self.pins_body(h["system"], h["name"])
+            if pins:
+                act = self.pin_active(h["system"], h["name"], pins)
+                rows = [dict(self.pin_where(h, p), id=p["id"], name=p["name"], lat=p["lat"], lon=p["lon"],
+                             reached=bool(p["reached_ts"]), active=bool(act and p["id"] == act["id"])) for p in pins]
+                out["here"] = {"body": h["name"], "pins": rows, "active": next((r for r in rows if r["active"]), None)}
+        return out
+
+    def pins_list(self):
+        """GET /api/pins: every pin, by system and body (Bookmarks' Pins list)."""
+        return {"pins": [{"id": r["id"], "system": str(r["system"]), "sysname": r["sysname"], "body": r["body"],
+                          "short": short_name(r["sysname"] or "", r["body"]), "name": r["name"], "lat": r["lat"], "lon": r["lon"],
+                          "reached": bool(r["reached_ts"])}
+                         for r in self.db.execute("SELECT * FROM surface_pins ORDER BY sysname, body, ord, id")]}
+
+    def pins_post(self, body):
+        """POST /api/pins {action: add {system, sysname, body, name, lat, lon, active?} | here {name} | delete | reset |
+        activate | rename {name} | move {dir: -1 or 1}, with id}: (answer, HTTP status); the answer has that body's pins."""
+        act = body.get("action")
+        name_of = lambda v: " ".join(str(v).split())[:PIN_NAME_MAX] if isinstance(v, str) else ""
+
+        def coord(k, lim):
+            v = body.get(k)
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not -lim <= v <= lim:
+                raise ValueError(f"{'latitude' if k == 'lat' else 'longitude'} must be a number from -{lim} to {lim}")
+            return float(v)
+        if act in ("add", "here"):
+            if act == "here":
+                h = self.surface_here()
+                if not h:
+                    return {"error": "no position on a body here (Status.json gives one from orbital cruise down)"}, 400
+                system, bname, lat, lon = h["system"], h["name"], h["lat"], h["lon"]
+                sysname = (self.journals.pos or {}).get("name")
+            else:
+                sid, bname = str(body.get("system") or ""), name_of(body.get("body") or "")[:200] if isinstance(body.get("body"), str) else ""
+                if not sid.isdigit() or not bname:
+                    return {"error": "give the system (its id64) and the body's full name"}, 400
+                system, sysname = int(sid), name_of(body.get("sysname") or "") or None
+                bname = " ".join(body["body"].split())
+                try:
+                    lat, lon = coord("lat", 90), coord("lon", 180)
+                except ValueError as e:
+                    return {"error": str(e)}, 400
+            n = self.db.execute("SELECT count(*), max(ord) FROM surface_pins WHERE system=? AND body=?", (system, bname)).fetchone()
+            name = name_of(body.get("name")) or f"Pin {(n[0] or 0) + 1}"
+            cur = self.db.execute("INSERT INTO surface_pins (system, body, sysname, name, lat, lon, ord, created_ts) "
+                                  "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (system, bname, sysname, name, lat, lon, (n[1] or 0) + 1,
+                                                                         iso_ts(time.time())))
+            if body.get("active") is True:
+                meta_set(self.db, "pin_active", {"system": system, "body": bname, "id": cur.lastrowid})
+        else:
+            pid = body.get("id")
+            row = self.db.execute("SELECT * FROM surface_pins WHERE id=?", (pid,)).fetchone() \
+                if isinstance(pid, int) and not isinstance(pid, bool) else None
+            if not row:
+                return {"error": "no such pin"}, 404
+            system, bname = row["system"], row["body"]
+            if act == "delete":
+                self.db.execute("DELETE FROM surface_pins WHERE id=?", (pid,))
+            elif act == "reset":
+                self.db.execute("UPDATE surface_pins SET reached_ts=NULL WHERE id=?", (pid,))
+            elif act == "activate":
+                self.db.execute("UPDATE surface_pins SET reached_ts=NULL WHERE id=?", (pid,))
+                meta_set(self.db, "pin_active", {"system": system, "body": bname, "id": pid})
+            elif act == "rename":
+                name = name_of(body.get("name"))
+                if not name:
+                    return {"error": "give the pin a name"}, 400
+                self.db.execute("UPDATE surface_pins SET name=? WHERE id=?", (name, pid))
+            elif act == "move":
+                d = body.get("dir")
+                if d not in (-1, 1):
+                    return {"error": "dir must be -1 or 1"}, 400
+                pins = self.pins_body(system, bname)
+                i = next(k for k, p in enumerate(pins) if p["id"] == pid)
+                j = i + d
+                if 0 <= j < len(pins):
+                    pins[i], pins[j] = pins[j], pins[i]
+                    for k, p in enumerate(pins):
+                        self.db.execute("UPDATE surface_pins SET ord=? WHERE id=?", (k + 1, p["id"]))
+            else:
+                return {"error": "action must be add, here, delete, reset, activate, rename or move"}, 400
+        self.db.commit()
+        self._pin_seen = None   # a change: the active pin is said again ("set")
+        self.bump()
+        return {"ok": True, "pins": [{"id": p["id"], "name": p["name"], "lat": p["lat"], "lon": p["lon"], "reached": bool(p["reached_ts"])}
+                                     for p in self.pins_body(system, bname)]}, 200
+
+    def pin_watch(self):
+        """Each tick: the active pin's guidance. Said (moment "pin", the Navigator's): when it becomes active with you on
+        its body ("set"), as you pass PIN_BANDS, and on arrival (PIN_ARRIVE_M: then the next one is active). True when
+        the page should hear of a new distance or turn (the line under the map moves from orbit down)."""
+        h = self.surface_here()
+        if not h:
+            changed, self._pin_seen, self._pin_key = self._pin_key is not None, None, None
+            return changed
+        pins = self.pins_body(h["system"], h["name"])
+        act = self.pin_active(h["system"], h["name"], pins) if pins else None
+        if not act:
+            changed, self._pin_seen, self._pin_key = self._pin_key is not None, None, None
+            return changed
+        w = self.pin_where(h, act)
+        d, ts = w["dist"], iso_ts(time.time())
+        band = sum(1 for b in PIN_BANDS if d < b)
+        ground = bool(h["flags"] & FLAG_IN_SRV or h["flags2"] & 1)
+        if d <= PIN_ARRIVE_M["ground" if ground else "ship"]:
+            self.db.execute("UPDATE surface_pins SET reached_ts=? WHERE id=?", (ts, act["id"]))
+            nxt = self.pin_active(h["system"], h["name"])
+            self.journals.moment("pin", ts, what="arrived", name=act["name"],
+                                 next=dict(self.pin_where(h, nxt), name=nxt["name"]) if nxt else None)
+            self._pin_seen = (nxt["id"], 0) if nxt else None
+        elif self._pin_seen is None or self._pin_seen[0] != act["id"]:
+            self._pin_seen = (act["id"], band)
+            self.journals.moment("pin", ts, what="set", name=act["name"], **w)
+        elif band > self._pin_seen[1]:
+            self._pin_seen = (act["id"], band)
+            self.journals.moment("pin", ts, what="near", name=act["name"], **w)
+        step = 10 if d < 1000 else 100 if d < 10000 else 1000
+        key = (act["id"], round(d / step), None if w["turn"] is None else round(w["turn"] / 10))
+        changed, self._pin_key = key != self._pin_key, key
+        return changed
+
     # ---- carrier trips (#19): Spansh's carrier router, planned in Plot Route, followed on the Carrier tile (meta
     # carrier_trip: {id, created_ts, request, legs, at (the leg reached), arrived_ts, seen_id64, off, done_ts}; live-only)
     def carrier_trip_defaults(self):
@@ -17384,6 +17554,8 @@ class State:
                 self.notices.clear("no_journal_files")
             settled = self.journals.settle_carrier(time.time())
             if self.carrier_trip_follow() or settled:   # #19: the trip follows the carrier (both always run)
+                self.bump()
+            if self.pin_watch():   # #16: the active pin's distance and turn, said at its bands and on arrival
                 self.bump()
             self.uploads_hub.idle()   # EDDN: a companion file written after its line, signals after a quiet spell
             self.rail_device()
@@ -18854,6 +19026,16 @@ def make_app(state, hosts=None):
         state.riches_clear()
         return web.json_response({"ok": True})
 
+    async def pins_view(request):
+        """#16: GET every surface pin (Bookmarks), POST a change (pins_post)."""
+        if request.method == "GET":
+            return web.json_response(state.pins_list())
+        body = await json_object(request)
+        if body is None:
+            return web.json_response({"error": "expected a JSON object"}, status=400)
+        out, status = state.pins_post(body)
+        return web.json_response(out, status=status)
+
     async def carrier_trip_view(request):
         """#19: plot a carrier trip with Spansh's carrier router (in the background), or {clear: true} to forget it."""
         body = await json_object(request)
@@ -19849,6 +20031,8 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/riches/plot", riches_plot_view)
     app.router.add_post("/api/riches/clear", riches_clear_view)
     app.router.add_post("/api/carrier/trip", carrier_trip_view)
+    app.router.add_get("/api/pins", pins_view)
+    app.router.add_post("/api/pins", pins_view)
     app.router.add_post("/api/highway/clear", highway_clear_view)
     app.router.add_post("/api/highway/autotarget", pc_only(highway_autotarget_view))
     app.router.add_post("/api/highway/autotarget/test", pc_only(highway_autotarget_test_view))

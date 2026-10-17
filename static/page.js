@@ -1128,6 +1128,9 @@ function runPays(value, factor) {
   return factor > 1 ? `${credits(value)} (×${factor}: ${credits(value * factor)})` : credits(value);
 }
 function samplingHtml() {
+  return pinLineHtml() + samplingOnlyHtml();
+}
+function samplingOnlyHtml() {
   const sm = data.sampling;
   if (sm && sm.elsewhere) { const t = elsewhereText(sm.elsewhere); return t ? `<div class="spacing elsewhere">${esc(t)}</div>` : ""; }
   if (!sm || !sm.samples || sm.samples >= 3) return "";
@@ -1162,7 +1165,7 @@ function targetCounts(t) {
 }
 function renderOnBody() {
   const el = document.getElementById("onbody"), ob = obNow();
-  if (!ob) { el.innerHTML = ""; return; }
+  if (!ob) { el.innerHTML = pinLineHtml(); return; }
   const b = obData && !obData.error && obData.bodies.find(x => x.name === ob.body);
   if (!b) { el.innerHTML = samplingHtml() + `${onOrOver(ob)} <b>${esc(ob.body)}</b> (${esc(howOnBody(ob))})`; return; }
   const bits = [], f = bioFactor(b);
@@ -1294,6 +1297,7 @@ function renderNow() {
   if (risk) lines.push(`<div class="now-line now-risk ${risk.cls}">${risk.html}</div>`);
   // landed: what is left on this body (and the sample spacing); otherwise what is left in the system
   if (obNow()) lines.push(`<div class="now-line now-body">${document.getElementById("onbody").innerHTML}</div>`);
+  else if (pinLineHtml()) lines.push(`<div class="now-line now-body">${pinLineHtml()}</div>`);   // #16: from orbit
   else {
     const here = data.systems.find(s => sysId(s) === sysId(p));
     // the all-clear only once Here's data is for this system and the honk has found every body: before that
@@ -1436,7 +1440,9 @@ function surfLocal(s, lat, lon) {
 // Everything the map and legend draw, sized for a square canvas of side S (px): pure, so the tests can check it.
 function surfaceLayout(s, cfg, S) {
   const hd = s.heading == null ? 0 : s.heading, rad = hd * Math.PI / 180, ch = Math.cos(rad), sh = Math.sin(rad);
-  const items = [], add = (it, lat, lon) => { if (lat == null || lon == null) return; items.push(Object.assign(it, surfLocal(s, lat, lon))); };
+  const items = [], add = (it, lat, lon) => { if (lat == null || lon == null) return; items.push(Object.assign(it, {lat, lon}, surfLocal(s, lat, lon))); };
+  // #16: this body's pins: the active one kept (at the rim when off the map), the others when near; reached ones faint
+  for (const p of s.pins || []) add({kind: "pin", tag: p.name, id: p.id, active: !!p.active, faint: !!p.reached && !p.active, keep: !!p.active}, p.lat, p.lon);
   if (s.ship) add({kind: "ship", tag: "ship", keep: true}, s.ship.lat, s.ship.lon);
   for (const r of s.rigs || []) { const t = surfTons(r);
     add({kind: "rig", tag: String(r.n), n: r.n, id: r.id, mineral: t.mineral, tons: t.tons, full: !!r.full, hollow: !r.full, keep: true,
@@ -1509,6 +1515,9 @@ function drawSurface(canvas, L, small) {
     if (it.off) continue;
     const x = it.sx, y = it.sy;
     if (it.kind === "bio") { g.fillStyle = it.colour; g.globalAlpha = it.faint ? 0.45 : 1; g.beginPath(); g.arc(x, y, mr * 0.55, 0, 2 * Math.PI); g.fill(); g.globalAlpha = 1; }
+    else if (it.kind === "pin") { const r = it.active ? mr + 2 : mr; g.fillStyle = it.active ? C.accent : C.muted; g.globalAlpha = it.faint ? 0.4 : 1;
+      g.beginPath(); g.moveTo(x, y - r); g.lineTo(x + r * 0.75, y); g.lineTo(x, y + r); g.lineTo(x - r * 0.75, y); g.closePath(); g.fill(); g.globalAlpha = 1;
+      if (!small && (it.active || !it.faint)) { g.font = `${font}px system-ui, sans-serif`; g.textAlign = "left"; g.fillText(it.tag, x + r, y - r * 0.8); g.textAlign = "center"; } }
     else if (it.kind === "tag") { g.strokeStyle = it.colour || C.muted; g.lineWidth = 2; g.globalAlpha = it.faint ? 0.35 : 1;
       g.beginPath(); g.arc(x, y, mr * 0.75, 0, 2 * Math.PI); g.stroke(); g.globalAlpha = 1; }
     else if (it.kind === "rig") {
@@ -1538,7 +1547,7 @@ function drawSurface(canvas, L, small) {
   g.textAlign = "center"; g.textBaseline = "middle";
   // off the map: a chevron on the rim pointing out, with the tag
   for (const it of L.items) if (it.off) {
-    const col = it.kind === "rig" ? (it.far ? C.bad : C.accent) : it.kind === "ship" ? C.info : it.kind === "bio" || it.kind === "tag" ? it.colour || C.muted : it.kind === "loc" ? C.warn : C.muted;
+    const col = it.kind === "rig" ? (it.far ? C.bad : C.accent) : it.kind === "pin" ? C.accent : it.kind === "ship" ? C.info : it.kind === "bio" || it.kind === "tag" ? it.colour || C.muted : it.kind === "loc" ? C.warn : C.muted;
     g.save(); g.translate(it.sx, it.sy); g.rotate(it.ang);
     g.fillStyle = col; g.beginPath(); g.moveTo(0, -7); g.lineTo(6, 2); g.lineTo(0, -1); g.lineTo(-6, 2); g.closePath(); g.fill();
     g.restore();
@@ -1594,15 +1603,22 @@ function surfaceLegend(s, L, cfg) {
         `<span class="rm">${r.mineral ? esc(r.mineral) : `<span class="unk">placed</span>`}${r.tons ? ` <b>${r.tons} t</b>` : ""}</span>` +
         `<span class="rw">${surfWhere(r)}${r.far ? ` <b class="bad">far: lost at 5 km</b>` : ""}${r.full ? ` <span class="ok">probably full</span>` : ""}` +
         ` <a href="#" class="rx" data-rigremove="${r.id}" data-rign="${r.n}" title="picked up without a tap? The game writes nothing when a rig is picked up: mark it picked up here">✕</a></span></div>`; }).join("") + `</div>`);
+  // #16: pins, in their order (the server's): tap one to fly to it
+  const pins = (s.pins || []).map(p => L.items.find(it => it.kind === "pin" && it.id === p.id) || Object.assign({}, p, {kind: "pin", active: p.active, faint: p.reached}));
+  if (pins.length) rows.push(`<div class="lg-h">Pins <span class="unk">(tap one to go there)</span></div>` + pins.map(it =>
+    `<div class="lg-row lg-pin${it.active ? " cur" : it.faint ? " faint" : ""}" data-pinact="${it.id}" title="${it.active ? "the pin you are guided to" : "go there: guided to it from now on"}">` +
+    `<span class="tg pin">◆</span> <b>${esc(it.tag || it.name)}</b> ${it.brg != null ? surfWhere(it) : `<span class="unk">${surfDist(it.dist)}</span>`}` +
+    `${it.active ? ` <span class="ok">● target</span>` : it.faint ? ` <span class="unk">reached</span>` : ""}</div>`).join(""));
+  const goto = (it, name) => ` <button type="button" class="mini" data-pingo="${it.lat},${it.lon}" data-pinname="${esc(name)}" title="pin it and go there">📍</button>`;
   const sites = by("site");
   if (sites.length) rows.push(`<div class="lg-h">Sites</div>` + sites.map(it =>
     `<div class="lg-row" data-tag="${it.tag}"><span class="tg">${it.tag}</span> ${it.mineral ? esc(it.mineral) : `<span class="unk">?</span>`} <b>${it.tons} t</b>` +
-    ` <span class="unk">${it.site === "rig" ? (it.lost ? "rig lost" : "rig picked up") : "unmarked"}${it.location ? ` · L${it.location}` : ""} · ${surfDist(it.dist)}</span></div>`).join(""));
+    ` <span class="unk">${it.site === "rig" ? (it.lost ? "rig lost" : "rig picked up") : "unmarked"}${it.location ? ` · L${it.location}` : ""} · ${surfDist(it.dist)}</span>${goto(it, `Site ${it.tag}`)}</div>`).join(""));
   const locs = by("loc");
   if (locs.length) rows.push(`<div class="lg-h">Mining locations</div>` + locs.map(it =>
-    `<div class="lg-row" data-tag="${it.tag}"><span class="tg loc">${it.tag}</span> ${surfWhere(it)}</div>`).join(""));
+    `<div class="lg-row" data-tag="${it.tag}"><span class="tg loc">${it.tag}</span> ${surfWhere(it)}${goto(it, `Location ${it.n}`)}</div>`).join(""));
   const ship = by("ship")[0];
-  if (ship) rows.push(`<div class="lg-row lg-ship"><span class="tg ship">H</span> Ship ${surfWhere(ship)}</div>`);
+  if (ship) rows.push(`<div class="lg-row lg-ship"><span class="tg ship">H</span> Ship ${surfWhere(ship)}${goto(ship, "Ship")}</div>`);
   return rows.join("") || `<div class="unk">nothing marked on this body yet</div>`;
 }
 // the strip's one line: rigs, sites and the ship, short
@@ -1616,11 +1632,14 @@ function surfaceLine(L) {
 // Now's map (beside its legend, below on a narrow screen) and the strip's small copy
 // a legend's title and rows, written only when they change (a rewrite would drop a hover or a half-done click)
 function setSurfLegend(el, s, L, cfg) {
-  const html = `<div class="lg-title">${esc(s.body || "")}${s.alt != null && !s.down ? ` <span class="unk">${Math.round(s.alt)} m up</span>` : ""}</div>` + surfaceLegend(s, L, cfg);
+  const html = `<div class="lg-title">${esc(s.body || "")}${s.alt != null && !s.down ? ` <span class="unk">${Math.round(s.alt)} m up</span>` : ""}` +
+    ` <button type="button" class="mini" data-pinhere title="pin where you are now, with a name">📍 Pin here</button>` +
+    `<button type="button" class="mini" data-pincopy title="copy where you are: latitude, longitude">📋</button></div>` + surfaceLegend(s, L, cfg);
   if (html !== el._surfKey) { el._surfKey = html; el.innerHTML = html; }
 }
 // a rig picked up without a tap (the game writes nothing when one is): marked picked up from its slot's ✕
 for (const id of ["nowMapLegend", "ovMapLegend"]) document.getElementById(id).addEventListener("click", async e => {
+  if (pinLegendClick(e)) return;
   const x = e.target.closest("[data-rigremove]"); if (!x) return;
   e.preventDefault();
   if (!confirm(`Mark rig ${x.dataset.rign} as picked up? What it collected stays as a saved site.`)) return;
@@ -1629,6 +1648,140 @@ for (const id of ["nowMapLegend", "ovMapLegend"]) document.getElementById(id).ad
   catch (err) { r = {error: err.message}; }
   if (r.error) toast(`could not mark the rig: ${r.error}`);
 });
+// ---- surface pins (#16, the author 2026-10-17): named points on a body kept until deleted (body bookmarks: the
+// Anaconda wreck, Guardian ruins, a good spot), one active at a time, guided from orbit down (the payload's pins: the
+// strip's line, the map, the overlay's radar) and said by the Navigator. Set in a body's panel (typed or pasted
+// coordinates, also before you reach the body), 📍 Pin here, 📍 on a site or location; Bookmarks lists them all ----
+// typed or pasted coordinates: decimal degrees in any common layout ("-12.34, 45.67", "Lat -12.34 Lon 45.67",
+// "12.34 S, 45.67 E", a degree sign, text around them); the first number is the latitude unless the letters say
+// otherwise; S and W are negative. {lat, lon} or {error}
+function parsePinCoords(text) {
+  const re = /([-+−]?\d+(?:\.\d+|,\d+)?)\s*°?\s*([NSEW](?![a-z]))?/gi, nums = [];
+  let m;
+  while (nums.length < 2 && (m = re.exec(String(text || "")))) {
+    let v = Number(m[1].replace(",", ".").replace("−", "-"));
+    const h = (m[2] || "").toUpperCase();
+    if (h === "S" || h === "W") v = -Math.abs(v);
+    nums.push({v, h});
+  }
+  if (nums.length < 2) return {error: "give two numbers: the latitude, then the longitude"};
+  let [a, b] = nums;
+  if ((a.h === "E" || a.h === "W") && (b.h === "N" || b.h === "S")) [a, b] = [b, a];
+  if (!Number.isFinite(a.v) || Math.abs(a.v) > 90) return {error: `the latitude must be from -90 to 90 (not ${a.v})`};
+  if (!Number.isFinite(b.v) || Math.abs(b.v) > 180) return {error: `the longitude must be from -180 to 180 (not ${b.v})`};
+  return {lat: a.v, lon: b.v};
+}
+const pinCoordText = c => `${Math.abs(c.lat).toFixed(4)}° ${c.lat < 0 ? "S" : "N"}, ${Math.abs(c.lon).toFixed(4)}° ${c.lon < 0 ? "W" : "E"}`;
+const pinTurnWords = p => p.turn == null ? (p.way || "") : Math.abs(p.turn) < 10 ? "ahead" : `turn ${Math.abs(p.turn)}° ${p.turn > 0 ? "right" : "left"}`;
+const pinSpokenDist = m => m < 1000 ? `${Math.max(10, Math.round(m / 10) * 10)} metres` : m < 10000 ? `${(m / 1000).toFixed(1)} kilometres` : `${Math.round(m / 1000).toLocaleString()} kilometres`;
+const pinSpokenTurn = p => p.turn == null ? (p.way || "") : Math.abs(p.turn) < 10 ? "dead ahead" : `turn ${Math.abs(p.turn)} degrees ${p.turn > 0 ? "right" : "left"}`;
+function pinSpoken(m) {
+  if (m.what === "arrived") return `Arrived at ${m.name}.` + (m.next ? ` Next: ${m.next.name}, ${pinSpokenDist(m.next.dist)}, ${pinSpokenTurn(m.next)}.` : "");
+  if (m.what === "set") return `${m.name} set. ${pinSpokenDist(m.dist)}, bearing ${m.bearing}.`;
+  return `${m.name}: ${pinSpokenDist(m.dist)}, ${pinSpokenTurn(m)}.`;
+}
+const pinActive = () => data && data.pins && data.pins.here && data.pins.here.active || null;
+const pinSpokenNow = () => { const a = pinActive(); return a ? `${a.name}, ${pinSpokenDist(a.dist)}, ${pinSpokenTurn(a)}` : ""; };
+function pinLineHtml() {
+  const a = pinActive();
+  return a ? `<div class="spacing pinline" title="the pin you fly to (tap another in the map's legend)">📍 <b>${esc(a.name)}</b>: ${esc(surfDist(a.dist))}, ${esc(pinTurnWords(a))}</div>` : "";
+}
+const pinMark = short => { const n = data && data.pins && data.pins.counts && data.pins.counts[short];
+  return n ? ` <span class="pinmark" title="${n} pin${n === 1 ? "" : "s"} on this body">📍</span>` : ""; };
+const PINS = {list: null, sig: null};
+async function loadPins() {
+  try { const r = await apiJson("api/pins"); if (!r.error) PINS.list = r.pins || []; } catch {}
+  refreshPinsUi();
+}
+function refreshPinsUi() {
+  for (const id of ["bodyPanel", "sBodyPanel"]) { const sec = document.querySelector(`#${id} [data-sec="pins"] .secbody`);
+    if (sec && sec.dataset.sys) sec.innerHTML = pinsListHtml(sec.dataset.sys, sec.dataset.body); }
+  drawBmPins();
+}
+async function pinsPost(body) {
+  let r;
+  try { r = await apiJson("api/pins", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+  catch (err) { r = {error: err.message}; }
+  if (r && r.error) toast(`Pin: ${r.error}`);
+  else await loadPins();
+  return r || {};
+}
+// a body's panel: its pins and the field to add one
+function pinsListHtml(sys, body) {
+  const mine = (PINS.list || []).filter(p => p.system === String(sys) && p.body === body);
+  return (mine.length ? `<div class="pinlist">` + mine.map((p, i) =>
+    `<div class="pinrow${p.reached ? " unk" : ""}"><a href="#" data-pinact="${p.id}" title="go there: guided to it when you are on this body">◆ <b>${esc(p.name)}</b></a>` +
+    ` <span class="unk">${esc(pinCoordText(p))}</span>${p.reached ? ` reached <button type="button" class="mini" data-pinreset="${p.id}" title="not reached after all">↺</button>` : ""}` +
+    `${i ? ` <button type="button" class="mini" data-pinmove="${p.id}" data-dir="-1" title="earlier">▲</button>` : ""}` +
+    `${i < mine.length - 1 ? ` <button type="button" class="mini" data-pinmove="${p.id}" data-dir="1" title="later">▼</button>` : ""}` +
+    ` <button type="button" class="mini" data-pinrm="${p.id}" title="delete this pin">✕</button></div>`).join("") + `</div>` : "") +
+    `<div class="srow pinadd"><input type="text" data-pinin placeholder="paste coordinates: -12.34, 45.67" aria-label="coordinates" size="22">` +
+    `<input type="text" data-pinname placeholder="name (optional)" aria-label="pin name" size="12" maxlength="40">` +
+    `<button type="button" class="mini" data-pinadd>Add pin</button> <span data-pinsee class="unk"></span></div>`;
+}
+async function pinPanelClick(e) {
+  const sec = e.target.closest('[data-sec="pins"]'); if (!sec) return false;
+  const b = sec.querySelector(".secbody"), info = b && b.dataset;
+  const act = e.target.closest("[data-pinact]"), rm = e.target.closest("[data-pinrm]"), mv = e.target.closest("[data-pinmove]"),
+        rs = e.target.closest("[data-pinreset]"), add = e.target.closest("[data-pinadd]");
+  if (act) { e.preventDefault(); pinsPost({action: "activate", id: Number(act.dataset.pinact)}); return true; }
+  if (rm) { if (confirm("Delete this pin?")) pinsPost({action: "delete", id: Number(rm.dataset.pinrm)}); return true; }
+  if (mv) { pinsPost({action: "move", id: Number(mv.dataset.pinmove), dir: Number(mv.dataset.dir)}); return true; }
+  if (rs) { pinsPost({action: "reset", id: Number(rs.dataset.pinreset)}); return true; }
+  if (add) {
+    const c = parsePinCoords(b.querySelector("[data-pinin]").value), see = b.querySelector("[data-pinsee]");
+    if (c.error) { see.textContent = c.error; see.className = "warnc"; return true; }
+    pinsPost({action: "add", system: info.sys, sysname: info.sysname, body: info.body, name: b.querySelector("[data-pinname]").value, lat: c.lat, lon: c.lon});
+    return true;
+  }
+  return false;
+}
+for (const id of ["bodyPanel", "sBodyPanel"]) {
+  const el = document.getElementById(id);
+  el.addEventListener("click", e => { pinPanelClick(e); });
+  // what the typed coordinates are read as, before saving
+  el.addEventListener("input", e => {
+    if (!e.target.matches("[data-pinin]")) return;
+    const c = parsePinCoords(e.target.value), see = e.target.closest(".pinadd").querySelector("[data-pinsee]");
+    see.textContent = !e.target.value.trim() ? "" : c.error ? c.error : `reads as ${pinCoordText(c)}`;
+    see.className = c.error && e.target.value.trim() ? "warnc" : "unk";
+  });
+}
+// the map's legend: tap a pin to fly to it; 📍 on a site or location pins it and goes there; Pin here; copy where you are
+function pinLegendClick(e) {
+  const act = e.target.closest("[data-pinact]"), go = e.target.closest("[data-pingo]");
+  if (act) { e.preventDefault(); pinsPost({action: "activate", id: Number(act.dataset.pinact)}); return true; }
+  if (go) {
+    const [lat, lon] = go.dataset.pingo.split(",").map(Number), pos = data && data.position, body = data && data.pins && data.pins.here && data.pins.here.body;
+    if (!pos || !body) { toast("Pin: no body here"); return true; }
+    pinsPost({action: "add", system: String(pos.id64), sysname: pos.name, body, name: go.dataset.pinname, lat, lon, active: true});
+    return true;
+  }
+  if (e.target.closest("[data-pinhere]")) { const n = prompt("Name this pin (where you are now):", ""); if (n !== null) pinsPost({action: "here", name: n}); return true; }
+  if (e.target.closest("[data-pincopy]")) { const sf = data && data.surface;
+    if (sf && sf.lat != null) copyText(`${sf.lat.toFixed(4)}, ${sf.lon.toFixed(4)}`); return true; }
+  return false;
+}
+// Bookmarks: every pin, by system and body, with Plot route to the system and ✕
+function drawBmPins() {
+  const el = document.getElementById("bmPins"); if (!el) return;
+  const list = PINS.list || [];
+  el.hidden = !list.length;
+  if (!list.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<h4 class="vmhead">📍 Pins</h4><table class="pintable"><thead><tr><th>System</th><th>Body</th><th>Pin</th><th></th></tr></thead><tbody>` +
+    list.map(p => `<tr${p.reached ? ` class="unk"` : ""}><td class="name" data-name="${esc(p.sysname || "")}" title="click to copy">${esc(p.sysname || "?")}${p.sysname ? plotBtn(p.sysname) : ""}</td>` +
+      `<td>${esc(p.short || p.body)}</td><td><b>${esc(p.name)}</b> <span class="unk">${esc(pinCoordText(p))}</span></td>` +
+      `<td><button type="button" class="mini" data-pinrm="${p.id}" title="delete this pin">✕</button></td></tr>`).join("") + `</tbody></table>`;
+}
+document.getElementById("bmPins").addEventListener("click", e => {
+  const rm = e.target.closest("[data-pinrm]"); if (rm && confirm("Delete this pin?")) pinsPost({action: "delete", id: Number(rm.dataset.pinrm)});
+});
+// the payload's counts changed (a pin added or deleted, in this window or another): the list is asked for again
+function pinsTick() {
+  const sig = JSON.stringify(data && data.pins && data.pins.counts) + "|" + ((data && data.pins && data.pins.here && data.pins.here.pins) || []).map(p => `${p.id}${p.reached ? "r" : ""}`).join();
+  if (sig !== PINS.sig) { PINS.sig = sig; loadPins(); }
+}
+
 // How Now fits its map on the screen (pure, so the tests can check it). vw, vh: the window; width: Now's content width;
 // top: where the map's canvas starts on the page (in the chosen arrangement); gap: the space between columns.
 // A wide landscape screen puts the map in a column right of the lines (the legend in a third, beside it), sized to
@@ -2101,6 +2254,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed; within 100 m of a plant you tagged where the next sample would count", "alert"],
   ["approach", "approaching a landable body at or over your high-gravity level with unsold data over the amber level or rebuy multiple", "alert"],
   ["bodybrief", "approaching a body with biological signals: what they could be (the FSS already said so, so off by default)", null],
+  ["pins", "surface pins: the pin you fly to, said when it is set, at 10 km, 1 km and 100 m, and on arrival (then the next one)", null],
   ["carriertrip", "carrier trips (Plot Route → Carrier): the carrier ready for its next leg, said once its cooldown should be over (the leg itself is said with its arrival)", null],
   ["chat", "chat: other players' messages read aloud by Comms (Settings → Voice → Chat: off by default; squadron, wing and direct ticked), never an NPC's", null],
   ["docking", "docking: the pad the station gave you (said every time, shown big on Now and in the overlay's Surface radar place), and why one refused when it is not obvious (no pad free, ship too big, access restricted, hostile, your offences, a fighter out)", null],
@@ -2129,7 +2283,7 @@ const UNSPOKEN = new Set(Object.keys(UNSPOKEN_WHY));
 const alertCfgBase = () => Object.assign({enabled: false}, Object.fromEntries(ALERTS.map(([k]) => [k, true])),
   // a notification on every jump (or scoop, or FSS) would be noise: these are spoken by default, not notified
   {jump: false, honk: false, brief: false, fss: false, mapped: false, scoop: false, scoopstop: false, supercharge: false, highway: false, autotarget: false, wrongtarget: false,
-   docking: false, sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false, chat: false});
+   docking: false, sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false, chat: false, pins: false});
 const alertCfg = Object.assign(alertCfgBase(), store.get("alerts", {}));
 // off until you tick them (the whole row): the jumponium call-out
 const OFF_KINDS = {jumponium: false};
@@ -3096,10 +3250,10 @@ function hwySpoken(s) {
 // finished one (nothing to do there: Status.json keeps the target after you leave a body) gets only a short clause
 // after the fuel.
 function statusReportText() {
-  const sm = data && data.sampling;
+  const sm = data && data.sampling, pin = pinSpokenNow();   // #16: the pin you fly to, first
   if (data && data.on_body && sm && sm.species)
-    return `${sm.species}, sample ${sm.samples} of 3` + (sm.clear ? ", clear to take the next." : sm.to_go ? `, ${sm.to_go} metres still to go.` : ".");
-  const parts = [], f = data && data.fuel;
+    return (pin ? pin + ". " : "") + `${sm.species}, sample ${sm.samples} of 3` + (sm.clear ? ", clear to take the next." : sm.to_go ? `, ${sm.to_go} metres still to go.` : ".");
+  const parts = pin ? [pin] : [], f = data && data.fuel;
   const hd = hereData && !hereData.error && hereData.id64 === posId() ? hereData : null;
   const plan = hd && hd.leaving ? planItems(hd.leaving) : [];
   const dest = hd && data.destination ? hd.bodies.find(b => b.body_id === data.destination.body_id) : null;
@@ -3867,6 +4021,7 @@ function renderBookmarks(bms) {
     `<tr><td colspan="5" class="unk">No bookmarks yet. Click ☆ beside any system to add one.</td></tr>`;
   refocus("bmRows", fk);
   drawSweep();
+  drawBmPins();
 }
 
 // ---- Bookmark dialog ----
@@ -4166,7 +4321,7 @@ function renderHere() {
     const firsts = [b.first_discovered && `<span class="fl" title="first discovered">🏁</span>`, b.first_mapped && `<span class="fl" title="first mapped">🗺</span>`,
                     !b.first_mapped && b.mapped && `<span class="fl unk" title="mapped (not first)">🗺</span>`,
                     b.first_footfall && `<span class="fl" title="first footfall">👣</span>`, !b.scanned && `<span class="unk" title="known to Spansh, not scanned by you">—</span>`].filter(Boolean).join("");
-    return `<tr class="${b.main ? "main" : ""}${selectedBody === b.name ? " sel" : ""}${destBody === b ? " dest" : ""}${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}"><td class="name" data-name="${esc(b.name)}">${ind}${esc(b.name)}${codexTypeMark(b.codex_type, h.region)}${codexGeoMark(b.codex_geo, h.region)}${b.ggg ? " " + gggIcon(!!b.ggg.confirmed, gggTitle(b.ggg)) : ""}${(b.curiosities || []).length ? ` <span class="cur" title="${b.curiosities.map(c => esc(c.tag + ": " + c.why)).join("&#10;")}">🔭</span>` : ""}${b.notable ? ` <span class="nb ${b.notable}">${b.notable}</span>` : ""}${b.terraformable ? ` <span class="nb T">T</span>` : ""}${firsts ? `<div class="sf2 sub2">${firsts}</div>` : ""}</td>
+    return `<tr class="${b.main ? "main" : ""}${selectedBody === b.name ? " sel" : ""}${destBody === b ? " dest" : ""}${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}"><td class="name" data-name="${esc(b.name)}">${ind}${esc(b.name)}${pinMark(b.name)}${codexTypeMark(b.codex_type, h.region)}${codexGeoMark(b.codex_geo, h.region)}${b.ggg ? " " + gggIcon(!!b.ggg.confirmed, gggTitle(b.ggg)) : ""}${(b.curiosities || []).length ? ` <span class="cur" title="${b.curiosities.map(c => esc(c.tag + ": " + c.why)).join("&#10;")}">🔭</span>` : ""}${b.notable ? ` <span class="nb ${b.notable}">${b.notable}</span>` : ""}${b.terraformable ? ` <span class="nb T">T</span>` : ""}${firsts ? `<div class="sf2 sub2">${firsts}</div>` : ""}</td>
       <td>${sfText(b.type === "Star" ? "star" : "planet", b.subtype || "")}${b.type === "Star" ? (b.scoopable ? ` <span class="scoop">⛽</span>` : "") : ""}${b.rings ? `<span class="sf2"> ${icon("ring", "i-ring", b.rings, ringsText(b))}</span>` : ""}${b.dist_ls != null ? `<div class="sf2 sub2 unk">${Math.round(b.dist_ls).toLocaleString()} ls</div>` : ""}</td>
       <td class="num c2hide">${b.dist_ls != null ? Math.round(b.dist_ls).toLocaleString() : ""}</td>
       <td class="num${b.gravity >= highGravity() ? " noscoop" : ""}">${b.gravity != null && b.type === "Planet" ? b.gravity.toFixed(2) : ""}${atm ? `<div class="sf2 atm2" title="${esc(atm)}">${esc(shortForm("atmosphere", atm))}</div>` : ""}</td>
@@ -4409,7 +4564,7 @@ function discHtml(b, depth) {
   const belts = (b.belts || []).length ? `<span class="belt" title="${b.belts.length} belt${b.belts.length === 1 ? "" : "s"}">⋯</span>` : "";
   return `<div class="sbody${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}">` +
     `<div class="discwrap" style="width:${size + 14}px;height:${size + 14}px">${ring}<span class="${cls}" style="width:${size}px;height:${size}px;--c:${col}"></span>${stopsHtml(b)}</div>` +
-    `<div class="sname" title="${esc(b.name)}">${esc(b.name)}${belts}</div><div class="badges">${badges}</div>` +
+    `<div class="sname" title="${esc(b.name)}">${esc(b.name)}${pinMark(b.name)}${belts}</div><div class="badges">${badges}</div>` +
     `<div class="sval${maxOf(b) ? "" : " unk"}">${maxOf(b) ? credits(maxOf(b)) : "—"}</div>` +
     (b.type === "Planet" && b.dist_ls != null ? `<div class="sdist">${Math.round(b.dist_ls).toLocaleString()} ls</div>` : "") + `</div>`;
 }
@@ -4715,7 +4870,11 @@ function renderBodyInto(panel, d, bodyName, closeJs) {
   const curSec = (row.curiosities || []).length ? sec("curiosities", "🔭 Curiosities", row.curiosities.map(c => `<div><b>${esc(c.tag)}</b> · ${esc(c.why)}</div>`).join("")) : "";
   const mineSec = row.mining || (row.mined || []).length ? sec("mining", row.mining ? `⛏ ${mineCount(row.mining)}` : "⛏ Mining",
     (row.mining ? row.mining_odds ? mineOddsHtml(row.mining_odds) : `<span class="unk">no survey odds for this ground</span>` : "") + minedHtml(row)) : "";
-  h += curSec + bioSec + mineSec + ringSec + compSec + `<div class="two">${physSec}${orbitSec}</div>`;
+  // #16: the body's pins and the field to add one; folded until you open it while the body has none
+  const npins = (PINS.list || []).filter(p => p.system === String(d.id64) && p.body === d.full_name).length;
+  const pinSec = isStar ? "" : `<div class="sec${(bodySecs.pins ?? !npins) ? " closed" : ""}" data-sec="pins"><div class="lbl">📍 Pins${npins ? ` · ${npins}` : ""}</div>` +
+    `<div class="secbody" data-sys="${esc(d.id64)}" data-body="${esc(d.full_name)}" data-sysname="${esc(d.system || "")}">${pinsListHtml(d.id64, d.full_name)}</div></div>`;
+  h += pinSec + curSec + bioSec + mineSec + ringSec + compSec + `<div class="two">${physSec}${orbitSec}</div>`;
   h += sec("value", "Value and discovery", kv([
     ["Pays now", has(row.value_now) ? credits(row.value_now) + " cr" : null], ["Could pay", has(row.value_max) ? credits(row.value_max) + " cr" + (has(row.value_max_base) && row.value_max_base !== row.value_max ? ` (${credits(row.value_max_base)} without bonuses)` : "") : null],
     ["Of which", row.value_parts ? `${credits(row.value_parts.carto_now)} + ${credits(row.value_parts.bio_now)} bio held · ${credits(row.value_parts.carto_left)} + ${credits(row.value_parts.bio_left)} bio still there (bio ×${row.value_parts.bio_factor})` : null],
@@ -8783,6 +8942,7 @@ function onData() {
   // first payload, the server was restarted, or this window slept (see poll): no sounds for old state
   const firstNews = data.run_id !== runId || woke;
   onHush(firstNews); takeCopilot(data.copilot, firstNews); takeChatter(data.chatter); takeChat(firstNews); nowStakesTick();
+  pinsTick();   // #16
   if (data.ask_seq !== AL.seq) loadAskLog();   // S35: a new question while Questions asked is open
   const cpl = document.getElementById("copilotLine"), btn = data.copilot && data.copilot.button;
   cpl.hidden = !btn; cpl.textContent = btn ? `Co-pilot button: ${btn}` : "";
@@ -9091,6 +9251,9 @@ function onData() {
         alertOut("docking", `🛬 Pad ${m.pad}`, [m.station, m.where].filter(Boolean).join(" · "), {tag: "docking",
                  say: () => line("docking_granted", {pad: m.pad, station: m.station || "the station"}, `Pad ${m.pad}.`) +
                    (m.say_where ? " " + m.say_where : "")});
+      else if (m.kind === "pin" && m.name)   // #16: the active pin: set, passing 10 km / 1 km / 100 m, arrived (the Navigator's)
+        alertOut("pins", m.what === "arrived" ? `📍 Arrived at ${m.name}` : `📍 ${m.name}: ${surfDist(m.dist)}`,
+                 m.what === "arrived" ? (m.next ? `next: ${m.next.name}, ${surfDist(m.next.dist)}` : "") : pinTurnWords(m), {tag: "pins", say: pinSpoken(m)});
       else if (m.kind === "docking" && m.what === "denied" && m.words)   // #3: only the reasons that are not obvious
         alertOut("docking", "🛬 Docking denied", `${m.station ? m.station + ": " : ""}${m.words}`, {tag: "docking",
                  say: () => line("docking_denied", {reason: m.words, station: m.station || "the station"}, `Docking denied: ${m.words}.`)});
@@ -10146,7 +10309,7 @@ drawChatRead();
 // file and the voices installed. The XO row is the main voice (its voice select switches it) and the main personality.
 // an alert row in a few words, for a crew member's "Speaks for" and the messages (test_crew keeps it in step with ALERTS;
 // the Spoken lines tally has its own capitalised names, ALERT_SHORT)
-const ROW_WORDS = {carriertrip: "carrier trips", chat: "other players' chat", discovery: "target verdicts", arrival: "arrivals", game: "start and exit", jump: "jumps", honk: "the honk",
+const ROW_WORDS = {pins: "surface pins", carriertrip: "carrier trips", chat: "other players' chat", discovery: "target verdicts", arrival: "arrivals", game: "start and exit", jump: "jumps", honk: "the honk",
   brief: "arrival briefings", fss: "the FSS", mapped: "mapped planets", leaving: "leaving with work left", fuel: "fuel",
   scoop: "tank full", scoopstop: "scooping stopped", supercharge: "supercharges", exo: "Exomastery routes", riches: "survey routes",
   trade: "trade routes", highway: "the Highway", refuelshort: "fuel short of a refuel", lastscoop: "last scoop", autotarget: "auto-target",

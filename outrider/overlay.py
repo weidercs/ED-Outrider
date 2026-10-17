@@ -732,7 +732,8 @@ def radar_panel(surf, pal, size="normal", radar_range=800):
         return None
     bio = surf.get("bio") or []
     cur = next((s for s in bio if s.get("current")), None)
-    if not (bio or surf.get("ship") or surf.get("rigs") or surf.get("tags")):
+    pins = surf.get("pins") or []
+    if not (bio or surf.get("ship") or surf.get("rigs") or surf.get("tags") or pins):
         return None
     rng = max(radar_range, (cur.get("need") or 0) * 1.4 if cur else 0)
     w, r = 300, 118
@@ -768,8 +769,24 @@ def radar_panel(surf, pal, size="normal", radar_range=800):
         x, y, _ = radar_xy(here, rig["lat"], rig["lon"], cx, cy, r, rng)
         items.append(rect(x - 4, y - 4, 8, 8, pal["warn"], None))
         items.append(text(x + 6, y - 6, str(rig.get("n", "")), pal["warn"], "small"))
+    # #16: surface pins; the active one (on the rim when beyond the edge) with its name
+    for p in sorted(pins, key=lambda p: bool(p.get("active"))):
+        if p.get("reached") and not p.get("active"):
+            continue
+        x, y, beyond = radar_xy(here, p["lat"], p["lon"], cx, cy, r, rng)
+        c = pal["accent"] if p.get("active") else pal["muted"]
+        items.append(marker(x, y, "diamond", c, r=6 if p.get("active") else 4))
+        if p.get("active") and not beyond:
+            items.append(text(x + 8, y - 8, fit(p.get("name") or "", 120, "small"), c, "small"))
     items.append(marker(cx, cy, "arrow", pal["text"], r=9))
     y = cy + r + 14
+    act = next((p for p in pins if p.get("active")), None)
+    if act:   # #16: the active pin, one line: "📍 Wreck 12.4 km, 30° left"
+        d, t = act.get("dist") or 0, act.get("turn")
+        way = act.get("way") or "" if t is None else "ahead" if abs(t) < 10 else f"{abs(t)}° {'right' if t > 0 else 'left'}"
+        items.append(text(PAD, y, fit(f"📍 {act.get('name') or ''} {d / 1000:.1f} km, {way}" if d >= 1000 else
+                                      f"📍 {act.get('name') or ''} {round(d)} m, {way}", w - 2 * PAD, "small"), pal["accent"], "small"))
+        y += lh_small + 2
     scale = f"edge {rng / 1000:.1f} km" if rng >= 1000 else f"edge {round(rng)} m"
     items.append(text(w - PAD, y, scale, pal["muted"], "small", align="right"))
     if cur and cur.get("need"):

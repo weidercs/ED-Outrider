@@ -2,6 +2,22 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-17 · Surface pins: body bookmarks with fly-to guidance (NEXT-VERSION #16)
+- **Pins:** named points on a body (table `surface_pins`, live-only; GET/POST `/api/pins`).
+  - **Added:** in a body panel's folded 📍 Pins section (typed or pasted coordinates in any common layout,
+    `parsePinCoords`, shown as read before adding; also before you reach the body), with 📍 Pin here and 📋 copy by the
+    legend title, or with 📍 on a site, mining location or the ship.
+  - **One active:** the one tapped, else the first not reached, in order (▲ ▼).
+- **Guided from orbital cruise down:**
+  - the strip and Now, "📍 Wreck: 12.4 km, turn 30° right";
+  - the map (on the rim when off it) and the legend's Pins (tap to go there);
+  - the overlay's radar (a diamond and a line).
+- **Said by the Navigator** (the new "pins" row, `State.pin_watch`): set, at 10 km, 1 km and 100 m, and arrived (50 m
+  on foot or in the SRV, 250 m in the ship), then the next pin's way. The status report starts with it.
+- **Found again:** 📍 on a body with pins in Here and Overview, and Bookmarks' Pins list.
+- **The follow-up** (the author asked to remember it): Canonn's known sites per body, with "pin it".
+- **Tests:** `tests/test_pins.py`, and the smoke test's "surface pins".
+
 ## 2026-10-17 · Carrier trips (NEXT-VERSION #19) and a tighter Carrier tile
 - **Plot Route → Carrier:** your carrier's trip, from Spansh's carrier router (`SPANSH_FC`, POST /api/carrier/trip,
   probed 2026-10-17: names accepted; the cargo in use must include the hold's tritium).

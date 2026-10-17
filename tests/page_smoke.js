@@ -9008,6 +9008,90 @@ const releasePayloads = async () => {
     console.log(goodTL ? "OK" : "FAIL", "| header tiles shown |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "Settings → Display ticks the tiles this device shows: left out of the row and the one line, a column each, at least one stays, the fold modes kept", errors.slice(before));
   }
+  // Surface pins (#16): the coordinates read in every common layout; the spoken words; the active pin's line; the map's
+  // pins and the legend (tap one to go there, 📍 on a site pins it); a body panel's Pins (what it reads as, Add); the 📍
+  // on a body with pins; Bookmarks' list; the Navigator's line; the status report leads with it
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, got = {}, posts = [];
+    const realFetch = w.fetch;
+    const list = [{id: 1, system: "42", sysname: "Sys", body: "Sys B 7", short: "B 7", name: "Wreck", lat: -12.5, lon: 45.25, reached: false}];
+    w.fetch = (u, o) => String(u) === "api/pins" ? (o && o.method === "POST" ? posts.push(JSON.parse(o.body)) : 0,
+      Promise.resolve(new Response(JSON.stringify(o && o.method === "POST" ? {ok: true, pins: []} : {pins: list}), {status: 200, headers: {"Content-Type": "application/json"}})))
+      : realFetch(u, o);
+    got.parse = JSON.parse(w.eval(`JSON.stringify(["-12.34, 45.67", "Lat -12.34 Lon 45.67", "12.34 S, 45.67 E", "12.34° N 45.67° W",
+      "45.67 E 12.34 S", "Guardian site at -3.5 / 120.25 (Canonn)", "12,5 45,25", "95, 10", "10, 200", "just 12"].map(t => { const c = parsePinCoords(t);
+      return c.error ? "error" : [c.lat, c.lon]; }))`));
+    got.coordText = w.eval(`pinCoordText({lat: -12.34, lon: 45.67})`);
+    got.spoken = JSON.parse(w.eval(`JSON.stringify([pinSpoken({what: "set", name: "Beacon", dist: 340200, bearing: 120}),
+      pinSpoken({what: "near", name: "Beacon", dist: 840, turn: -32}), pinSpoken({what: "near", name: "Beacon", dist: 4200, turn: 4}),
+      pinSpoken({what: "arrived", name: "Beacon", next: {name: "Ruins", dist: 2300, turn: 95}})])`));
+    w.eval(`window.__pn = {pins: data.pins, surface: data.surface, pos: data.position, speak, flags: [speechOn, isSpeaker], hush: hushState, list: PINS.list};
+      window.__spoken = []; speak = (t, o) => window.__spoken.push([t, o.kind]); speechOn = true; isSpeaker = true; hushState = null; alertSpeak.pins = true;
+      data.position = Object.assign({}, data.position, {id64: 42, name: "Sys"});
+      const pin = {id: 1, name: "Wreck", lat: 0, lon: 0.5, dist: 8726, bearing: 90, turn: 90, way: "on your right", reached: false, active: true};
+      data.pins = {counts: {"B 7": 2}, here: {body: "Sys B 7", pins: [pin, {id: 2, name: "Old", lat: 0, lon: 0.001, dist: 17, bearing: 90, turn: 90, way: "", reached: true, active: false}], active: pin}};
+      data.surface = {body: "B 7", lat: 0, lon: 0, heading: 0, radius: 1000000, show: true, ship: null, rigs: [], sites: [{kind: "unmarked", lat: 0.002, lon: 0, minerals: {}, tons: 5}],
+                      locations: [], bio: [], tags: [], pins: data.pins.here.pins};`);
+    try {
+      got.line = w.eval(`pinLineHtml()`).replace(/<[^>]+>/g, "");
+      const L = JSON.parse(w.eval(`JSON.stringify(surfaceLayout(data.surface, surfaceCfg(), 400).items.filter(i => i.kind === "pin").map(i => [i.tag, i.active, i.faint, !!i.off]))`));
+      got.map = L;
+      w.eval(`window.__lg = document.createElement("div"); setSurfLegend(__lg, data.surface, surfaceLayout(data.surface, surfaceCfg(), 400), surfaceCfg())`);
+      got.legend = [w.eval(`__lg.querySelectorAll("[data-pinact]").length`), w.eval(`/Pins/.test(__lg.textContent)`), w.eval(`!!__lg.querySelector("[data-pinhere]")`)];
+      // tap the reached pin: it is the target again; 📍 on the site pins it and goes there
+      w.eval(`pinLegendClick({target: __lg.querySelector('[data-pinact="2"]'), preventDefault() {}})`);
+      w.eval(`pinLegendClick({target: __lg.querySelector("[data-pingo]")})`);
+      await sleep(30);
+      got.legendPosts = posts.splice(0);
+      // a body's panel: Pins with the field (what it reads as), Add posts
+      {
+        w.eval(`PINS.list = ${JSON.stringify(list)}; window.__bp = document.getElementById("bodyPanel"); __bp.hidden = false;
+          renderBodyInto(__bp, {id64: "42", system: "Sys", full_name: "Sys B 7", name: "B 7", row: {}, own: {PlanetClass: "Rocky body"}, spansh: null}, "B 7", "closeBody()")`);
+        const sec = d.querySelector('#bodyPanel [data-sec="pins"]');
+        got.panel = [!!sec, /📍 Pins · 1/.test(sec.querySelector(".lbl").textContent), /Wreck/.test(sec.textContent), sec.classList.contains("closed")];
+        const inp = sec.querySelector("[data-pinin]");
+        inp.value = "Guardian ruins: 12.34 S 45.67 E"; inp.dispatchEvent(new w.Event("input", {bubbles: true}));
+        got.preview = sec.querySelector("[data-pinsee]").textContent;
+        sec.querySelector("[data-pinname]").value = "Ruins";
+        sec.querySelector("[data-pinadd]").click();
+        await sleep(30);
+        got.panelPost = posts.splice(0);
+      }
+      // the 📍 in Here's rows; Bookmarks' list
+      got.mark = w.eval(`pinMark("B 7")`).includes("📍") && w.eval(`pinMark("A 1")`) === "";
+      w.eval(`drawBmPins()`);
+      got.bm = [!d.getElementById("bmPins").hidden, d.querySelectorAll("#bmPins tbody tr").length, /Wreck/.test(d.getElementById("bmPins").textContent)];
+      // the Navigator's line, and the status report
+      got.said = JSON.parse(w.eval(`(() => { const saved = data.moments, s0 = lastMomentSeq;
+        data.moments = [{seq: s0 + 1, kind: "pin", what: "near", name: "Wreck", dist: 840, turn: -32, ts: ""}]; onData();
+        data.moments = saved; lastMomentSeq = s0; return JSON.stringify(__spoken.splice(0).filter(x => x[1] === "pins")); })()`));
+      got.status = w.eval(`statusReportText()`).split(". ")[0];
+    } finally {
+      w.fetch = realFetch;
+      w.eval(`const k = window.__pn; Object.assign(data, {pins: k.pins, surface: k.surface, position: k.pos}); speak = k.speak; [speechOn, isSpeaker] = k.flags;
+        hushState = k.hush; PINS.list = k.list; document.getElementById("bodyPanel").hidden = true; drawBmPins();
+        delete window.__pn; delete window.__spoken; delete window.__lg; delete window.__bp;`);
+      await releasePayloads();
+    }
+    const want = {
+      parse: [[-12.34, 45.67], [-12.34, 45.67], [-12.34, 45.67], [12.34, -45.67], [-12.34, 45.67], [-3.5, 120.25], [12.5, 45.25], "error", "error", "error"],
+      coordText: "12.3400° S, 45.6700° E",
+      spoken: ["Beacon set. 340 kilometres, bearing 120.", "Beacon: 840 metres, turn 32 degrees left.", "Beacon: 4.2 kilometres, dead ahead.",
+               "Arrived at Beacon. Next: Ruins, 2.3 kilometres, turn 95 degrees right."],
+      line: "📍 Wreck: 8.7 km, turn 90° right",
+      map: [["Wreck", true, false, true], ["Old", false, true, false]],   // the active one 8.7 km off: on the rim
+      legend: [2, true, true],
+      legendPosts: [{action: "activate", id: 2}, {action: "add", system: "42", sysname: "Sys", body: "Sys B 7", name: "Site U1", lat: 0.002, lon: 0, active: true}],
+      panel: [true, true, true, false], preview: "reads as 12.3400° S, 45.6700° E",
+      panelPost: [{action: "add", system: "42", sysname: "Sys", body: "Sys B 7", name: "Ruins", lat: -12.34, lon: 45.67}],
+      mark: true, bm: [true, 1, true], said: [["Wreck: 840 metres, turn 32 degrees left.", "pins"]], status: "Wreck, 8.7 kilometres, turn 90 degrees right"};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodPN = !bad.length && errors.length === before;
+    allOk = allOk && goodPN;
+    console.log(goodPN ? "OK" : "FAIL", "| surface pins |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "coordinates in every layout, the spoken words, the line, the map and legend (go there, pin a site), a body's Pins (reads as, Add), the 📍, Bookmarks, the status report", errors.slice(before));
+  }
   // Carrier trips (#19): the Carrier plotter's own form (figures from the journal, To me, + via) posting api/carrier/trip;
   // the tile's one movement line (the leg, 📋, departs / cooldown / ready / ready?, ✕; off the trip with re-plot), ⚠ when
   // the depot cannot pay for the next leg; the ready line said once; the arrival's words; Plot Route's trip list

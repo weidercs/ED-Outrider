@@ -657,7 +657,7 @@ SAMPLES = {
 CREW_ROLES = (
     ("xo", "XO / Co-pilot", "XO", ()),
     ("navigator", "Navigator", "Navigator",
-     ("jump", "highway", "riches", "trade", "refuelshort", "lastscoop", "autotarget", "wrongtarget", "supercharge")),
+     ("jump", "highway", "riches", "trade", "refuelshort", "lastscoop", "autotarget", "wrongtarget", "supercharge", "pins")),
     ("science", "Science Officer", "Science Officer",
      ("discovery", "arrival", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "leaving", "codex", "phenomena",
       "ggg", "rare_star", "surface_site", "signal_poi", "curious")),

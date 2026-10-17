@@ -214,7 +214,7 @@ the sentence ends:
 | Crew member | Speaks for |
 |---|---|
 | XO / Co-pilot | the main voice: voice answers, the status report, the co-pilot, the hush and speech on |
-| Navigator | jumps and every route line (the Highway, survey and trade routes), fuel short of a refuel, last scoop, auto-target, wrong target, supercharges |
+| Navigator | jumps and every route line (the Highway, survey and trade routes), fuel short of a refuel, last scoop, auto-target, wrong target, supercharges, surface pins |
 | Science Officer | arrivals, briefings, the FSS, mapped planets, leaving with work left, codex, phenomena, rare stars, signals, curiosities |
 | Exobiologist | valuable bodies, sampling, Exomastery routes |
 | Chief Engineer | fuel, tank full, scooping stopped, jumponium, hull and heat |

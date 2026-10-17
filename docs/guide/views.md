@@ -439,6 +439,23 @@ above it; the firsts and the checklist under the system's name give it their roo
   again at 4.5 km ("Rig 3 is 3.8 kilometres away, behind you; it is lost at 5.": which way, in eight sectors).
 - **Strip copy:** a tick in ⚙ Settings → Surface map adds a small copy to the on-body strip, with a one-line legend.
 
+**Pins.** Named points on a body, kept until you delete them: the Anaconda wreck, Guardian ruins, a good spot to come
+back to.
+
+- **Adding one:** open the body's panel (Here or Overview, before you reach it too: from a Canonn page while still in
+  supercruise), its **📍 Pins** section, and paste or type the coordinates: `-12.34, 45.67`, `Lat -12.34 Lon 45.67`,
+  `12.34 S, 45.67 E`, text around them is fine; it shows what it read before you add it. On a body, **📍 Pin here** (by
+  the map's legend title) pins where you are, and **📋** copies your coordinates to share. **📍** beside a site, a
+  mining location or the ship in the legend pins it and takes you there.
+- **Flying to one:** one pin is the target at a time: the one you tapped (in the legend or the panel), else the first
+  not reached, in their order (▲ ▼ in the panel). From orbital cruise down, the strip and Now say how far and which
+  way ("📍 Wreck: 12.4 km, turn 30° right"), the map draws it (on the rim when it is off the map) and the overlay's
+  radar shows it with a line. The Navigator says it when it is set ("Wreck set. 340 kilometres, bearing 120."), at
+  10 km, 1 km and 100 m, and on arrival (within 50 m on foot or in the SRV, 250 m in the ship), then the next pin's
+  way; the status report starts with it. Reached pins are dimmed, with ↺ to undo.
+- **Finding them again:** a 📍 beside a body with pins in Here and Overview, and every pin in **Bookmarks** (with
+  Plot route to its system).
+
 **Marking rigs.** The game logs nothing when you deploy or pick up a rig, so you tell Outrider with the
 co-pilot button. In the Rhino on a planet:
 
