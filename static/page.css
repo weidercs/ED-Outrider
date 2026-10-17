@@ -1045,6 +1045,10 @@ body.nowmode header, body.nowmode main { display: none; }
 #alertDialog .setsec[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 #alertDialog .setsec[open] { padding-bottom: 10px; }
 #alertDialog .setsec > label.mod:first-of-type { border-top: 0; }
+/* Voice: Main voice and Main personality side by side (the author, 2026-10-16), wrapping on a narrow screen; the first
+   label after them keeps its dashed line */
+#alertDialog .mainrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 28px; margin-top: 8px; font-size: 13px; }
+#alertDialog #voiceSettings > label.mod:first-of-type { border-top: 1px dashed var(--line); }
 /* Server settings: the config file's sections, folding, a row per key */
 .srvset .srvsec { border-top: 1px solid var(--line); }
 .srvset .srvsec > summary { cursor: pointer; padding: 7px 0; font-weight: 600; color: var(--text); }

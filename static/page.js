@@ -9525,7 +9525,8 @@ let mvVoices = null;   // More voices: Piper's catalogue once fetched (see loadM
 function drawTts() {
   const t = data && data.tts, sel = document.getElementById("ttsVoice");
   document.getElementById("ttsEngine").textContent = t && t.engine === "piper" ? "· Piper" : "· browser speech";
-  document.getElementById("ttsStatus").textContent = t && t.available ? t.status : "";
+  // only when it says something: loading, downloading, a failure (the author, 2026-10-16: "ready" told nothing)
+  document.getElementById("ttsStatus").textContent = t && t.available && t.status !== "ready" ? t.status : "";
   document.getElementById("ttsHint").textContent = !t || !t.available
     ? "Piper is not installed, so the browser's own voice is used (robotic on Linux). For a natural voice: python3 -m venv --system-site-packages .venv && .venv/bin/pip install piper-tts, then restart Outrider."
     : "Voices live in data/piper-voices/ where Outrider runs; More voices below downloads any of Piper's there.";

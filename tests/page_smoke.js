@@ -4395,7 +4395,7 @@ const releasePayloads = async () => {
     const want = {colony: [500, null, " · 1,000 m"], sortTh: ["dist", "grav", "now", "max"], sortCycle: ["dist", "-dist rev", "max"],
       nearCycle: ["value", "-value", "distance"], treeSort: "max", halves: [true, true, true], halvesOff: false, matRow: true, link: ["linked", "linked"],
       nogame: ["linked · no game", "linked"], stale: ["unlinked · retrying", "stale"], none: ["unlinked · retrying", "none"], pill: true,
-      chips: ["Alerts", "Voice", "What is said", "Sounds", "Values", "Risk & warnings", "Surface map", "Auto honk", "Uploads", "In-game overlay", "Display", "Sharing", "Server", "Spoken lines", "Questions asked"],
+      chips: ["Alerts", "What is said", "Sounds", "Values", "Risk & warnings", "Surface map", "Auto honk", "Uploads", "In-game overlay", "Display", "Sharing", "Voice", "Server", "Spoken lines", "Questions asked"],
       autoSmall: true, autoBig: false, line: true, cut: true};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodB12 = !bad.length && errors.length === before;
@@ -9029,6 +9029,18 @@ const releasePayloads = async () => {
       got.hintOff = [hint.textContent.startsWith("This voice and personality say every alert"), d.getElementById("ttsXoP").hidden];
       w.eval(`data.crew = Object.assign({}, data.crew, {on: true}); drawMainHint()`);
       got.hintOn = /^The XO's voice and personality: .*With the crew off .* say every alert\.$/.test(hint.textContent);
+      // on one line with Main voice; the voice's status only when it says something (not "ready"); Voice above Server
+      // settings with the other wide sections; Uploads "off by default" (the author, 2026-10-16)
+      got.row = [sel.closest(".mainrow") !== null && sel.closest(".mainrow") === d.getElementById("ttsVoice").closest(".mainrow")];
+      const st = () => d.getElementById("ttsStatus").textContent;
+      w.eval(`window.__mp.tts = data.tts; data.tts = Object.assign({}, data.tts, {available: true, status: "ready"}); drawTts()`);
+      got.row.push(st());
+      w.eval(`data.tts = Object.assign({}, data.tts, {status: "loading en_GB-cori-high"}); drawTts()`);
+      got.row.push(st());
+      w.eval(`data.tts = window.__mp.tts; drawTts()`);
+      const secs = [...d.querySelectorAll("#alertDialog .setbody > details.setsec")].map(x => x.dataset.secKey);
+      got.order = secs.slice(secs.indexOf("voice"), secs.indexOf("voice") + 3);
+      got.uploads = /\(off by default\)/.test(d.querySelector('[data-sec-key="uploads"] > summary').textContent);
     } finally {
       w.eval(`const k = window.__mp; speechLib = k.lib; data.crew = k.crew;
         for (const [key, v] of k.store) { if (v === null) localStorage.removeItem(key); else localStorage.setItem(key, v); }
@@ -9037,7 +9049,8 @@ const releasePayloads = async () => {
     }
     const want = {one: [["business", "sarcastic", "vulcan", "klingon", "__mix"], "sarcastic", true], several: ["__mix", false],
       picked: [JSON.stringify([["vulcan"], false]), true], mix: [JSON.stringify([["vulcan"], true]), false, "__mix", true, true],
-      swear: "(all but Down to business, Vulcan)", swearFew: "(Sarcastic, Klingon)", hintOff: [true, true], hintOn: true};
+      swear: "(all but Down to business, Vulcan)", swearFew: "(Sarcastic, Klingon)", hintOff: [true, true], hintOn: true,
+      row: [true, "", "loading en_GB-cori-high"], order: ["voice", "server", "log"], uploads: true};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodMP = !bad.length && errors.length === before;
     allOk = allOk && goodMP;

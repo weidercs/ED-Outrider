@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Settings: Main voice and personality on one line, Voice beside the other wide sections
+- **One line:** Main voice and Main personality share a line (wrapping on a narrow screen), the explanation under
+  them.
+- **The voice's status:** it shows only when it says something (loading, downloading, a failure), not "ready".
+- **Voice moved down**, just above Server settings, so the full-width sections are together. The chips follow.
+- **Uploads' note:** "(off by default)".
+
 ## 2026-10-16 · Settings → Voice: Main personality beside Main voice, profanity's "all but", the section full width
 - **Main personality = XO:** a dropdown under Main voice picks one personality. Its last entry, **A mix…**, shows the
   boxes and One personality per system (moved up from further down).
