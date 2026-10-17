@@ -815,6 +815,13 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
           during a jump, or with a map, the FSS or the DSS open. With the crew on, its stations talk among themselves (the Crew
           table's Chatter column picks which).</div>
       </div>
+      <div id="chatReadBox" class="mod inlineopts" data-find-block="chat read aloud squadron wing">
+        <b>Chat</b>&nbsp; <label title="other players' messages (never NPCs'), read aloud by Comms after any alert, never while hushed; off by default"><input type="checkbox" id="chatRead"> Read aloud</label>
+        <span id="chatChans"></span>
+        <label>as <select id="chatHeader" aria-label="how a message starts"><option value="name">Kurbo: …</option>
+          <option value="full">Commander Kurbo on Squadron: …</option><option value="none">the message only</option></select></label>
+        <span id="chatMutedList" class="hint"></span>
+      </div>
       <div id="crewBox" class="crewbox" data-find-block="crew">
         <h4 class="crewhead">Crew</h4>
         <div class="mod inlineopts crewsw"><label><input type="checkbox" id="crewOn"> <b>Split the alerts among a crew</b></label>

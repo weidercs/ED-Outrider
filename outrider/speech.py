@@ -664,7 +664,7 @@ CREW_ROLES = (
     ("exobiologist", "Exobiologist", "Exobiologist", ("exo", "find", "sampling")),
     ("engineer", "Chief Engineer", "Engineer", ("fuel", "scoop", "scoopstop", "jumponium", "hull")),
     ("quartermaster", "Quartermaster", "Quartermaster", ("sell", "saleleft", "unsold", "carrier", "loss")),
-    ("comms", "Comms Officer", "Comms", ("uploads", "firstsseen", "game", "docking")),
+    ("comms", "Comms Officer", "Comms", ("uploads", "firstsseen", "game", "docking", "chat")),
     ("tactical", "Tactical", "Tactical", ()),
     ("mining", "Mining Officer", "Mining Officer", ("rigs", "rigleash", "rigsout")),
 )

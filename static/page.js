@@ -3,7 +3,8 @@
 // the config file's [defaults] (data.defaults) where the page asks for one. Only SETTINGS_KEYS are shared:
 // per-device ones (the view, layouts, the search form, which screen speaks) never are. ed_outrider.py has the
 // same list (BROWSER_SETTINGS).
-const SETTINGS_KEYS = ["alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechMix", "speechNames", "chatterNames", "speechSpeed",
+const SETTINGS_KEYS = ["alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechMix", "speechNames", "chatterNames",
+  "chatRead", "chatChannels", "chatHeader", "chatMuted", "speechSpeed",
   "speechProfanity", "speechProfanityPct", "speechDangerBusiness", "speechShift", "sayBio", "sayGeo", "sayHazard",
   "sayMapped", "honkAnnounce", "sound", "unsoldCfg", "highlightCfg", "bioMinCfg", "maxBonus", "codexNewCounts",
   "highG", "streakCfg", "skipFloor", "sort", "sorts", "showVisited", "showExplored", "oneJump", "map",
@@ -15,7 +16,8 @@ const serverSettings = () => { const s = typeof window !== "undefined" && window
 // the personalities would otherwise throw in every spoken alert. A value of the wrong type reads as unset.
 const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
 const SETTING_SHAPES = {alerts: isObj, alertSound: isObj, alertSpeak: isObj, speechStyles: Array.isArray, unsoldCfg: isObj,
-  highlightCfg: isObj, streakCfg: isObj, sorts: isObj, map: isObj, log: isObj, bioSort: isObj, surfaceCfg: isObj, highway: isObj};
+  highlightCfg: isObj, streakCfg: isObj, sorts: isObj, map: isObj, log: isObj, bioSort: isObj, surfaceCfg: isObj, highway: isObj,
+  chatChannels: Array.isArray, chatMuted: Array.isArray};
 // null is a fine value for a plain setting (a reset stores it: "follow the default"), but a key with a shape is
 // read as an object or list at start-up, so a null there reads as unset too (else `lSaved.days` stops the script)
 const settingOk = (k, v) => !SETTING_SHAPES[k] || SETTING_SHAPES[k](v);
@@ -2000,6 +2002,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed; within 100 m of a plant you tagged where the next sample would count", "alert"],
   ["approach", "approaching a landable body at or over your high-gravity level with unsold data over the amber level or rebuy multiple", "alert"],
   ["bodybrief", "approaching a body with biological signals: what they could be (the FSS already said so, so off by default)", null],
+  ["chat", "chat: other players' messages read aloud by Comms (Settings → Voice → Chat: off by default; squadron, wing and direct ticked), never an NPC's", null],
   ["docking", "docking: the pad the station gave you (said every time, shown big on Now and in the overlay's Surface radar place), and why one refused when it is not obvious (no pad free, ship too big, access restricted, hostile, your offences, a fighter out)", null],
   ["sell", "docked where you can sell, and what you banked", "cash"],
   ["saleleft", "a sale left data aboard: Universal Cartographics sells 50 systems a page, so a sale that stops after one page leaves the rest unsold (said once the pages stop and the estimate has caught up); likewise completed samples still unsold after a Vista Genomics sale", "alert"],
@@ -2026,7 +2029,7 @@ const UNSPOKEN = new Set(Object.keys(UNSPOKEN_WHY));
 const alertCfgBase = () => Object.assign({enabled: false}, Object.fromEntries(ALERTS.map(([k]) => [k, true])),
   // a notification on every jump (or scoop, or FSS) would be noise: these are spoken by default, not notified
   {jump: false, honk: false, brief: false, fss: false, mapped: false, scoop: false, scoopstop: false, supercharge: false, highway: false, autotarget: false, wrongtarget: false,
-   docking: false, sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false});
+   docking: false, sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false, chat: false});
 const alertCfg = Object.assign(alertCfgBase(), store.get("alerts", {}));
 // off until you tick them (the whole row): the jumponium call-out
 const OFF_KINDS = {jumponium: false};
@@ -2204,11 +2207,14 @@ function overlayAlert(kind, title, body, tag) {
     body: JSON.stringify({kind, title: String(title || "").slice(0, 200), body: String(body || "").slice(0, 300), danger})}).catch(() => {});
   return true;
 }
-function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still = null, quiet = false} = {}) {
-  lastAlert = {kind, title, body, at: Date.now()};
+// caption: the caption strip's words when they differ from the spoken ones (chat: always "Kurbo: ..."); priv: never
+// cached or logged on the PC (#17); chatFrom: the chat's sender, for Spoken lines' 🔇. Chat (#17) is no alert: it does
+// not reset the quiet chatter waits for
+function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still = null, quiet = false, caption = null, priv = false, chatFrom = null} = {}) {
+  if (kind !== "chat") lastAlert = {kind, title, body, at: Date.now()};
   overlayAlert(kind, title, body, tag);
   if (TABLET) tabBanner(kind, title, body, tag);   // the tablet shows it; the PC says it (and the tablet too with Play alerts here)
-  const entry = logSpeech({kind, tag, words: title});
+  const entry = logSpeech({kind, tag, words: title, chatFrom});
   const snd = sound === undefined ? (ALERTS.find(a => a[0] === kind) || [])[2] : sound;
   const loud = speakerHere(), hush = hushed() && speechPrio(kind, tag) > 1;   // hushed: danger (and a rig press's answer) still speaks
   const plays = !!(loud && snd && soundOn && alertSound[kind] && !hush);   // no sound, no wait before the words
@@ -2222,15 +2228,15 @@ function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still =
     entry.style = lineStyle; entry.key = lineKey; entry.template = lineTemplate;
     // who says it (the crew, when on): the member line() picked the words for, else the row's by the line's tag
     const crew = lineCrew !== undefined ? lineCrew : crewMember(kind, tag || lineKey);
-    speak(words, {delay: plays ? delay + soundLead(snd) : delay, kind, tag, still, log: entry, ...crewVoice(crew, lineStyle)});
-    addCaption(words);
+    speak(words, {delay: plays ? delay + soundLead(snd) : delay, kind, tag, still, log: entry, private: priv, ...crewVoice(crew, lineStyle)});
+    addCaption(caption || words);
     return true;
   }
   // another window speaks it: Now's captions get its plain wording (a personality line picked here would not be
   // the one said there)
   if (!loud && alertSpeak[kind] && !UNSPOKEN.has(kind) && !quiet && !hush) {
     linePlain = true;
-    try { addCaption((typeof say === "function" ? say() : say) || title); } catch { addCaption(title); } finally { linePlain = false; }
+    try { addCaption(caption || (typeof say === "function" ? say() : say) || title); } catch { addCaption(title); } finally { linePlain = false; }
   }
   setFate(entry, !loud ? `silent: ${hushReason()}` : !speechOn ? "silent: speech off" : UNSPOKEN.has(kind) ? `not spoken (${UNSPOKEN_WHY[kind]})`
     : quiet ? (typeof quiet === "string" ? quiet : "merged into another line (quiet)")
@@ -2254,7 +2260,7 @@ const SPEECH_SYS_BOUND = new Set(["chatter", "find", "signals", "jump", "honk", 
 // a rig confirmation answers your own press, like a line asked for; so does the docking pad (#3: your request's answer,
 // wanted at once)
 const speechPrio = (kind, tag) => DANGER.has(tag) || kind === "hull" || kind === "fuel" ? 0 : kind === "manual" || kind === "rigs" || kind === "docking" ? 1
-  : kind === "chatter" ? 4   // space chatter (#15): after everything else
+  : kind === "chatter" || kind === "chat" ? 4   // space chatter (#15) and other players' chat (#17): after everything else
   : ["find", "signals", "codex", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "bodybrief", "supercharge", "jumponium"].includes(kind) ? 3 : 2;
 // the queue without what went stale by `now` with the ship at `pos`
 const speechExpire = (items, now, pos) => items.filter(it => now - it.notBefore <= SPEECH_MAX_AGE
@@ -2294,7 +2300,7 @@ async function runningAudio() {
 // `log` is the transcript entry alertOut made for it (a line spoken some other way gets its own). `piperOnly`: said in
 // Piper or not at all, never the browser's own voice (the co-pilot channel's lines: the author's choice).
 function speak(text, {delay = 0, kind = "manual", tag = null, still = null, voice = null, speaker = null, pace = 1, log = null, piperOnly = false,
-                      role = null, crew = null} = {}) {
+                      role = null, crew = null, private: priv = false} = {}) {
   const words = spokenText(text);
   const entry = log || logSpeech({kind, tag});
   if (words) entry.words = words;
@@ -2305,7 +2311,8 @@ function speak(text, {delay = 0, kind = "manual", tag = null, still = null, voic
   if (tag && !speechCooled(speechLast, tag, now)) return setFate(entry, `refused: said under ${SPEECH_COOLDOWN[tag] / 1000} s ago`);
   const prevLast = tag ? speechLast[tag] : undefined;
   if (tag) speechLast[tag] = now;
-  const item = {words, kind, tag, still, voice, speaker, pace, piperOnly, role: voice ? role : null, prio: speechPrio(kind, tag), at: now, notBefore: now + delay, prevLast,
+  // priv (#17): another player's chat: never in the voice's cache or the log on the PC (api/say ...&private=1)
+  const item = {words, kind, tag, still, voice, speaker, pace, piperOnly, priv, role: voice ? role : null, prio: speechPrio(kind, tag), at: now, notBefore: now + delay, prevLast,
                 sys: SPEECH_SYS_BOUND.has(kind) && data && data.position ? posId() : null, log: entry};
   const before = speechItems;
   speechItems = speechAdd(speechItems, item);
@@ -2399,7 +2406,7 @@ addEventListener("pagehide", () => {
 const lineSpeed = it => Math.min(2, Math.max(0.5, speechSpeed() * (it.pace || 1)));
 function nextLine() {
   const i = speechPick(speechItems), it = i < 0 ? null : speechItems[i];
-  return it ? {text: it.words, voice: it.voice || null, speaker: it.speaker ?? null, speed: lineSpeed(it), role: it.role || null} : null;
+  return it ? {text: it.words, voice: it.voice || null, speaker: it.speaker ?? null, speed: lineSpeed(it), role: it.role || null, private: !!it.priv} : null;
 }
 async function sayNow(item) {
   const cur = speechNow = {prio: item.prio, kind: item.kind, stopped: false, halt: null, stop() { this.stopped = true; if (this.halt) this.halt(); }};
@@ -2412,7 +2419,7 @@ async function sayNow(item) {
       try {
         const speed = Math.min(2, Math.max(0.5, speechSpeed() * (item.pace || 1)));
         const r = await fetch("api/say/play", {method: "POST", headers: {"Content-Type": "application/json"},
-                                               body: JSON.stringify({text: item.words, voice: item.voice || null, speaker: item.speaker ?? null, role: item.role || null, speed, id, next: nextLine(),
+                                               body: JSON.stringify({text: item.words, voice: item.voice || null, speaker: item.speaker ?? null, role: item.role || null, speed, id, next: nextLine(), private: !!item.priv,
                                                                      volume: outVolume()})});
         if (r.ok) {
           item.engine = "Piper on the PC";
@@ -2442,7 +2449,7 @@ async function sayNow(item) {
       try {
         const speed = Math.min(2, Math.max(0.5, speechSpeed() * (item.pace || 1)));
         const r = await fetch(`api/say?text=${encodeURIComponent(item.words)}&speed=${speed}${item.voice ? `&voice=${encodeURIComponent(item.voice)}` : ""}`
-                              + (item.speaker != null ? `&speaker=${item.speaker}` : "") + (item.role ? `&role=${encodeURIComponent(item.role)}` : ""));
+                              + (item.speaker != null ? `&speaker=${item.speaker}` : "") + (item.role ? `&role=${encodeURIComponent(item.role)}` : "") + (item.priv ? "&private=1" : ""));
         if (r.ok) {
           const buf = await ctx.decodeAudioData(await r.arrayBuffer());
           if (cur.stopped) return;
@@ -2651,6 +2658,7 @@ let lineCrew = null;  // the crew member line() picked the last line for (crewMe
 // and with lineStrict says nothing rather than a line missing a value
 let lineCrewForce = undefined, lineStrict = false;
 let crewUi = false;   // Settings' crew table and memory note are set up (drawCrew may run: crew batch 2, further down)
+let chatUi = false;   // Settings' Chat line is set up (drawChatRead may run: #17, further down)
 const crewRoles = () => Array.isArray(speechLib.crew_roles) ? speechLib.crew_roles : [];
 const crewTitle = id => (crewRoles().find(r => r.id === id) || {}).short || id;
 // The crew's placeholders (crew batch 3): one per role, {engineer} and the like (a role's id), naming another crew
@@ -8640,7 +8648,7 @@ function onData() {
   { const cn = bioColoursNote(); if (cn !== bioColoursDrawn) { bioColoursDrawn = cn; drawHereLegend(); } }   // S7's note in Here's legend
   // first payload, the server was restarted, or this window slept (see poll): no sounds for old state
   const firstNews = data.run_id !== runId || woke;
-  onHush(firstNews); takeCopilot(data.copilot, firstNews); takeChatter(data.chatter); nowStakesTick();
+  onHush(firstNews); takeCopilot(data.copilot, firstNews); takeChatter(data.chatter); takeChat(firstNews); nowStakesTick();
   if (data.ask_seq !== AL.seq) loadAskLog();   // S35: a new question while Questions asked is open
   const cpl = document.getElementById("copilotLine"), btn = data.copilot && data.copilot.button;
   cpl.hidden = !btn; cpl.textContent = btn ? `Co-pilot button: ${btn}` : "";
@@ -9148,7 +9156,9 @@ function drawSpeechLog() {
   drawSpeechBans();
   document.getElementById("speechTally").innerHTML = speechTallyHtml();
   // 👎 on a line picked from the lines file: never that wording again (not on plain wording, which has no versions)
-  const ban = e => !e.template || !e.key ? "" : e.banned ? ` <span class="unk">· banned</span>`
+  const ban = e => e.chatFrom ? (chatMuted().some(x => x.toLowerCase() === e.chatFrom.toLowerCase()) ? ` <span class="unk">· ${esc(e.chatFrom)} muted</span>`
+      : ` <button type="button" class="try" data-chatmute="${esc(e.chatFrom)}" title="never read ${esc(e.chatFrom)}'s chat aloud (undo in Settings → Voice → Chat)">🔇</button>`)
+    : !e.template || !e.key ? "" : e.banned ? ` <span class="unk">· banned</span>`
     : ` <button type="button" class="try ban" data-ban="${e.id}" title="never say this line again (every browser)">👎</button>`;
   document.getElementById("speechLog").innerHTML = speechLog.length ? [...speechLog].reverse().map(e =>
     `<div class="slog ${fateGroup(e.fate)}"><span class="unk">${hms(e.t)}</span> <b>${esc(e.fate || "waiting")}</b> <span class="unk">· ${esc(speechLogFacts(e).join(" · "))}</span>${ban(e)}<br>“${esc(e.words)}”</div>`).join("")
@@ -9186,6 +9196,8 @@ async function banLine(alert, template, ban) {
   return true;
 }
 document.getElementById("speechLog").addEventListener("click", ev => {
+  const cm = ev.target.closest("[data-chatmute]");
+  if (cm) { chatMute(cm.dataset.chatmute, true); return; }
   const b = ev.target.closest("[data-ban]"); if (!b) return;
   const e = speechLog.find(x => x.id === Number(b.dataset.ban));
   if (e && e.key && e.template) banLine(e.key, e.template, true);
@@ -9381,6 +9393,7 @@ function drawSpeechStyles() {
     : swear.length >= clean.length ? `(all but ${clean.map(label).join(", ")})` : `(${swear.map(label).join(", ")})`;
   document.getElementById("speechDangerBusiness").checked = speechDangerBusiness();
   document.getElementById("speechShift").checked = speechShift();
+  if (chatUi) drawChatRead();   // (#17: imported or changed in another window)
   // Main personality: one of them, or "A mix…" (the boxes above and One personality per system)
   const main = document.getElementById("speechMain"), names = Object.fromEntries(styles);
   const single = !speechMix() && on.length === 1 && on[0] in names;
@@ -9899,13 +9912,107 @@ document.getElementById("chatTry").onclick = () => {
   m.textContent = r === true ? "" : r; m.className = "hint";
 };
 
+// ---- chat read aloud by Comms (#17, the author 2026-10-17): other players' messages (the payload's chat: live only,
+// never an NPC's or your own; in memory only), off by default, per browser and shared as the other settings. A tick per
+// channel (squadron, wing, direct ticked), the header ("Kurbo: ..." by default), mutes from Spoken lines' 🔇. Said last
+// in the queue, never while hushed (the "chat" alert row, Comms' by default), and never cached or logged on the PC. The
+// pace: one sender's messages in a row are one line; one line every CHAT_GAP at most, a mention of you at once; past
+// CHAT_SUMMARY waiting, "and 4 more on Squadron"; anything waiting over CHAT_STALE is shown, not said.
+const CHAT_TICKS = [["squadron", "Squadron"], ["wing", "Wing"], ["player", "Direct"], ["local", "Local"], ["voicechat", "Voice chat"]];
+const chatTickOf = ch => ch === "friend" ? "player" : ch === "starsystem" ? "local" : ch;
+const CHAT_WHERE = {squadron: "on Squadron", wing: "on Wing", player: "to you", friend: "to you", local: "on Local", starsystem: "on Local", voicechat: "on Voice chat"};
+const CHAT_WORD = {squadron: "Squadron", wing: "Wing", player: "direct", friend: "direct", local: "Local", starsystem: "Local", voicechat: "Voice chat"};
+const CHAT_GAP = 15000, CHAT_STALE = 60000, CHAT_SUMMARY = 3;
+const chatRead = () => store.get("chatRead", false) === true;
+const chatChannels = () => { const v = store.get("chatChannels", null); return Array.isArray(v) ? v.filter(x => typeof x === "string") : ["squadron", "wing", "player"]; };
+const chatHeader = () => { const v = store.get("chatHeader", "name"); return ["name", "full", "none"].includes(v) ? v : "name"; };
+const chatMuted = () => { const v = store.get("chatMuted", []); return Array.isArray(v) ? v.filter(x => typeof x === "string") : []; };
+const CHATQ = {last: null, spokenAt: 0, queue: []};
+// a message as words to say: a link is "a link", emoji go
+const chatClean = (t, more) => String(t || "").replace(/\b(?:https?:\/\/|www\.)\S+/gi, "a link")
+  .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}]/gu, "").replace(/\s+/g, " ").trim() + (more ? ", and more" : "");
+const chatEnd = t => /[.!?]$/.test(t) ? t : t + ".";
+// one sender's messages in a row, with the header asked for
+function chatWords(group, extra = "") {
+  const m = group[0], h = chatHeader();
+  const body = group.map(x => chatClean(x.text, x.more)).filter(Boolean).map(chatEnd).join(" ");
+  return (h === "full" ? `Commander ${m.sender} ${CHAT_WHERE[m.channel] || ""}: ` : h === "name" ? `${m.sender}: ` : "") + body + extra;
+}
+// the payload's chat: the messages past the last seen; none from the first payload (a page opening never reads a backlog)
+function takeChat(first) {
+  const list = data && Array.isArray(data.chat) ? data.chat : [];
+  const top = list.reduce((a, m) => Math.max(a, Number(m.seq) || 0), 0);
+  if (first || CHATQ.last == null || top < CHATQ.last) { CHATQ.last = top; return; }   // (top lower: Outrider restarted)
+  const fresh = list.filter(m => m.seq > CHATQ.last && m.sender && m.text);
+  CHATQ.last = top;
+  if (!chatRead() || !fresh.length) return;
+  const ticked = new Set(chatChannels()), muted = new Set(chatMuted().map(x => x.toLowerCase()));
+  for (const m of fresh)
+    if (!muted.has(m.sender.toLowerCase()) && (ticked.has(chatTickOf(m.channel)) || m.mention)) CHATQ.queue.push({m, at: Date.now()});
+  chatPump();
+}
+function chatSay(group, extra = "") {
+  const m = group[0], text = group.map(x => chatClean(x.text, x.more)).join(" ");
+  alertOut("chat", `${m.sender} · ${CHAT_WORD[m.channel] || m.channel}`, text, {say: chatWords(group, extra),
+    caption: `${m.sender}: ${text}`, priv: true, chatFrom: m.sender});
+}
+// every second: what may be said now
+function chatPump(now = Date.now()) {
+  const q = CHATQ.queue;
+  while (q.length && now - q[0].at > CHAT_STALE) { const x = q.shift(); addCaption(`${x.m.sender}: ${chatClean(x.m.text, x.m.more)}`); }
+  if (!q.length) return false;
+  const mi = q.findIndex(x => x.m.mention), due = now - CHATQ.spokenAt >= CHAT_GAP;
+  if (mi < 0 && !due) return false;
+  let i = mi >= 0 && !due ? mi : 0;
+  const head = q[i].m, group = [];
+  while (i < q.length && q[i].m.sender === head.sender && q[i].m.channel === head.channel) group.push(q.splice(i, 1)[0].m);
+  // too many waiting: the rest summed up by channel, shown in the captions
+  let extra = "";
+  if (q.length >= CHAT_SUMMARY) {
+    const by = {};
+    for (const x of q.splice(0)) { by[CHAT_WORD[x.m.channel] || x.m.channel] = (by[CHAT_WORD[x.m.channel] || x.m.channel] || 0) + 1; addCaption(`${x.m.sender}: ${chatClean(x.m.text, x.m.more)}`); }
+    extra = " And " + Object.entries(by).map(([w, n]) => `${n} more ${w === "direct" ? "directly" : "on " + w}`).join(", ") + ".";
+  }
+  CHATQ.spokenAt = now;
+  chatSay(group, extra);
+  return true;
+}
+setInterval(() => { try { chatPump(); } catch (err) { console.warn("chat:", err); } }, 1000);
+// Settings -> Voice -> Chat
+function drawChatRead() {
+  const on = document.getElementById("chatRead"); if (!on) return;
+  on.checked = chatRead();
+  const ch = new Set(chatChannels()), box = document.getElementById("chatChans");
+  const html = CHAT_TICKS.map(([k, w]) => `<label><input type="checkbox" data-chatch="${k}"${ch.has(k) ? " checked" : ""}> ${w}</label>`).join(" ");
+  if (box.dataset.drawn !== html) { box.innerHTML = html; box.dataset.drawn = html; }
+  const hd = document.getElementById("chatHeader"); if (document.activeElement !== hd) hd.value = chatHeader();
+  const mu = chatMuted(), ml = document.getElementById("chatMutedList");
+  ml.innerHTML = mu.length ? "muted: " + mu.map((n, i) => `${esc(n)} <a href="#" data-chatunmute="${i}" title="read ${esc(n)}'s chat again">✕</a>`).join(", ") : "";
+}
+function chatMute(name, mute) {
+  const list = chatMuted().filter(x => x.toLowerCase() !== String(name).toLowerCase());
+  store.set("chatMuted", mute ? [...list, name] : list);
+  if (mute) CHATQ.queue = CHATQ.queue.filter(x => x.m.sender.toLowerCase() !== String(name).toLowerCase());
+  toast(mute ? `${name}'s chat will not be read aloud` : `${name}'s chat is read aloud again`);
+  drawChatRead(); drawSpeechLog();
+}
+document.getElementById("chatRead").onchange = e => { store.set("chatRead", e.target.checked); if (!e.target.checked) CHATQ.queue = []; drawChatRead(); };
+document.getElementById("chatChans").onchange = e => { const k = e.target.dataset.chatch; if (!k) return;
+  const ch = new Set(chatChannels()); if (e.target.checked) ch.add(k); else ch.delete(k);
+  store.set("chatChannels", CHAT_TICKS.map(([x]) => x).filter(x => ch.has(x))); drawChatRead(); };
+document.getElementById("chatHeader").onchange = e => { store.set("chatHeader", e.target.value); e.target.blur(); };
+document.getElementById("chatMutedList").onclick = e => { const a = e.target.closest("[data-chatunmute]"); if (!a) return;
+  e.preventDefault(); const n = chatMuted()[Number(a.dataset.chatunmute)]; if (n) chatMute(n, false); };
+chatUi = true;
+drawChatRead();
+
 // ---- the crew in Settings (crew batch 2): its switches, the table (Role · Name · Personality · Voice · Speaker · Speaks
 // for · ▶ · ↺, the XO first), the XO note, Settings > Alerts' Crew column and the voice lab's Assign and "by crew"
 // audition. Each change is one POST to api/voice/crew (data.crew comes back), checked by the server against the lines
 // file and the voices installed. The XO row is the main voice (its voice select switches it) and the main personality.
 // an alert row in a few words, for a crew member's "Speaks for" and the messages (test_crew keeps it in step with ALERTS;
 // the Spoken lines tally has its own capitalised names, ALERT_SHORT)
-const ROW_WORDS = {discovery: "target verdicts", arrival: "arrivals", game: "start and exit", jump: "jumps", honk: "the honk",
+const ROW_WORDS = {chat: "other players' chat", discovery: "target verdicts", arrival: "arrivals", game: "start and exit", jump: "jumps", honk: "the honk",
   brief: "arrival briefings", fss: "the FSS", mapped: "mapped planets", leaving: "leaving with work left", fuel: "fuel",
   scoop: "tank full", scoopstop: "scooping stopped", supercharge: "supercharges", exo: "Exomastery routes", riches: "survey routes",
   trade: "trade routes", highway: "the Highway", refuelshort: "fuel short of a refuel", lastscoop: "last scoop", autotarget: "auto-target",

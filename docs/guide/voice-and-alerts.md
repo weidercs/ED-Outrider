@@ -219,7 +219,7 @@ the sentence ends:
 | Exobiologist | valuable bodies, sampling, Exomastery routes |
 | Chief Engineer | fuel, tank full, scooping stopped, jumponium, hull and heat |
 | Quartermaster | sales, unsold data, your carrier, losses |
-| Comms Officer | the game's start and exit, someone scanning your firsts, docking pads and refusals |
+| Comms Officer | the game's start and exit, someone scanning your firsts, docking pads and refusals, other players' chat (read aloud, below) |
 | Tactical | every danger line (while Danger lines always in Tactical's voice is on) |
 | Mining Officer | the Rhino's rigs |
 
@@ -347,6 +347,25 @@ someone says something: in supercruise, or while you are on foot or in the SRV o
 - **Name the speaker in captions** (per browser) puts "Engineer (Mira):" before each line.
 - If an alert comes in mid-conversation, the rest of the conversation is dropped. Chatter lines can be banned in
   Spoken lines like any other.
+
+**Chat read aloud**
+
+Off by default. Tick **Read aloud** on the **Chat** line in ⚙ Settings → Voice and Comms reads other players'
+messages to you: squadron, wing and direct messages by default, local and voice chat if you tick them, NPCs never.
+
+- **How it starts:** "Kurbo: …" (the default), "Commander Kurbo on Squadron: …", or the message alone. The caption
+  strip always shows "Kurbo: …".
+- **The pace:** several messages from one commander in a row are read as one; at most one every 15 seconds; with
+  more waiting, the first is read and the rest summed up ("And 3 more on Squadron"); anything waiting over a minute is
+  shown in the captions but not read. A message that mentions your commander name is read at once, even from a
+  channel you did not tick.
+- **As written:** a link is said "a link", emoji are left out; their words, swearing included, are read as they wrote
+  them (your profanity setting is about Outrider's own lines). Up to about 300 characters, then "and more".
+- **When:** after any alert, never while hushed; only what arrives while the page is open (never a backlog).
+- **🔇 in Spoken lines** beside a chat line mutes that commander; the Chat line lists the muted ones with ✕ to undo.
+- It is the **Chat** row of ⚙ Settings → Alerts (speak only, by default): the overlay's Alerts panel shows it there.
+- **Private:** other players' words are never written to Outrider's log or its database, and never kept in the
+  voice's cache.
 
 **Spoken lines: what was said, and banning lines**
 

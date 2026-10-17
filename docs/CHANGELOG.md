@@ -2,6 +2,24 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-17 · Chat read aloud by Comms (NEXT-VERSION #17)
+- **Settings → Voice → Chat** (off by default): Read aloud, a tick per channel (Squadron, Wing and Direct ticked;
+  Local and Voice chat not; NPCs never), and how a message starts ("Kurbo: …", "Commander Kurbo on Squadron: …", the
+  message alone). Browser settings chatRead, chatChannels, chatHeader and chatMuted, shared like the others.
+- **The server** keeps live ReceiveText, never an NPC's or your own, in memory only (`Journals.chat`, the payload's
+  `chat`; `chat_sender` tidies "$cmdr_decorate" and "CMDR"), marking a mention of your commander name.
+- **The page** reads it in Comms' voice (the new "chat" alert row; Comms' by default), last in the queue, never while
+  hushed:
+  - one sender's run of messages as one line;
+  - one line per 15 s at most, a mention at once;
+  - past 3 waiting, "And 3 more on Squadron";
+  - over a minute old, shown in the captions only;
+  - a link said "a link", emoji dropped;
+  - 🔇 in Spoken lines mutes a commander (✕ on the Chat line to undo).
+- **Private:** api/say and api/say/play take `private`. The voice neither caches nor prefetches the line, and a
+  failure is logged without its words.
+- **Tests:** `tests/test_chat.py`, and the smoke test's "chat read aloud" block.
+
 ## 2026-10-17 · A Terraformable worlds route (🪨, NEXT-VERSION #18)
 - **What:** Plot Route has a seventh plotter, Terraformable, beside Earth-like and Ammonia. It is the Road to Riches
   router asked for rocky and high metal content worlds, kind `tf` in `outrider.riches.SURVEY_KINDS` and in page.js

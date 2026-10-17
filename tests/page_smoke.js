@@ -9000,6 +9000,77 @@ const releasePayloads = async () => {
     console.log(goodTL ? "OK" : "FAIL", "| header tiles shown |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "Settings → Display ticks the tiles this device shows: left out of the row and the one line, a column each, at least one stays, the fold modes kept", errors.slice(before));
   }
+  // Chat read aloud by Comms (#17): nothing from the first payload; the ticked channels, a mention through an unticked
+  // one and through the gap; one sender's messages in a row as one line; one line per CHAT_GAP; "and N more" past
+  // CHAT_SUMMARY; a stale one shown, not said; the three headers; a link and emoji; 🔇 mutes a sender; private to the PC
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, got = {};
+    w.eval(`window.__ch = {chat: data.chat, speak, flags: [speechOn, isSpeaker], hush: hushState, alert: lastAlert, q: JSON.stringify(CHATQ),
+        caps: captions.splice(0), aspeak: alertSpeak.chat, cmdr: data.commander, store: ["chatRead", "chatChannels", "chatHeader", "chatMuted"].map(k => [k, localStorage.getItem(k)])};
+      window.__spoken = [];
+      speak = (t, o) => window.__spoken.push([t, o.kind, !!o.private]);
+      speechOn = true; isSpeaker = true; hushState = null; lastAlert = null; alertSpeak.chat = true;
+      ["chatChannels", "chatHeader", "chatMuted"].forEach(k => localStorage.removeItem(k)); store.set("chatRead", true);
+      Object.assign(CHATQ, {last: null, spokenAt: 0, queue: []});
+      window.__msg = (seq, channel, sender, text, mention = false) => ({seq, ts: "", channel, sender, text, more: false, mention});
+      window.__said = () => JSON.stringify(__spoken.splice(0));`);
+    try {
+      // the first payload: a backlog is never read
+      w.eval(`data.chat = [__msg(1, "squadron", "Kurbo", "old news")]; takeChat(true); chatPump(Date.now())`);
+      got.first = JSON.parse(w.eval("__said()"));
+      // two from Kurbo in a row (one line), an unticked local one (not queued), a mention on local (queued)
+      w.eval(`data.chat = [__msg(1, "squadron", "Kurbo", "old news"), __msg(2, "squadron", "Kurbo", "o7 all"), __msg(3, "squadron", "Kurbo", "anyone out here?"),
+        __msg(4, "starsystem", "Bob", "selling stuff"), __msg(5, "starsystem", "Alice", "Hefay, is that you?", true)]; takeChat(false)`);
+      got.firstLine = JSON.parse(w.eval("__said()"));
+      got.caption = w.eval("captions.map(c => c.words)");
+      got.alertKept = w.eval("lastAlert === null");   // chat is no alert: chatter's quiet is not reset
+      // the mention waits for nobody: said on the next pump although the gap has not passed
+      got.mention = JSON.parse(w.eval("chatPump(Date.now()), __said()"));
+      // the gap: a new squadron line waits CHAT_GAP
+      w.eval(`data.chat = [__msg(6, "squadron", "Zed", "next")]; takeChat(false)`);
+      got.gapWait = JSON.parse(w.eval("chatPump(Date.now()), __said()"));
+      got.gapDue = JSON.parse(w.eval("chatPump(Date.now() + CHAT_GAP + 1), __said()"));
+      // too many waiting: the first said, the rest summed up
+      w.eval(`CHATQ.spokenAt = 0; data.chat = [6, 7, 8, 9, 10].map(n => __msg(n + 1, n === 10 ? "wing" : "squadron", "P" + n, "msg " + n)); takeChat(false)`);
+      got.summary = JSON.parse(w.eval("__said()"));
+      // stale: waited over a minute, shown and not said
+      w.eval(`CHATQ.queue.push({m: __msg(99, "squadron", "Late", "too late"), at: Date.now() - CHAT_STALE - 1}); CHATQ.spokenAt = Date.now()`);
+      got.stale = [JSON.parse(w.eval("chatPump(Date.now()), __said()")), w.eval("captions[captions.length - 1].words")];
+      // headers, a link and emoji
+      w.eval(`store.set("chatHeader", "full"); CHATQ.spokenAt = 0; data.chat = [__msg(20, "squadron", "Kurbo", "look https://example.com/x 🚀🚀")]; takeChat(false)`);
+      got.full = JSON.parse(w.eval("__said()"))[0][0];
+      w.eval(`store.set("chatHeader", "none"); CHATQ.spokenAt = 0; data.chat = [__msg(21, "player", "Kurbo", "hi")]; takeChat(false)`);
+      got.none = JSON.parse(w.eval("__said()"))[0][0];
+      // 🔇 in Spoken lines mutes the sender; muted, nothing of theirs is read; ✕ in Settings brings them back
+      w.eval(`store.set("chatHeader", "name"); chatMute("Kurbo", true); CHATQ.spokenAt = 0; data.chat = [__msg(22, "squadron", "Kurbo", "muted?")]; takeChat(false)`);
+      got.muted = [JSON.parse(w.eval("__said()")), w.eval(`JSON.stringify(store.get("chatMuted"))`), d.getElementById("chatMutedList").textContent.includes("Kurbo")];
+      d.querySelector("#chatMutedList [data-chatunmute]").click();
+      got.unmuted = w.eval(`JSON.stringify(store.get("chatMuted"))`);
+      // the switch off: nothing queued or said
+      w.eval(`store.set("chatRead", false); CHATQ.spokenAt = 0; data.chat = [__msg(23, "squadron", "Zed", "off")]; takeChat(false)`);
+      got.off = JSON.parse(w.eval("chatPump(Date.now()), __said()"));
+      w.eval("drawChatRead()");
+      got.ui = [d.getElementById("chatRead").checked, d.querySelectorAll("#chatChans [data-chatch]").length,
+                [...d.querySelectorAll("#chatChans [data-chatch]")].filter(x => x.checked).map(x => x.dataset.chatch)];
+    } finally {
+      w.eval(`const k = window.__ch; data.chat = k.chat; speak = k.speak; [speechOn, isSpeaker] = k.flags; hushState = k.hush; lastAlert = k.alert;
+        alertSpeak.chat = k.aspeak; Object.assign(CHATQ, JSON.parse(k.q)); captions.length = 0; captions.push(...k.caps);
+        for (const [key, v] of k.store) { if (v === null) localStorage.removeItem(key); else localStorage.setItem(key, v); }
+        drawChatRead(); delete window.__ch; delete window.__spoken; delete window.__msg; delete window.__said;`);
+      await releasePayloads();
+    }
+    const want = {first: [], firstLine: [["Kurbo: o7 all. anyone out here?", "chat", true]], caption: ["Kurbo: o7 all anyone out here?"],
+      alertKept: true, mention: [["Alice: Hefay, is that you?", "chat", true]], gapWait: [], gapDue: [["Zed: next.", "chat", true]],
+      summary: [["P6: msg 6. And 3 more on Squadron, 1 more on Wing.", "chat", true]], stale: [[], "Late: too late"],
+      full: "Commander Kurbo on Squadron: look a link.", none: "hi.", muted: [[], JSON.stringify(["Kurbo"]), true], unmuted: "[]", off: [],
+      ui: [false, 5, ["squadron", "wing", "player"]]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodCR = !bad.length && errors.length === before;
+    allOk = allOk && goodCR;
+    console.log(goodCR ? "OK" : "FAIL", "| chat read aloud |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "no backlog, the channels and a mention, one sender in a row as one line, the gap, the summary, stale shown not said, the headers, links and emoji, mute and unmute, off, private to the PC", errors.slice(before));
+  }
   // Main personality (the author, 2026-10-16): beside Main voice, one personality or "A mix…" (the boxes and One
   // personality per system); a browser with one ticked gets the dropdown, with several the mix; the explanation says
   // what they are for with the crew on and off; with profanity names the personalities that never swear, the short way

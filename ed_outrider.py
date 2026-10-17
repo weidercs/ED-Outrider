@@ -481,7 +481,8 @@ SHUTDOWN_LIVE_S = 300      # s: a Shutdown older than this is a journal being ca
 # Page settings saved on the server for browsers that have not set them ("use these for new browsers"):
 # only these localStorage keys, at most this size. Per-device keys (the view, layouts, the search form, which
 # screen speaks) stay out. The page has the same list (SETTINGS_KEYS in page.js).
-BROWSER_SETTINGS = ("alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechMix", "speechNames", "chatterNames", "speechSpeed",
+BROWSER_SETTINGS = ("alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechMix", "speechNames", "chatterNames",
+                    "chatRead", "chatChannels", "chatHeader", "chatMuted", "speechSpeed",
                     "speechProfanity", "speechProfanityPct", "speechDangerBusiness", "speechShift", "sayBio", "sayGeo", "sayHazard",
                     "sayMapped", "honkAnnounce", "sound", "unsoldCfg", "highlightCfg", "bioMinCfg", "maxBonus", "codexNewCounts",
                     "highG", "streakCfg", "skipFloor", "sort", "sorts", "showVisited", "showExplored", "oneJump", "map",
@@ -1388,9 +1389,16 @@ CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "M
 # one back to the ship moves it back, and a MarketSell counts as mining up to what it holds (mining_sales; the rest of
 # the sale is trade)
 SALE_DOCK_EVENTS = ("Docked", "Undocked", "Location")
+# Chat read aloud by Comms (NEXT-VERSION #17, the author 2026-10-17): other players' messages, live only (never a catch-up
+# or a re-read), never the NPCs'. Kept in memory only (Journals.chat, CHAT_KEEP): never in the database, outrider.log
+# or the voice's cache; the page decides what to say (the channels ticked, mutes, the rate)
+CHAT_EVENTS = ("ReceiveText",)
+CHAT_KEEP = 32               # messages the payload carries (a burst between two polls loses none)
+CHAT_CHANNELS = ("squadron", "wing", "player", "friend", "local", "starsystem", "voicechat")
+CHAT_MAX = 300               # characters of a message kept (the page says "and more" past it)
 MINED_EVENTS = ("MiningRefined", "CargoTransfer", "EjectCargo", "Died", "MarketSell", "CarrierBuy")
 _OTHER_EVENTS = (POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS + CMDR_EVENTS + MATERIAL_EVENTS
-                 + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + DOCKING_EVENTS + ("Loadout", "Shutdown", "Fileheader"))
+                 + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + DOCKING_EVENTS + CHAT_EVENTS + ("Loadout", "Shutdown", "Fileheader"))
 # The Commander view (outrider/commander.py): Journals.handle_commander folds these into the meta keys of
 # outrider.commander.COMMANDER_META and the play_activity table, and each one bumps Journals.commander_version (the page's
 # cue to ask for the open tab again); COMMANDER_ONLY are read for it alone
@@ -2028,6 +2036,19 @@ def live_event(ts, now=None):
         return False
 
 
+def chat_sender(raw):
+    """A chat message's sender as a name to say: "$cmdr_decorate:#name=Kurbo;" (local chat) and "CMDR Kurbo" become
+    "Kurbo"; an NPC's "$..." localisation key is None."""
+    raw = str(raw or "").strip()
+    m = re.match(r"\$cmdr_decorate:#name=(.*?);?$", raw)
+    if m:
+        raw = m.group(1)
+    elif raw.startswith("$"):
+        return None
+    raw = re.sub(r"(?i)^cmdr\s+", "", raw).strip()
+    return raw or None
+
+
 def second_before(ts):
     """The journal timestamp one second earlier: an inclusive upper bound for "before ts"."""
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts_seconds(ts) - 1))
@@ -2590,6 +2611,8 @@ class Journals:
         # recent moments the page may announce: {seq, ts, kind, ...}; kinds: scan, bio (a body worth a
         # look, priced by State), heat, interdicted, undocked (the undock warning). seq only grows; the page remembers the last it saw.
         self.moments = collections.deque(maxlen=16)
+        self.chat = collections.deque(maxlen=CHAT_KEEP)   # live chat {seq, ts, channel, sender, text, more, mention}
+        self.chat_seq = 0
         self.jump_arrival = None   # the latest hyperspace arrival {id64, name, ts} (auto honk)
         self.supercruise_entry = None   # the latest SupercruiseEntry {id64, ts} (auto-target's danger wait)
         self.last_honk = None      # the latest discovery scan {id64, ts, bodies, progress}
@@ -2643,6 +2666,22 @@ class Journals:
         """A system's own data changed: State rebuilds its rows (dirty) and leaving_summary's cache moves on."""
         self.dirty.add(system)
         self.data_seq += 1
+
+    def handle_chat(self, ev, ts):
+        """ReceiveText (#17): another player's message, live only, never an NPC's or your own; kept for the page in
+        memory only. `mention`: your commander name in it (it gets through an unticked channel and the rate)."""
+        channel = str(ev.get("Channel") or "").lower()
+        if channel not in CHAT_CHANNELS or not live_event(ts):
+            return
+        sender = chat_sender(ev.get("From"))
+        text = " ".join(str(ev.get("Message_Localised") or ev.get("Message") or "").split())
+        me = ((self.commander or {}).get("name") or "").strip()
+        if not sender or not text or (me and sender.lower() == me.lower()):
+            return
+        self.chat_seq += 1
+        mention = bool(me) and re.search(r"(?<![\w])" + re.escape(me) + r"(?![\w])", text, re.I) is not None
+        self.chat.append({"seq": self.chat_seq, "ts": ts, "channel": channel, "sender": sender, "text": text[:CHAT_MAX],
+                          "more": len(text) > CHAT_MAX, "mention": mention})
 
     def moment(self, kind, ts, **kw):
         self.moment_seq += 1
@@ -3088,11 +3127,13 @@ class Journals:
                 set(self.body_touched), set(self.approached), self.brief_key,
                 set(self.regions_said), self.region_entered, self.jumponium, dict(self.sale_run or {}) or None,
                 json.loads(json.dumps(self.burst)), self.uploads.snapshot() if self.uploads else None,
-                json.loads(json.dumps(self.nsp_burst)), json.loads(json.dumps(self.docking_hold)))
+                json.loads(json.dumps(self.nsp_burst)), json.loads(json.dumps(self.docking_hold)), self.chat_seq, list(self.chat))
 
     def restore(self, cp):
         (self.moment_seq, moments, self.last_heat, touched, approached, self.brief_key,
-         regions, self.region_entered, self.jumponium, self.sale_run, self.burst, uploads, self.nsp_burst, self.docking_hold) = cp
+         regions, self.region_entered, self.jumponium, self.sale_run, self.burst, uploads, self.nsp_burst, self.docking_hold,
+         self.chat_seq, chat) = cp
+        self.chat = collections.deque(chat, maxlen=CHAT_KEEP)
         if self.uploads and uploads:
             self.uploads.restore(uploads)
         self.body_touched, self.approached, self.regions_said = set(touched), set(approached), set(regions)
@@ -3342,6 +3383,9 @@ class Journals:
             self.note_sale_dock(name, ev, ts)
         # before the Commander view's fold: its Sessions count a sale's mined part as this works it out (one rule)
         mined = self.note_mined(name, ev, ts) if name in MINED_EVENTS else None
+        if name in CHAT_EVENTS:
+            self.handle_chat(ev, ts)
+            return
         if name in DOCKING_WATCH:
             self.handle_docking(name, ev, ts)
             if name in DOCKING_EVENTS:
@@ -7324,6 +7368,7 @@ class State:
             "destination": self.destination(),
             "plan_first": self.plan_first(),   # S30: the body you made the suggested order's first stop here
             "moments": self.moments_summary(),
+            "chat": list(self.journals.chat),   # #17: live chat, in memory only (the page reads it aloud if asked)
             "hull": self.journals.hull,
             "modules": self.modules_summary(),
             "last_sale": self.journals.last_sale,
@@ -18774,7 +18819,7 @@ def make_app(state, hosts=None):
             return None
         return n if n is not None and n >= 0 else None
 
-    async def synth(sp, text, speed, voice, speaker=None, role=None):
+    async def synth(sp, text, speed, voice, speaker=None, role=None, private=False):
         """A line as WAV from Piper, or None (the page then uses browser speech for it). `speed` and `voice` as
         the page sent them: a personality's own voice only if installed, so a name from the page never downloads.
         `speaker`: one of that voice's people (the voice lab's try, a personality's, S40); None: the one picked for it.
@@ -18803,11 +18848,14 @@ def make_app(state, hosts=None):
                 if why:
                     state.crew_note(role, v, why)
                     v = who = None
-            return sp.say(text, speed, v) if who is None else sp.say(text, speed, v, who)
+            # private (#17, another player's chat): never in the voice's cache, never in the log
+            kw = {"keep": False} if private else {}
+            return sp.say(text, speed, v, **kw) if who is None else sp.say(text, speed, v, who, **kw)
         try:
             return await asyncio.get_running_loop().run_in_executor(None, make)
         except Exception as e:  # noqa: BLE001 -- a line Piper cannot speak: the page uses browser speech for it
-            print(f"spoken alerts: could not speak {text[:60]!r}: {type(e).__name__}: {e}", file=sys.stderr)
+            print(f"spoken alerts: could not speak {'a chat message' if private else repr(text[:60])}: {type(e).__name__}"
+                  + ("" if private else f": {e}"), file=sys.stderr)
             return None
 
     async def say_view(request):
@@ -18817,7 +18865,7 @@ def make_app(state, hosts=None):
         if not sp or not sp.ready or not text.strip():
             return web.json_response({"error": "no Piper voice ready" if text.strip() else "no text"}, status=503)
         audio = await synth(sp, text, request.query.get("speed"), request.query.get("voice"), request.query.get("speaker"),
-                            request.query.get("role"))
+                            request.query.get("role"), private=request.query.get("private") == "1")
         if not audio:
             return web.json_response({"error": "no Piper voice ready"}, status=503)
         return web.Response(body=audio, content_type="audio/wav", headers={"Cache-Control": "no-store"})
@@ -18828,7 +18876,8 @@ def make_app(state, hosts=None):
         """Synthesise the next queued line ({text, voice, speed}) into Speaker's cache while the current one plays, so
         it starts at once (review S11). Called only once the current line's audio exists: a warm-up that took the
         voice's lock first would make the line being said wait for it. Fire and forget: a failure costs nothing."""
-        if not isinstance(d, dict) or not isinstance(d.get("text"), str) or not d["text"].strip() or not sp or not sp.ready:
+        if not isinstance(d, dict) or not isinstance(d.get("text"), str) or not d["text"].strip() or not sp or not sp.ready \
+                or d.get("private"):   # #17: another player's chat is never made ahead into the cache
             return None
         t = asyncio.get_running_loop().create_task(synth(sp, outrider.tts.clip_text(d["text"]), d.get("speed"), d.get("voice"),
                                                          d.get("speaker"), d.get("role")))
@@ -18891,7 +18940,8 @@ def make_app(state, hosts=None):
         if line is None:
             return web.json_response({"error": "another line is playing"}, status=409)
         try:
-            audio = await synth(sp, text, body.get("speed"), body.get("voice"), body.get("speaker"), body.get("role"))
+            audio = await synth(sp, text, body.get("speed"), body.get("voice"), body.get("speaker"), body.get("role"),
+                                private=body.get("private") is True)
             if not audio:
                 return web.json_response({"error": "no Piper voice ready"}, status=503)
             prefetch(sp, body.get("next"))   # the page's next line, made while this one plays

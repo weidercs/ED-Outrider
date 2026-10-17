@@ -717,11 +717,11 @@ class Speaker:
         while len(self._cache) > CACHE_PHRASES:
             self._cache.popitem(last=False)
 
-    def say(self, text, speed=1.0, voice=None, speaker=None):
+    def say(self, text, speed=1.0, voice=None, speaker=None, keep=True):
         """WAV bytes for `text` at `speed` (1 = the voice's own pace), or None if no voice is ready yet.
         `voice`: a personality's own voice (or one tried in the voice lab), when it is installed (else the main
         voice). `speaker`: one of that voice's people (the lab's try); None: the one picked for it. Recent phrases
-        are cached."""
+        are cached; `keep` False (another player's chat, #17) neither reads nor fills the cache."""
         text = clip_text(text)
         if not text or not self.ready:
             return None
@@ -734,17 +734,19 @@ class Speaker:
         # the pronunciation table's version too: a word said differently is heard at once, not from the cache
         key = (text, round(speed, 2), voice if extra else None, speaker, PRONOUNCE.stamp())
         with self._lock:
-            if key in self._cache:
+            if keep and key in self._cache:
                 self._cache.move_to_end(key)
                 return self._cache[key]
             if not extra:
                 audio = self._synth(self._voice, text, speed, speaker)
-                self._keep(key, audio)
+                if keep:
+                    self._keep(key, audio)
                 return audio
         with extra[1]:   # its own lock: the main voice keeps speaking meanwhile
             audio = self._synth(extra[0], text, speed, speaker)
-        with self._lock:
-            self._keep(key, audio)
+        if keep:
+            with self._lock:
+                self._keep(key, audio)
         return audio
 
 

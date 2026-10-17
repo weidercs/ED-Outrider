@@ -1310,6 +1310,13 @@ upstream project's choices, not rules of the game.
   subject is padded only for a few lower-case words before the first ": " (never a path or an exception's name). Long
   lines wrap only on a real terminal: a pipe (Docker's log, a file) keeps whole lines for grep. Under systemd
   (JOURNAL_STREAM set) the times go, since the journal adds its own.
+- **Chat read aloud stays private and polite** (#17, `Journals.handle_chat`, page.js `takeChat` / `chatPump`): other
+  players' words are kept in memory only (Journals.chat, CHAT_KEEP; in the checkpoint so a retried tick never reads
+  them twice), never in the database, outrider.log or the voice's cache (api/say and api/say/play take `private`:
+  Speaker.say's keep=False, no prefetch, an error printed without the words). Live only (live_event), never an NPC's
+  or your own. The page paces it (CHAT_GAP, CHAT_SUMMARY, CHAT_STALE) because squadron chat comes in bursts (the
+  author's journals: 280 of 394 messages within a minute of the one before); a mention of you skips the pace. Chat is
+  no alert for chatter's quiet (lastAlert is left alone).
 
 ## Known limits
 
