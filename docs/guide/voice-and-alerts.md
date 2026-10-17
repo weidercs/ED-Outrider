@@ -218,7 +218,7 @@ the sentence ends:
 | Science Officer | arrivals, briefings, the FSS, mapped planets, leaving with work left, codex, phenomena, rare stars, signals, curiosities |
 | Exobiologist | valuable bodies, sampling, Exomastery routes |
 | Chief Engineer | fuel, tank full, scooping stopped, jumponium, hull and heat |
-| Quartermaster | sales, unsold data, your carrier, losses |
+| Quartermaster | sales, unsold data, your carrier and its trips, losses |
 | Comms Officer | the game's start and exit, someone scanning your firsts, docking pads and refusals, other players' chat (read aloud, below) |
 | Tactical | every danger line (while Danger lines always in Tactical's voice is on) |
 | Mining Officer | the Rhino's rigs |

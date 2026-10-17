@@ -1317,6 +1317,14 @@ upstream project's choices, not rules of the game.
   or your own. The page paces it (CHAT_GAP, CHAT_SUMMARY, CHAT_STALE) because squadron chat comes in bursts (the
   author's journals: 280 of 394 messages within a minute of the one before); a mention of you skips the pace. Chat is
   no alert for chatter's quiet (lastAlert is left alone).
+- **Carrier trips plan, never fly** (#19): the game books one carrier jump at a time, so a trip is a list of legs
+  followed on the tile, never a route Outrider targets or presses keys for. Spansh's router assumes the depot full at
+  every jump; `carrier_route_legs` follows the real depot instead and marks only the legs that need tritium moved
+  across. The leg advances on the carrier's position (`carrier_trip_follow`), which moves on the booked jump's
+  departure (settle_carrier) and is corrected by a later CarrierLocation: accurate enough (the author), and "ready?"
+  rather than "ready" until the journal confirms. The cooldown is CARRIER_COOLDOWN_S from that arrival: an estimate,
+  since busy systems and the servers delay it and only a player docked on the carrier sees the real jump. No automatic
+  clipboard: the author found it confusing when not expected.
 
 ## Known limits
 

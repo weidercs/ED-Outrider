@@ -3075,6 +3075,7 @@ class JournalsRegistry(unittest.TestCase):
         "docking_said": "live-only: grants counted this session for #12's green-lights cadence, live lines only",
         "highway": "live-only: the Highway route (DESIGN_NOTES), cannot be rebuilt from journals",
         "riches": "live-only: the Road to Riches route (Spansh's plot), cannot be rebuilt from journals",
+        "carrier_trip": "live-only: the carrier trip (#19, Spansh's carrier router), cannot be rebuilt from journals",
         "next_stop": "live-only: the player's chosen next stop (stamp_next_stop keeps it through the re-read)",
         "plan_first": "live-only: the first stop picked where you are (S30); an arrival elsewhere after it clears it, "
                       "the re-read's older ones do not (stamp_next_stop)",

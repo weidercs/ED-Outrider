@@ -568,6 +568,34 @@ BURN_MIN_SAMPLES = 3       # fewer measured jumps than this: no factor (the form
 BURN_K_RANGE = (0.8, 1.2)  # the factor is held to this: history scales the formula, it never replaces it
 
 
+def carrier_route_legs(result, depot, hold):
+    """Spansh's carrier router answer (#19: POST /api/fleetcarrier/route, probed 2026-10-17: {jumps: [{name, id64,
+    distance, fuel_used, must_restock, restock_amount, ...}]}, the first the start) as legs [{system, id64, ly, fuel,
+    top_up, buy}] and {need, have, short}. Spansh assumes the depot full at every jump; this follows the real one from
+    `depot`: before a leg it cannot pay for, the hold's tritium tops it up (top_up: the tons moved, up to its 1,000 t).
+    `buy`: Spansh's restock (the hold ran dry: buy tritium there). None for an answer that is no carrier route."""
+    jumps = result.get("jumps") if isinstance(result, dict) else None
+    if not isinstance(jumps, list) or len(jumps) < 2:
+        return None
+    depot, hold = max(0, int(depot or 0)), max(0, int(hold or 0))
+    have, legs, need = depot + hold, [], 0
+    for i, j in enumerate(jumps):
+        if not isinstance(j, dict) or not j.get("name"):
+            return None
+        fuel = max(0, int(round(float(j.get("fuel_used") or 0)))) if i else 0
+        top_up = 0
+        if i and depot < fuel:
+            top_up = min(hold, CARRIER_DEPOT_MAX - depot)
+            depot, hold = depot + top_up, hold - top_up
+        depot -= fuel
+        need += fuel
+        legs.append({"system": str(j["name"]), "id64": j.get("id64"), "ly": round(float(j.get("distance") or 0), 1),
+                     "fuel": fuel, "top_up": top_up, "short": depot < 0,
+                     "buy": int(j.get("restock_amount") or 0) if j.get("must_restock") else 0})
+        depot = max(0, depot)
+    return legs, {"need": need, "have": have, "short": max(0, need - have)}
+
+
 def carrier_burns(carrier_id, events, where=None):
     """Your carrier's measured jumps (S13 B): what each burned against what carrier_burn says, from its history in time
     order (cargo_events: [(ts, event dict)]). A move is a CarrierJumpRequest not cancelled before a CarrierLocation or

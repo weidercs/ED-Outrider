@@ -1942,8 +1942,9 @@ const releasePayloads = async () => {
       return o;
     })()`);
     const bad = [];
-    if (!/Tritium in Depot: 668 t/.test(got.with) || got.trit !== "Total Tritium: 14,199 t (151 jumps)") bad.push("tile with tritium");
-    if (!/UC ✓ · Vista ✓ · 668 t tritium/.test(got.without) || !got.tritGone) bad.push("tile without");
+    // the author's format (2026-10-17): "Tritium: depot/total" on the UC · Vista line; the depot alone with none in the hold
+    if (!/UC ✓ · Vista ✓ · Tritium: 668t\/14,199t/.test(got.with) || got.trit !== "Tritium: 668t/14,199t") bad.push("tile with tritium " + JSON.stringify([got.with, got.trit]));
+    if (!/UC ✓ · Vista ✓ · Tritium: 668t$/.test(got.without) || got.tritGone) bad.push("tile without " + JSON.stringify(got.without));
     if (JSON.stringify(got.noTile) !== "[true,true]" || !got.tileBack) bad.push("no carrier tile");
     if (JSON.stringify(got.aim) !== "[0,1,0]") bad.push("carrier 🎯 " + JSON.stringify(got.aim));
     if (JSON.stringify(got.look) !== JSON.stringify(["[fleet-carrier]Out Of The Blue", true, "target Far Away", "", true])) bad.push("carrier markers " + JSON.stringify(got.look));
@@ -1974,6 +1975,10 @@ const releasePayloads = async () => {
                       finance: {balance: 1328648923, reserve: 1000001263, available: 328647660, ts: iso(Date.now() - 3600e3),
                                 upkeep: 13700000, weeks: 96.9, warn: false, rates: "published"}};
       renderCarrier();
+      o.booked = line().textContent;
+      // one movement line (the author, 2026-10-17): a booked jump's countdown, else the meeting line below
+      data.carrier = Object.assign({}, data.carrier, {planned: null});
+      renderCarrier();
       o.trip = line().textContent;
       // a suspended service: its name and a red ✗, "suspended" on hover (the author, 2026-10-14)
       o.red = [...line().querySelectorAll(".noscoop")].map(x => (x.textContent === "✗" ? x.previousSibling.textContent.split("·").pop().trim() + " " : "") + x.textContent +
@@ -1982,7 +1987,7 @@ const releasePayloads = async () => {
       data.carrier = Object.assign({}, data.carrier, {trip: Object.assign({}, data.carrier.trip, {hold: 5000, covered: true}),
         finance: Object.assign({}, data.carrier.finance, {balance: 40000000, weeks: 2.9, warn: true, ts: "2026-09-27T12:00:00Z"})});
       renderCarrier();
-      o.amber = [...line().querySelectorAll(".warnc")].map(x => x.textContent).filter(t => /depot|balance/.test(t));   // not the tank's
+      o.amber = [...line().querySelectorAll(".warnc")].map(x => x.textContent).filter(t => /depot|balance/i.test(t));   // not the tank's
       o.asOf = [line().textContent, (line().querySelector("#carrierFin") || {}).title || ""];
       // more than one top-up gives (the depot holds 1,000 t): covered only by topping up again on the way
       data.carrier = Object.assign({}, data.carrier, {trip: Object.assign({}, data.carrier.trip, {top_up: "on_the_way"})});
@@ -1998,11 +2003,12 @@ const releasePayloads = async () => {
     })()`);
     const bad = [];
     if (!/it → you ≈ 3 carrier jumps · ≈ 1,300 t tritium · depot 668 t: 632 t short/.test(got.trip)) bad.push("trip " + got.trip);
-    if (!/\(432 ly jump ≈ 96 t; depot after ≈ 572 t\)/.test(got.trip)) bad.push("booked jump");
-    if (JSON.stringify(got.red) !== JSON.stringify(["depot 668 t: 632 t short", "UC ✗ (hover: suspended)", "Redemption office ✗ (hover: suspended)"])) bad.push("red " + JSON.stringify(got.red));
+    if (!/\(432 ly jump ≈ 96 t; depot after ≈ 572 t\)/.test(got.booked) || /it → you/.test(got.booked)) bad.push("booked jump " + got.booked);
+    // only UC and Vista (the author, 2026-10-17: the redemption office and the rest are dropped from the tile)
+    if (JSON.stringify(got.red) !== JSON.stringify(["depot 668 t: 632 t short", "UC ✗ (hover: suspended)"])) bad.push("red " + JSON.stringify(got.red));
     if (!/Vista ✓/.test(got.trip)) bad.push("vista");
-    if (got.fin[0] !== "balance 1.33B · ~96 wks upkeep" || got.fin[1] !== "" || !got.fin[2] || /as of/.test(got.trip)) bad.push("finance " + JSON.stringify(got.fin));
-    if (JSON.stringify(got.amber) !== JSON.stringify(["depot 668 t: 632 t short, enough after topping up", "balance 40.0M · ~2.9 wks upkeep"])) bad.push("amber " + JSON.stringify(got.amber));
+    if (got.fin[0] !== "Balance 1.33B · ~96 wks upkeep" || got.fin[1] !== "" || !got.fin[2] || /as of/.test(got.trip)) bad.push("finance " + JSON.stringify(got.fin));
+    if (JSON.stringify(got.amber) !== JSON.stringify(["depot 668 t: 632 t short, enough after topping up", "Balance 40.0M · ~2.9 wks upkeep"])) bad.push("amber " + JSON.stringify(got.amber));
     // "~N wks upkeep" only on the line (the author, 2026-10-14); how old the stats are only in its hover
     if (/as of/.test(got.asOf[0]) || !/as of (Sep 27|27 Sep)/.test(got.asOf[1])) bad.push("as of " + JSON.stringify(got.asOf));
     if (JSON.stringify(got.onTheWay) !== JSON.stringify([["depot 668 t: 632 t short, enough if topped up on the way", true]])) bad.push("on the way " + JSON.stringify(got.onTheWay));
@@ -2017,7 +2023,9 @@ const releasePayloads = async () => {
     const w = dom.window, before = errors.length;
     const got = w.eval(`(() => {
       const saved = data.carrier, o = {}, line = () => document.getElementById("carrierLine");
-      const titles = () => [...line().querySelectorAll("span[title]")].map(x => x.title).filter(t => /fuel formula/.test(t));
+      // the booked jump's line and the meeting line take turns (one movement line, 2026-10-17): both, one after the other
+      const titles = () => { const one = () => [...line().querySelectorAll("span[title]")].map(x => x.title).filter(t => /fuel formula/.test(t));
+        const a = one(), p = data.carrier.planned; data.carrier.planned = null; renderCarrier(); const b = one(); data.carrier.planned = p; renderCarrier(); return [...a, ...b]; };
       data.carrier = {name: "Out Of The Blue", callsign: "G0X-85Z", system: "Home", aboard: false, here: false, distance: 1200,
                       has_uc: true, has_vista: true, suspended: [], fuel: 668, jump_range: 500, burn_factor: null,
                       trip: {jumps: 3, burn: 1300, depot: 668, short: 632, depot_after: 0, hold: null, covered: false},
@@ -8999,6 +9007,94 @@ const releasePayloads = async () => {
     allOk = allOk && goodTL;
     console.log(goodTL ? "OK" : "FAIL", "| header tiles shown |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "Settings → Display ticks the tiles this device shows: left out of the row and the one line, a column each, at least one stays, the fold modes kept", errors.slice(before));
+  }
+  // Carrier trips (#19): the Carrier plotter's own form (figures from the journal, To me, + via) posting api/carrier/trip;
+  // the tile's one movement line (the leg, 📋, departs / cooldown / ready / ready?, ✕; off the trip with re-plot), ⚠ when
+  // the depot cannot pay for the next leg; the ready line said once; the arrival's words; Plot Route's trip list
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, got = {}, posts = [];
+    const realFetch = w.fetch;
+    w.fetch = (u, o) => String(u) === "api/carrier/trip" ? (posts.push(JSON.parse(o.body)),
+      Promise.resolve(new Response(JSON.stringify({ok: true}), {status: 202, headers: {"Content-Type": "application/json"}}))) : realFetch(u, o);
+    const now = Date.now() / 1000;
+    const legs = [{system: "Home", ly: 0, fuel: 0, top_up: 0, buy: 0, short: false}, {system: "Leg One", ly: 500, fuel: 110, top_up: 0, buy: 0, short: false},
+                  {system: "Leg Two", ly: 500, fuel: 110, top_up: 300, buy: 0, short: false}, {system: "Far End", ly: 250, fuel: 60, top_up: 0, buy: 400, short: false}];
+    w.eval(`window.__ft = {carrier: data.carrier, trip: data.carrier_trip, pos: data.position, speak, flags: [speechOn, isSpeaker], hush: hushState,
+        plotter: hwyPlotter(), said: carrierReadySaid, caps: captions.splice(0)};
+      window.__spoken = []; speak = (t, o) => window.__spoken.push([t, o.kind]);
+      speechOn = true; isSpeaker = true; hushState = null; carrierReadySaid = null; alertSpeak.carriertrip = true;
+      data.position = Object.assign({}, data.position, {name: "Where I Am"});
+      data.carrier = {name: "Out Of The Blue", callsign: "G0X-85Z", system: "Leg One", aboard: false, here: false, distance: 100, has_uc: true, has_vista: true,
+                      suspended: [], fuel: 90, jump_range: 500, planned: null, moved_ts: "2026-10-17T10:00:00Z", assumed: true};
+      data.carrier_trip = {plotting: null, defaults: {from: "Home", fuel: 668, hold: 12000, used: 16000, type: "fleet"},
+        trip: {id: 1, legs: ${JSON.stringify(legs)}, at: 1, n: 3, next: ${JSON.stringify(legs[2])}, totals: {need: 280, have: 12668, short: 0}, hours: 0.7,
+               request: {from: "Home", to: "Far End", via: null, fuel: 668, hold: 12000, used: 16000, type: "fleet"}, off: null, done: false,
+               ready_at: ${now} + 125, sure: false}};
+      renderCarrier();`);
+    try {
+      const tile = () => d.getElementById("carrierLine").textContent;
+      got.cooldown = /Leg 2\/3 → Leg Two 📋 · cooldown 2:0[45]/.test(tile());
+      got.warn = [!!d.querySelector("#carrierTrit .warnc"), /move tritium from the hold into the depot first/.test(d.getElementById("carrierTrit").title)];
+      // the cooldown over: "ready?" (only the booked jump says it moved), said once as "should be"
+      w.eval(`data.carrier_trip.trip.ready_at = ${now} - 5; renderCarrier(); carrierTripTick(); carrierTripTick()`);
+      got.readyQ = [/ready\?/.test(tile()), JSON.parse(w.eval("JSON.stringify(__spoken.splice(0))"))];
+      // the journal saw the jump: "ready"; a page opened long after says nothing
+      w.eval(`data.carrier_trip.trip = Object.assign({}, data.carrier_trip.trip, {sure: true, at: 2, next: ${JSON.stringify(legs[3])}}); renderCarrier(); carrierTripTick()`);
+      got.ready = [/Leg 3\/3 → Far End 📋 · ready/.test(tile()), JSON.parse(w.eval("JSON.stringify(__spoken.splice(0))"))];
+      w.eval(`carrierReadySaid = null; data.carrier_trip.trip.ready_at = ${now} - 600; carrierTripTick()`);
+      got.late = JSON.parse(w.eval("JSON.stringify(__spoken.splice(0))"));
+      got.arrival = w.eval("carrierTripArrivalWords()");
+      // a booked jump: its countdown on the same line
+      w.eval(`data.carrier.planned = {system: "Far End", departure: new Date(Date.now() + 600e3).toISOString()}; renderCarrier()`);
+      got.departs = /Leg 3\/3 → Far End 📋 · departs (9:5\d|10:00)/.test(tile());
+      // off the trip: said so, with re-plot from here; ✕ ends it
+      w.eval(`data.carrier.planned = null; data.carrier_trip.trip = Object.assign({}, data.carrier_trip.trip, {off: {system: "Elsewhere"}}); renderCarrier()`);
+      got.off = [/off the trip at Elsewhere/.test(tile()), w.eval("carrierTripArrivalWords()")];
+      d.querySelector('#carrierLine [data-fctrip="replot"]').click();
+      d.querySelector('#carrierLine [data-fctrip="clear"]').click();
+      await sleep(30);
+      got.posts = posts.splice(0);
+      // Plot Route's trip list
+      got.list = [!d.getElementById("fcTrip").hidden, /Carrier trip to Far End/.test(d.getElementById("fcTripHead").textContent),
+                  d.querySelectorAll("#fcTripBody tbody tr").length, /move 300 t from the hold into the depot first/.test(d.getElementById("fcTripBody").textContent),
+                  /buy 400 t here/.test(d.getElementById("fcTripBody").textContent)];
+      // the Carrier plotter: its own row, To me, + via; the form posts what it shows
+      const radio = d.querySelector('[name=hwyPlotter][value="carrier"]');
+      radio.checked = true; radio.dispatchEvent(new w.Event("change", {bubbles: true}));
+      // the form's own rows and buttons (the tab itself may be hidden meanwhile)
+      const shown = id => { const el = d.getElementById(id); return !el.hidden && !el.closest(".srow").hidden && !(el.closest("label") || {}).hidden; };
+      got.form = [shown("fcFuel"), shown("fcToMe"), !shown("hwyShip"), !shown("hwyNearest"), d.getElementById("hwyGo").textContent,
+                  d.getElementById("fcFuel").value, d.getElementById("fcHold").value, d.getElementById("fcUsed").value];
+      d.getElementById("fcToMe").click();
+      d.getElementById("fcViaBtn").click();
+      d.getElementById("fcVia").value = "Jaques";
+      d.getElementById("fcFuel").value = "500";
+      d.getElementById("hwyForm").dispatchEvent(new w.Event("submit", {bubbles: true, cancelable: true}));
+      await sleep(30);
+      got.submit = posts.splice(0);
+    } finally {
+      w.fetch = realFetch;
+      w.eval(`const k = window.__ft; Object.assign(data, {carrier: k.carrier, carrier_trip: k.trip, position: k.pos}); speak = k.speak;
+        [speechOn, isSpeaker] = k.flags; hushState = k.hush; carrierReadySaid = k.said; captions.length = 0; captions.push(...k.caps);
+        ["fcFuel", "fcHold", "fcUsed", "fcVia", "hwyTo"].forEach(id => { document.getElementById(id).value = ""; });
+        const r = hForm.querySelector('[name=hwyPlotter][value="' + k.plotter + '"]'); r.checked = true; r.dispatchEvent(new Event("change", {bubbles: true}));
+        renderCarrier(); delete window.__ft; delete window.__spoken;`);
+      await releasePayloads();
+    }
+    const want = {cooldown: true, warn: [true, true],
+      readyQ: [true, [["Your carrier should be ready to jump. Next leg: Leg Two.", "carriertrip"]]],
+      ready: [true, [["Carrier ready to jump. Next leg: Far End.", "carriertrip"]]], late: [], arrival: " Leg 2 of 3, 1 to go.", departs: true,
+      off: [true, " That is off the planned trip."],
+      posts: [{from: null, to: "Far End", via: null, fuel: 668, hold: 12000, used: 16000, type: "fleet"}, {clear: true}],
+      list: [true, true, 4, true, true],
+      form: [true, true, true, true, "Plot the carrier's trip", "668", "12000", "16000"],
+      submit: [{to: "Where I Am", fuel: 500, hold: 12000, used: 16000, type: "fleet", via: "Jaques"}]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodFT = !bad.length && errors.length === before;
+    allOk = allOk && goodFT;
+    console.log(goodFT ? "OK" : "FAIL", "| carrier trips |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "the Carrier plotter's form and post, the tile's leg line (cooldown, ready?, ready, departs, off the trip), ⚠ for the depot, the ready line once, the arrival's words, the trip list", errors.slice(before));
   }
   // Chat read aloud by Comms (#17): nothing from the first payload; the ticked channels, a mention through an unticked
   // one and through the gap; one sender's messages in a row as one line; one line per CHAT_GAP; "and N more" past

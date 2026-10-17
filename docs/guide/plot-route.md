@@ -104,6 +104,21 @@ route's heading name it. A sweep takes up to 100 systems and replaces the survey
 **Trade.** The last plotter: Spansh's trade planner, station-to-station hops from where you are docked, in the
 same place as the survey routes (one of them at a time). See [Trading](cargo-and-trading.md#-trading).
 
+**Carrier.** Your fleet carrier's trip, from Spansh's carrier router. It is planning only: the game books one carrier
+jump at a time, so you still set each in the carrier's galaxy map. Its own form: the depot, the tritium in the hold
+and the cargo in use (filled in from your journal, all changeable), the carrier's type, **To me** (your system as the
+destination) and **+ via** for a stop on the way. The plan, folded under the form: each leg with its light years and
+tritium, and what to do first ("move 300 t from the hold into the depot first", "buy 400 t here"); at the top, the
+legs, about how long (20 minutes a leg: the countdown and the cooldown; longer in busy systems) and the tritium
+needed against what you have. It never replaces your ship's route, and 🎯 never targets it.
+
+Following it, on the **Carrier tile**: "Leg 2/6 → the next system 📋 · departs 12:30 ✕". 📋 copies the system to
+paste in the carrier map (only when you click it); after a jump the line counts the cooldown down, then says
+**ready** (or **ready?** when you are away: only the booked jump says the carrier moved, and a busy system can delay
+it). A jump onto a later leg skips ahead; one anywhere else says "off the trip", with **re-plot from here**; ✕ ends the
+trip, and the last leg ends it. The Quartermaster says "Carrier ready to jump. Next leg: …" when the cooldown should be
+over (the **Carrier trips** row in Settings → Alerts) and adds "Leg 3 of 6, 3 to go" to the carrier's arrival line.
+
 **The route line and 🎯.** The line under the tiles (on every tab) shows the next stop of whichever route the tab shows (🛣 the
 Highway, 💰 Road to Riches, 🧬 Exomastery, 🌍 Earth-like worlds, 🧪 ammonia worlds, 🧹 a sweep, 💱 a trade route), its
 "Next:" after the galaxy map's **waypoint** marker. The page draws the target button (🎯 in these notes and in

@@ -286,6 +286,12 @@ SPANSH_EXO = "https://spansh.co.uk/api/exobiology/route"   # Expressway to Exoma
 SPANSH_TRADE = "https://spansh.co.uk/api/trade/route"      # the trade planner: the same job, station-to-station hops
 SPANSH_TOURIST = "https://spansh.co.uk/api/tourist/route"  # the tourist router (S51's sweep): the same job, a visiting order
 TRADE_PLOT_TIMEOUT = 600    # s: the trade planner is slow (4 hops from Sol took 136 s on 2026-10-07)
+# Carrier trips (#19, the author 2026-10-17): Spansh's carrier router (probed 2026-10-17: names accepted; capacity_used
+# must include the tritium stored in the hold), planned in Plot Route, followed on the Carrier tile
+SPANSH_FC = "https://spansh.co.uk/api/fleetcarrier/route"
+CARRIER_TYPES = {"fleet": (25000, 25000), "squadron": (60000, 15000)}   # capacity, mass (Spansh's own figures)
+CARRIER_COOLDOWN_S = 300   # s after a carrier jump before the next can be booked (a busy system's servers take longer)
+CARRIER_LEG_S = 20 * 60    # s a leg takes: the 15-minute countdown and the cooldown (the plan's estimate)
 RICHES_METHOD = "POST"      # form fields (checked against the live API 2026-10-06; scripts/riches_probe.py checks it again)
 RICHES = {"radius": 25, "max_results": 25, "max_distance": 50000, "min_value": 100000,   # defaults of the plot form
           "use_mapping_value": True, "avoid_thargoids": True, "loop": False}
@@ -7228,6 +7234,8 @@ class State:
         # Road to Riches: the plot under way (as highway_plotting), its task, the arrival whose next system was copied
         self.riches_plotting = None
         self.riches_task = None
+        self.carrier_trip_plotting = None   # #19: {state, from, to, started, error} of the last carrier trip plot
+        self.carrier_trip_task = None
         self.dock_cache = {}   # the Nearest finder's last Spansh search and permit check (DOCK_CACHE_S)
         # uploads (EDDN, EDSM, Inara: opt-in, off by default; outrider/uploads.py): switched in Settings -> Uploads, which
         # writes [eddn]/[edsm]/[inara] enabled into the config file. senders: {service: async fn(rows)}.
@@ -7413,6 +7421,7 @@ class State:
             "fuel": self.fuel_summary(),
             "ship": self.journals.ship,
             "carrier": self.carrier_summary(),
+            "carrier_trip": self.carrier_trip_summary(),   # #19: a carrier trip planned in Plot Route
             "here_star": self.here_star(),
             "codex_recent": self.codex_recent(),
             "tail_error": self.tail_error,
@@ -16209,6 +16218,134 @@ class State:
         self._rc_copied = None
         return rc
 
+    # ---- carrier trips (#19): Spansh's carrier router, planned in Plot Route, followed on the Carrier tile (meta
+    # carrier_trip: {id, created_ts, request, legs, at (the leg reached), arrived_ts, seen_id64, off, done_ts}; live-only)
+    def carrier_trip_defaults(self):
+        """The plot form's figures from the journal: where the carrier is, its depot, the confirmed tritium in its hold
+        (a sell order) and the capacity in use (which includes that tritium), and its type."""
+        c = self.journals.carrier or {}
+        st = self.carrier_cargo() if c.get("id") is not None else None
+        stats = (st or {}).get("stats") or {}
+        used = stats["used"] + st["after_stats"] if isinstance(stats.get("used"), int) else None
+        line = ((st or {}).get("lines") or {}).get("tritium")
+        hold = line["count"] if line and line.get("state") == "confirmed" else 0
+        return {"from": c.get("system"), "fuel": c.get("fuel") if isinstance(c.get("fuel"), int) else None, "hold": hold,
+                "used": max(used, hold) if used is not None else hold or None,
+                "type": "squadron" if str(c.get("type") or "").lower().startswith("squadron") else "fleet"}
+
+    def carrier_trip_plot(self, body):
+        """POST /api/carrier/trip {to, via?, from?, fuel, hold, used, type}: ask Spansh's carrier router in the
+        background (the payload's carrier_trip.plotting says how it went), (answer, HTTP status)."""
+        if self.carrier_trip_task and not self.carrier_trip_task.done():
+            return {"error": "a carrier trip is being plotted already"}, 409
+        d = self.carrier_trip_defaults()
+        name = lambda v: " ".join(v.split()) if isinstance(v, str) else ""
+        frm, to, via = name(body.get("from")) or d["from"] or "", name(body.get("to")), name(body.get("via"))
+        if not frm:
+            return {"error": "no carrier seen yet: give the system it is in"}, 400
+        if not to or max(len(frm), len(to), len(via)) > FIND_NAME_MAX:
+            return {"error": f"give the destination system (up to {FIND_NAME_MAX} characters)"}, 400
+        kind = body.get("type") or d["type"]
+        if kind not in CARRIER_TYPES:
+            return {"error": "type must be fleet or squadron"}, 400
+        capacity, mass = CARRIER_TYPES[kind]
+
+        def whole(k, lo, hi, default):
+            v = body.get(k, default)
+            if v is None or v == "":
+                v = default
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or v != int(v) or not lo <= v <= hi:
+                raise ValueError(f"{k} must be a whole number from {lo:,} to {hi:,}")
+            return int(v)
+        try:
+            fuel = whole("fuel", 0, outrider.cargo.CARRIER_DEPOT_MAX, d["fuel"] if d["fuel"] is not None else 1000)
+            hold = whole("hold", 0, capacity, d["hold"] or 0)
+            used = whole("used", 0, capacity, d["used"] if d["used"] is not None else hold)
+        except ValueError as e:
+            return {"error": str(e)}, 400
+        if used < hold:
+            return {"error": "the cargo in use includes the tritium in the hold: it cannot be less"}, 400
+        request = {"from": frm, "to": to, "via": via or None, "fuel": fuel, "hold": hold, "used": used, "type": kind}
+        params = {"source": frm, "destinations": tuple(x for x in (via, to) if x), "capacity": capacity, "mass": mass,
+                  "capacity_used": used, "calculate_starting_fuel": 0, "fuel_loaded": fuel, "tritium_stored": hold}
+        self.carrier_trip_plotting = {"state": "running", "from": frm, "to": to, "started": iso_ts(time.time()), "error": None}
+        self.carrier_trip_task = asyncio.get_running_loop().create_task(self._carrier_trip_plot(params, request))
+        self.bump()
+        return {"ok": True, "plotting": self.carrier_trip_plotting}, 202
+
+    async def _carrier_trip_plot(self, params, request):
+        p = self.carrier_trip_plotting
+        try:
+            result = await self.spansh.plot(globals()["SPANSH_FC"], params, method="POST")
+            got = outrider.cargo.carrier_route_legs(result, request["fuel"], request["hold"])
+            if not got:
+                raise HighwayError("Spansh's answer was no carrier route")
+            legs, totals = got
+            c = self.journals.carrier or {}
+            meta_set(self.db, "carrier_trip", {"id": int(time.time() * 1000), "created_ts": iso_ts(time.time()),
+                                               "request": request, "legs": legs, "totals": totals, "at": 0,
+                                               "arrived_ts": None, "seen_id64": c.get("id64"), "off": None, "done_ts": None})
+            self.db.commit()
+            p.update(state="done")
+        except HighwayError as e:
+            p.update(state="failed", error=str(e))
+        except Exception as e:  # noqa: BLE001 -- said on the page rather than lost in a task
+            p.update(state="failed", error=f"{type(e).__name__}: {e}")
+        self.bump()
+
+    def carrier_trip_clear(self):
+        """POST /api/carrier/trip {clear: true}: forget the trip (and stop a plot under way)."""
+        if self.carrier_trip_task and not self.carrier_trip_task.done():
+            self.carrier_trip_task.cancel()
+        self.carrier_trip_plotting = None
+        meta_set(self.db, "carrier_trip", None)
+        self.db.commit()
+        self.bump()
+
+    def carrier_trip_follow(self):
+        """The carrier somewhere new: the trip moves to that leg (a later one skips ahead), the last ends it, anywhere
+        else marks it off course (re-plotted only when asked). True when anything changed."""
+        t = meta_get(self.db, "carrier_trip")
+        c = self.journals.carrier or {}
+        cid = c.get("id64")
+        if not t or t.get("done_ts") or cid is None or cid == t.get("seen_id64"):
+            return False
+        t["seen_id64"] = cid
+        legs, at = t["legs"], t.get("at") or 0
+        j = next((i for i in range(at + 1, len(legs)) if legs[i].get("id64") == cid
+                  or norm_name(legs[i]["system"]) == norm_name(c.get("system") or "")), None)
+        if j is None:
+            t["off"] = {"system": c.get("system"), "id64": cid}
+        else:
+            t.update(at=j, arrived_ts=c.get("moved_ts") or iso_ts(time.time()), off=None)
+            if j == len(legs) - 1:
+                t["done_ts"] = iso_ts(time.time())
+        meta_set(self.db, "carrier_trip", t)
+        return True
+
+    def carrier_trip_summary(self):
+        """The payload's carrier_trip: the plot's state, the form's figures, and the trip ({legs, at, n, next, totals,
+        hours, off, done, ready_at (epoch s: the cooldown's end after the last arrival), sure (the journal saw the
+        jump: not only the booked one)}), or None without one."""
+        out = {"plotting": self.carrier_trip_plotting, "defaults": self.carrier_trip_defaults(), "trip": None}
+        t = meta_get(self.db, "carrier_trip")
+        if not t:
+            return out
+        legs, at = t["legs"], t.get("at") or 0
+        c = self.journals.carrier or {}
+        ready = None
+        if at and t.get("arrived_ts") and not t.get("done_ts"):
+            try:
+                ready = ts_seconds(t["arrived_ts"]) + CARRIER_COOLDOWN_S
+            except (TypeError, ValueError):
+                ready = None
+        n = len(legs) - 1
+        out["trip"] = {"id": t["id"], "legs": legs, "at": at, "n": n, "next": legs[at + 1] if at < n else None,
+                       "totals": t.get("totals"), "hours": round((n - at) * CARRIER_LEG_S / 3600, 1),
+                       "request": t.get("request"), "off": t.get("off"), "done": bool(t.get("done_ts")),
+                       "ready_at": ready, "sure": not c.get("assumed")}
+        return out
+
     def riches_clear(self):
         """POST /api/riches/clear: forget the route (and stop a plot under way)."""
         if self.riches_task and not self.riches_task.done():
@@ -17245,7 +17382,8 @@ class State:
                         self.bump()
             if self.journals.offsets:   # a first journal read at last (S43): its banner goes
                 self.notices.clear("no_journal_files")
-            if self.journals.settle_carrier(time.time()):
+            settled = self.journals.settle_carrier(time.time())
+            if self.carrier_trip_follow() or settled:   # #19: the trip follows the carrier (both always run)
                 self.bump()
             self.uploads_hub.idle()   # EDDN: a companion file written after its line, signals after a quiet spell
             self.rail_device()
@@ -18716,6 +18854,17 @@ def make_app(state, hosts=None):
         state.riches_clear()
         return web.json_response({"ok": True})
 
+    async def carrier_trip_view(request):
+        """#19: plot a carrier trip with Spansh's carrier router (in the background), or {clear: true} to forget it."""
+        body = await json_object(request)
+        if body is None:
+            return web.json_response({"error": "expected a JSON object"}, status=400)
+        if body.get("clear") is True:
+            state.carrier_trip_clear()
+            return web.json_response({"ok": True})
+        out, status = state.carrier_trip_plot(body)
+        return web.json_response(out, status=status)
+
     async def highway_autotarget_view(request):
         """The Highway tab's auto-target toggle and delay: {enabled?: bool, delay?: seconds 0-60}."""
         body = await json_object(request)
@@ -19699,6 +19848,7 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/riches", riches_view)
     app.router.add_post("/api/riches/plot", riches_plot_view)
     app.router.add_post("/api/riches/clear", riches_clear_view)
+    app.router.add_post("/api/carrier/trip", carrier_trip_view)
     app.router.add_post("/api/highway/clear", highway_clear_view)
     app.router.add_post("/api/highway/autotarget", pc_only(highway_autotarget_view))
     app.router.add_post("/api/highway/autotarget/test", pc_only(highway_autotarget_test_view))

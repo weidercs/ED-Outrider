@@ -221,9 +221,10 @@ with different reporters.
 The **header** shows the galactic region, ranks, fuel, hull, any core module under your level (`module_warn`,
 80%; as of the last Loadout or repair, since the journal logs nothing in between), your carrier's jump countdown
 (its name after the galaxy map's fleet carrier marker, and its tritium while it is on a sell order: see [Cargo and trading](cargo-and-trading.md); where auto-target can work
-🎯 beside its system, when it is elsewhere, puts it in the galaxy map; the tritium for its trip to you, a suspended
-service as its name and a red ✗
-and its balance in weeks of upkeep: "~96 wks upkeep"), the nearest places to sell (your carrier among them while its UC or Vista is on),
+🎯 beside its system, when it is elsewhere, puts it in the galaxy map; one movement line: a carrier trip's leg (see
+[Plot Route](plot-route.md)), else a booked jump's countdown, else the jumps between you and it with the tritium for
+its trip to you; "UC ✓ · Vista ✓ · Tritium: 668t/14,199t" (the depot, then all of it with the hold; a suspended UC or
+Vista a red ✗); and its balance and weeks of upkeep: "Balance 1.33B · ~96 wks upkeep"), the nearest places to sell (your carrier among them while its UC or Vista is on),
 and the last backup.
 
 The **In-Game Route:** line under the tiles is the route the game plotted in the galaxy map (a route of more than one

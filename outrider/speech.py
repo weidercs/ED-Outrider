@@ -663,7 +663,7 @@ CREW_ROLES = (
       "ggg", "rare_star", "surface_site", "signal_poi", "curious")),
     ("exobiologist", "Exobiologist", "Exobiologist", ("exo", "find", "sampling")),
     ("engineer", "Chief Engineer", "Engineer", ("fuel", "scoop", "scoopstop", "jumponium", "hull")),
-    ("quartermaster", "Quartermaster", "Quartermaster", ("sell", "saleleft", "unsold", "carrier", "loss")),
+    ("quartermaster", "Quartermaster", "Quartermaster", ("sell", "saleleft", "unsold", "carrier", "carriertrip", "loss")),
     ("comms", "Comms Officer", "Comms", ("uploads", "firstsseen", "game", "docking", "chat")),
     ("tactical", "Tactical", "Tactical", ()),
     ("mining", "Mining Officer", "Mining Officer", ("rigs", "rigleash", "rigsout")),

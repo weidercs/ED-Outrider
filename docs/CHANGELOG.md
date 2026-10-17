@@ -2,6 +2,24 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-17 · Carrier trips (NEXT-VERSION #19) and a tighter Carrier tile
+- **Plot Route → Carrier:** your carrier's trip, from Spansh's carrier router (`SPANSH_FC`, POST /api/carrier/trip,
+  probed 2026-10-17: names accepted; the cargo in use must include the hold's tritium).
+  - The form: depot, hold, cargo in use and type, from the journal; To me; + via.
+  - The plan: the legs with their tritium and what to do first (`outrider.cargo.carrier_route_legs` follows the real
+    depot), the time, and the tritium needed against what you have.
+  - Planning only, in its own slot (meta `carrier_trip`, kept through a re-read): it never replaces your ship's route.
+- **Followed on the tile:** one line, "Leg 2/6 → system 📋 · departs / cooldown / ready / ready? ✕", from the
+  carrier's position (`State.carrier_trip_follow`: the next leg, a later one skipped to, off the trip with re-plot from
+  here, the end).
+- **The Quartermaster:** "Carrier ready to jump. Next leg: …" once, and "should be" when away (the new "carriertrip"
+  row). The arrival line adds "Leg 3 of 6, 3 to go", "Carrier trip complete." or "off the planned trip".
+- **The Carrier tile tightened** (the author): the name; where it is; one movement line (a trip, else a booked jump,
+  else the meeting line); "UC ✓ · Vista ✓ · Tritium: 668t/14,199t" (with ⚠ when the depot cannot pay for the next leg);
+  "Balance … · ~N wks upkeep". At most five lines from eight. Other suspended services left off the tile.
+- **Tests:** `tests/test_carrier_trip.py` (with the probed answer as a fixture) and the smoke test's "carrier trips";
+  the tile's checks follow the new wording.
+
 ## 2026-10-17 · Chat read aloud by Comms (NEXT-VERSION #17)
 - **Settings → Voice → Chat** (off by default): Read aloud, a tick per channel (Squadron, Wing and Direct ticked;
   Local and Voice chat not; NPCs never), and how a message starts ("Kurbo: …", "Commander Kurbo on Squadron: …", the

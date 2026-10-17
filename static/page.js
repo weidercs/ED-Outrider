@@ -434,8 +434,8 @@ function carrierServicesHtml(c) {
   const sus = c.suspended || [], title = "suspended in the carrier's management: it costs less upkeep, but serves no one";
   const off = label => `${esc(label)} <span class="noscoop" title="${title}">✗</span>`;
   const one = (on, label) => on ? `${label} ✓` : sus.includes(label) ? off(label) : `no ${label}`;
-  const others = sus.filter(x => x !== "UC" && x !== "Vista");
-  return `${one(c.has_uc, "UC")} · ${one(c.has_vista, "Vista")}` + others.map(x => ` · ${off(x)}`).join("");
+  // only UC and Vista: on-board selling is all that matters here (the author, 2026-10-17: the redemption office... dropped)
+  return `${one(c.has_uc, "UC")} · ${one(c.has_vista, "Vista")}`;
 }
 // the carrier's balance and the weeks of upkeep it pays (S61): amber under UPKEEP_WARN_WEEKS (outrider.cargo); the
 // rates are the published ones until checked against the game's Finance screen, and the title says so
@@ -446,7 +446,7 @@ function carrierFinanceHtml(fi) {
   // the line says only "~N wks upkeep" (the author, 2026-10-14); how old the stats are goes in the title
   const title = `balance ${crSign(fi.balance)} cr · reserve ${crSign(fi.reserve)} cr · available ${crSign(fi.available)} cr, from the carrier's last stats (${(fi.ts || "").slice(0, 10)}${old ? `: as of ${shortDay(fi.ts)}` : ""}: opening its management writes them).` +
     (fi.upkeep ? ` Upkeep ≈ ${credits(fi.upkeep)} cr a week at the published rates (the core and each service, a suspended one at its lower rate), not yet checked against the game's carrier Finance screen: the journal has no upkeep figure. Upkeep is drawn from the balance each week.` : "");
-  return `<span id="carrierFin" class="${fi.warn ? "warnc" : ""}" title="${esc(title)}">balance <b>${crSign(fi.balance)}</b>` +
+  return `<span id="carrierFin" class="${fi.warn ? "warnc" : ""}" title="${esc(title)}">Balance <b>${crSign(fi.balance)}</b>` +
     (w != null ? ` · ~<b>${w < 10 ? w.toFixed(1) : Math.floor(w).toLocaleString()}</b> wks upkeep` : "") + `</span>`;
 }
 function renderCarrier() {
@@ -482,7 +482,7 @@ function renderCarrier() {
            ` · it → you ≈ <b>${theirs}</b> carrier jump${theirs === 1 ? "" : "s"}` + carrierTripHtml(c.trip, c.burn_factor);
   }
   let plan = "";
-  const pl = c.planned;
+  const pl = c.planned, trip = carrierTripNow();
   if (pl && pl.departure) {
     const left = (Date.parse(pl.departure) - Date.now()) / 1000;
     const mmss = t => t >= 3600 ? `${Math.floor(t / 3600)} h ${Math.floor(t % 3600 / 60)} min` : `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
@@ -503,15 +503,114 @@ function renderCarrier() {
   const tr = c.tritium;
   const dcLine = dc ? `<span class="noscoop" title="cancel it in the carrier's management until then">Decommissioning: scrapped ${esc(shortDay(dc.scrap_ts || ""))}` +
     `${dc.refund ? ` · ${credits(dc.refund)} cr back` : ""}</span>` : "";
-  cl.innerHTML = val(mk("fleet-carrier") + esc(c.name), esc(c.callsign || "")) + ln(dcLine) + ln(where) + ln(meet) + ln(plan) +
-    ln(carrierServicesHtml(c) +
-       (tr ? ` · Tritium in Depot: <b>${tr.depot.toLocaleString()} t</b>` : c.fuel != null ? ` · ${c.fuel} t tritium` : "")) +
-    ln(carrierFinanceHtml(c.finance)) +
-    (tr ? `<div class="ln" id="carrierTrit" title="Total 500 ly Jumps Available: the jumps all your tritium gives at 500 ly, if the depot is topped up from the hold as it runs low">` +
-          `Total Tritium: <b>${tr.total.toLocaleString()} t</b>${tr.jumps != null ? ` (<b>${tr.jumps.toLocaleString()}</b> jumps)` : ""}</div>` : "");
+  // the tile, tightened (the author, 2026-10-17): the name, where, one movement line (a carrier trip, else a booked jump,
+  // else the meeting line), "UC ✓ · Vista ✓ · Tritium: depot/total", the balance and upkeep
+  const move = trip ? carrierTripLineHtml(trip, pl, c) : plan || meet;
+  const depot = tr ? tr.depot : c.fuel;
+  const nextFuel = trip && trip.next && !trip.off ? trip.next.fuel : null, low = nextFuel != null && depot != null && depot < nextFuel;
+  const tritTitle = (tr && tr.jumps != null ? `${tr.jumps.toLocaleString()} jumps of 500 ly with all of it, the depot topped up from the hold as it runs low` : "the depot (the carrier's tank)") +
+    (trip && trip.totals ? `; the trip needs ${trip.totals.need.toLocaleString()} t` + (trip.totals.short ? `, ${trip.totals.short.toLocaleString()} t more than you have: buy it before you set out` : "") : "") +
+    (low ? `; the depot will not pay for the next leg (${nextFuel} t): move tritium from the hold into the depot first (carrier management)` : "");
+  const trit = depot == null ? "" : ` · <span id="carrierTrit" title="${esc(tritTitle)}">Tritium: <b>${depot.toLocaleString()}t</b>${tr ? `/${tr.total.toLocaleString()}t` : ""}${low ? ` <span class="warnc">⚠</span>` : ""}</span>`;
+  drawFcTrip();
+  if (typeof hForm !== "undefined" && hwyPlotter() === "carrier") { fillFcForm(); drawHwyStatus(); }
+  cl.innerHTML = val(mk("fleet-carrier") + esc(c.name), esc(c.callsign || "")) + ln(dcLine) + ln(where) + ln(move) +
+    ln(carrierServicesHtml(c) + trit) + ln(carrierFinanceHtml(c.finance));
 }
+// ---- carrier trips (#19, the author 2026-10-17): planned in Plot Route (the Carrier plotter: Spansh's carrier router),
+// followed here, one line: "Leg 2/6 → system 📋 · departs 12:30 ✕". The leg moves on as the carrier does (the server's
+// carrier_trip_follow); after an arrival, its cooldown (CARRIER_COOLDOWN_S on the server: ready_at), then "ready" (or
+// "ready?" when only the booked jump says it moved: away from it, the journal cannot confirm). The Quartermaster says it
+// once ("the carriertrip row"). 📋 copies the next leg's system on a click only (never by itself: the author).
+function carrierTripNow() { const t = data && data.carrier_trip && data.carrier_trip.trip; return t && !t.done ? t : null; }
+function carrierTripLineHtml(t, pl, c) {
+  const x = `<button type="button" class="mini" data-fctrip="clear" title="end this carrier trip">✕</button>`;
+  if (t.off) return `<span class="warnc" title="the carrier jumped somewhere the trip does not go">off the trip at ${esc(t.off.system || "?")}</span> ` +
+    `<button type="button" class="mini" data-fctrip="replot" title="plot the trip again from where the carrier is now">re-plot from here</button> ${x}`;
+  const nx = t.next;
+  if (!nx) return "";
+  const mmss = s => s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.floor(s % 3600 / 60)} min` : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  let when = "";
+  if (pl && pl.departure) {
+    const left = (Date.parse(pl.departure) - Date.now()) / 1000;
+    when = left > 0 ? ` · departs <b>${mmss(left)}</b>` : " · jumping";
+  } else if (t.ready_at) {
+    const left = t.ready_at - Date.now() / 1000;
+    when = left > 0 ? ` · <span title="the cooldown after a jump (busy systems can take longer)">cooldown ${mmss(left)}</span>`
+      : t.sure ? " · <b>ready</b>" : ` · <span title="should be ready to jump: only the booked jump says it moved (busy systems can delay it)">ready?</span>`;
+  }
+  const leg = `Leg ${t.at + 1}/${t.n} → <span class="copy" data-name="${esc(nx.system)}" title="click to copy, then paste it in the carrier's galaxy map">${esc(nx.system)} 📋</span>`;
+  return leg + when + ` ${x}`;
+}
+// Plot Route's trip list (#19): folded, its summary the trip in one line; the legs with the tritium each burns and
+// what to do first (move tritium from the hold into the depot, buy it here), the current one marked
+let fcTripDrawn = "";
+function drawFcTrip() {
+  const box = document.getElementById("fcTrip"); if (!box) return;
+  const t = data && data.carrier_trip && data.carrier_trip.trip;
+  const key = JSON.stringify(t ? [t.id, t.at, t.off, t.done, t.n] : null);
+  if (key === fcTripDrawn) return;
+  fcTripDrawn = key;
+  box.hidden = !t;
+  if (!t) return;
+  const tot = t.totals || {}, dest = t.legs[t.legs.length - 1].system;
+  document.getElementById("fcTripHead").innerHTML = `🚢 Carrier trip to <b>${esc(dest)}</b>: ` +
+    (t.done ? "<span class=\"ok\">complete</span>" : t.off ? `<span class="warnc">off the trip at ${esc(t.off.system || "?")}</span>` : `leg ${t.at + 1} of ${t.n}`) +
+    ` · ${t.n} legs, about ${t.hours} h <span class="unk">(longer in busy systems)</span> · ${(tot.need || 0).toLocaleString()} t tritium of ${(tot.have || 0).toLocaleString()} t` +
+    (tot.short ? ` · <span class="noscoop">${tot.short.toLocaleString()} t short: buy it before you set out</span>` : "");
+  const note = x => [x.top_up ? `move ${x.top_up.toLocaleString()} t from the hold into the depot first` : "", x.buy ? `buy ${x.buy.toLocaleString()} t here` : "",
+                     x.short ? `<span class="noscoop">the depot cannot pay for it</span>` : ""].filter(Boolean).join(" · ");
+  document.getElementById("fcTripBody").innerHTML =
+    `<div class="srow"><button type="button" data-fctrip="clear">✕ End the trip</button>${t.off ? ` <button type="button" data-fctrip="replot">Re-plot from where it is</button>` : ""}</div>` +
+    `<table class="hwytable"><thead><tr><th>#</th><th>System</th><th class="num">ly</th><th class="num">Tritium</th><th></th></tr></thead><tbody>` +
+    t.legs.map((x, i) => `<tr class="${i <= t.at ? "unk" : ""}${i === t.at + 1 && !t.done ? " cur" : ""}"><td>${i || "start"}</td>` +
+      `<td><span class="copy" data-name="${esc(x.system)}" title="click to copy">${esc(x.system)}</span></td><td class="num">${i ? x.ly.toLocaleString() : ""}</td>` +
+      `<td class="num">${i ? x.fuel.toLocaleString() + " t" : ""}</td><td>${note(x)}</td></tr>`).join("") + `</tbody></table>`;
+}
+document.getElementById("fcTrip").addEventListener("click", e => {
+  const b = e.target.closest("[data-fctrip]"); if (!b) return;
+  const t = data && data.carrier_trip && data.carrier_trip.trip;
+  if (b.dataset.fctrip === "clear") carrierTripPost({clear: true});
+  else if (b.dataset.fctrip === "replot" && t && t.request) carrierTripPost(Object.assign({}, t.request, {from: null}));
+});
+// the cooldown is over: said once per leg (and only near the moment: a page opened later says nothing)
+let carrierReadySaid = null;
+function carrierTripTick(now = Date.now()) {
+  const t = carrierTripNow(), c = data && data.carrier;
+  if (!t || t.off || !t.next || !t.ready_at || !c || (c.planned && c.planned.departure)) return false;
+  const key = `${t.id}:${t.at}`, late = now / 1000 - t.ready_at;
+  if (late < 0 || late > 120 || carrierReadySaid === key) return false;
+  carrierReadySaid = key;
+  alertOut("carriertrip", t.sure ? "Carrier ready to jump" : "Carrier should be ready to jump", `next leg: ${t.next.system} (${t.at + 1} of ${t.n})`,
+           {say: `${t.sure ? "Carrier ready to jump" : "Your carrier should be ready to jump"}. Next leg: ${t.next.system}.`});
+  return true;
+}
+// what the arrival line adds on a trip: "Leg 3 of 6, 3 to go", the end, or off the plan
+function carrierTripArrivalWords() {
+  const t = data && data.carrier_trip && data.carrier_trip.trip;
+  if (!t) return "";
+  if (t.done) return " Carrier trip complete.";
+  if (t.off) return " That is off the planned trip.";
+  return t.at ? ` Leg ${t.at} of ${t.n}, ${t.n - t.at} to go.` : "";
+}
+async function carrierTripPost(body) {
+  let r;
+  try { r = await apiJson("api/carrier/trip", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+  catch (err) { r = {error: err.message}; }
+  if (r && r.error) toast(`Carrier trip: ${r.error}`);
+  return r || {};
+}
+document.getElementById("carrierLine").addEventListener("click", e => {
+  const b = e.target.closest("[data-fctrip]"); if (!b) return;
+  const t = carrierTripNow();
+  if (b.dataset.fctrip === "clear") carrierTripPost({clear: true});
+  else if (b.dataset.fctrip === "replot" && t && t.request) carrierTripPost(Object.assign({}, t.request, {from: null}));
+});
 // the countdown ticks without new data
-setInterval(() => { if (data && data.carrier && data.carrier.planned) { renderCarrier(); if (tilesFolded) renderTilesLine(); } }, 1000);
+setInterval(() => {
+  if (data && data.carrier && (data.carrier.planned || carrierTripNow())) { renderCarrier(); if (tilesFolded) renderTilesLine(); }
+  try { carrierTripTick(); } catch (err) { console.warn("carrier trip:", err); }
+}, 1000);
 document.addEventListener("click", async e => {
   if (!e.target.closest || !e.target.closest("#backupBtn, #srvBackupBtn")) return;
   let r;
@@ -2002,6 +2101,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed; within 100 m of a plant you tagged where the next sample would count", "alert"],
   ["approach", "approaching a landable body at or over your high-gravity level with unsold data over the amber level or rebuy multiple", "alert"],
   ["bodybrief", "approaching a body with biological signals: what they could be (the FSS already said so, so off by default)", null],
+  ["carriertrip", "carrier trips (Plot Route → Carrier): the carrier ready for its next leg, said once its cooldown should be over (the leg itself is said with its arrival)", null],
   ["chat", "chat: other players' messages read aloud by Comms (Settings → Voice → Chat: off by default; squadron, wing and direct ticked), never an NPC's", null],
   ["docking", "docking: the pad the station gave you (said every time, shown big on Now and in the overlay's Surface radar place), and why one refused when it is not obvious (no pad free, ship too big, access restricted, hostile, your offences, a fighter out)", null],
   ["sell", "docked where you can sell, and what you banked", "cash"],
@@ -6983,19 +7083,24 @@ function hwyFormShow() {
   hForm.querySelector(".hwy-nopt").hidden = p === "exact";
   hForm.querySelectorAll(".hwy-nonly").forEach(e => { e.hidden = p !== "neutron"; });
   hForm.querySelector(".hwy-xopt").hidden = p !== "exact";
-  const k = SURVEY[p], trade = p === "trade", survey = !!(k && k.form), slot = !!k;
+  const k = SURVEY[p], trade = p === "trade", survey = !!(k && k.form), slot = !!k, fc = p === "carrier";
   hForm.querySelectorAll(".hwy-ropt").forEach(e => { e.hidden = !survey; });
+  // #19: your carrier's trip: its own form (the depot, the hold, the cargo in use, the type), no ship, no range
+  hForm.querySelectorAll(".fc-opt, .fc-only").forEach(e => { e.hidden = !fc; });
+  hEl("hwyNearest").hidden = fc;
+  if (fc) fillFcForm();
   hForm.querySelectorAll(".hwy-ropt [data-field]").forEach(e => { e.hidden = !survey || !k.form.includes(e.dataset.field); });
   // a trade route starts at a station with your capital and hold: no destination, ship, cargo or range
   hForm.querySelectorAll(".trade-opt").forEach(e => { e.hidden = !trade; });
   hForm.querySelector(".hwyto").hidden = trade;
-  hForm.querySelector(".hwy-shiprow").hidden = trade;
-  if (trade) hForm.querySelector(".hwy-nopt").hidden = true;
-  hForm.querySelector(".hwy-cons").hidden = slot;   // Spansh's survey and trade routes take the range as it is
+  hForm.querySelector(".hwy-shiprow").hidden = trade || fc;
+  if (trade || fc) hForm.querySelector(".hwy-nopt").hidden = true;
+  if (fc) hForm.querySelector(".hwy-xopt").hidden = true;
+  hForm.querySelector(".hwy-cons").hidden = slot || fc;   // Spansh's survey and trade routes take the range as it is
   hEl("hwyTo").placeholder = survey ? "optional: where to end" : "destination system";
   // one slot: a survey or a trade plot replaces the route there is
   const rr = R.data && R.data.route;
-  hEl("hwyGo").textContent = slot && rr ? `Plot (replaces your ${surveyOf(rr.kind).what})` : "Plot";
+  hEl("hwyGo").textContent = fc ? "Plot the carrier's trip" : slot && rr ? `Plot (replaces your ${surveyOf(rr.kind).what})` : "Plot";
   // the neutron plotter can do without a ship (type the range); the exact one needs a Loadout
   const none = hEl("hwyShip").querySelector('option[value=""]');
   if (none) { none.disabled = p === "exact"; none.hidden = p === "exact"; }
@@ -7084,7 +7189,12 @@ function setHwyStatus(text, cls = "") { H.status = {text, cls}; drawHwyStatus();
 function drawHwyStatus() {
   const el = hEl("hwyStatus"), p = H.data && H.data.plotting, rp = R.data && R.data.plotting;
   let text = "", cls = "";
-  if (rp && rp.state === "running") {
+  const fp = data && data.carrier_trip && data.carrier_trip.plotting;
+  if (fp && fp.state === "running") {
+    const secs = fp.started ? Math.max(0, Math.round((Date.now() - new Date(fp.started)) / 1000)) : null;
+    text = `Asking Spansh's carrier router: ${fp.from} → ${fp.to}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
+  } else if (fp && fp.state === "failed" && hwyPlotter() === "carrier") { text = `Could not plot the carrier's trip: ${fp.error}.`; cls = "err"; }
+  else if (rp && rp.state === "running") {
     const secs = rp.started ? Math.max(0, Math.round((Date.now() - new Date(rp.started)) / 1000)) : null;
     text = `Asking Spansh for ${surveyOf(rp.kind).a} from ${rp.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
   } else if (p && p.state === "running") {
@@ -7095,8 +7205,32 @@ function drawHwyStatus() {
   else if (H.error) { text = `Could not load the highway: ${hwyErr(H.error)}.`; cls = "err"; }
   el.textContent = text.replace(/\.\.$/, "."); el.className = cls;
 }
+// #19: the carrier form's figures from the journal (the payload's carrier_trip.defaults), where nothing is typed
+function fillFcForm() {
+  const d = (data && data.carrier_trip && data.carrier_trip.defaults) || {};
+  for (const [id, v] of [["fcFuel", d.fuel], ["fcHold", d.hold], ["fcUsed", d.used]])
+    if (document.activeElement !== hEl(id) && hEl(id).value === "" && v != null) hEl(id).value = v;
+  if (d.type && !hEl("fcType").dataset.touched) hEl("fcType").value = d.type;
+  if (hwyPlotter() === "carrier") hEl("hwyFrom").placeholder = d.from ? `the carrier: ${d.from}` : "the carrier's system";
+}
+async function carrierSubmit() {
+  const num = id => hEl(id).value === "" ? null : Number(hEl(id).value);
+  const b = {to: hEl("hwyTo").value.trim(), fuel: num("fcFuel"), hold: num("fcHold"), used: num("fcUsed"), type: hEl("fcType").value};
+  const from = hEl("hwyFrom").value.trim(), via = hEl("fcVia").value.trim();
+  if (from) b.from = from;
+  if (via && !hEl("fcViaWrap").hidden) b.via = via;
+  if (!b.to) return setHwyStatus("Type the carrier's destination (or To me).", "err");
+  setHwyStatus("Asking Spansh's carrier router…", "busy");
+  const r = await carrierTripPost(b);
+  if (r.error) return setHwyStatus(`Could not plot the carrier's trip: ${hwyErr(r.error)}.`, "err");
+  H.status = null; drawHwyStatus();
+}
+hEl("fcToMe").onclick = () => { const n = data && data.position && data.position.name; if (n) hEl("hwyTo").value = n; };
+hEl("fcViaBtn").onclick = () => { const w = hEl("fcViaWrap"); w.hidden = !w.hidden; hEl("fcViaBtn").textContent = w.hidden ? "+ via" : "− via"; if (!w.hidden) hEl("fcVia").focus(); };
+hEl("fcType").onchange = e => { e.target.dataset.touched = "1"; };
 hForm.addEventListener("submit", async e => {
   e.preventDefault();
+  if (hwyPlotter() === "carrier") return carrierSubmit();
   if (SURVEY[hwyPlotter()]) return richSubmit(hwyPlotter());
   const b = hwyBody();
   if (!b.to) return setHwyStatus("Type the destination system.", "err");
@@ -9106,7 +9240,7 @@ function onData() {
   if (c && c.moved_ts !== lastCarrierMoved) {
     if (lastCarrierMoved) { alertOut("carrier", `${c.name} ${c.assumed ? "should now be" : "is"} at ${c.system}`,
                                      (c.distance != null ? `${c.distance} ly from you` : "") + (c.assumed ? (c.distance != null ? " · " : "") + "the booked jump (not yet confirmed)" : ""),
-                                     {say: () => line("carrier_arrived", {carrier: c.name, system: c.system})}); toast(`🚢 ${c.name} arrived at ${c.system}`); }
+                                     {say: () => line("carrier_arrived", {carrier: c.name, system: c.system}) + carrierTripArrivalWords()}); toast(`🚢 ${c.name} arrived at ${c.system}`); }
     lastCarrierMoved = c.moved_ts;
   }
   const k = (data.codex_recent || [])[0];
@@ -10012,7 +10146,7 @@ drawChatRead();
 // file and the voices installed. The XO row is the main voice (its voice select switches it) and the main personality.
 // an alert row in a few words, for a crew member's "Speaks for" and the messages (test_crew keeps it in step with ALERTS;
 // the Spoken lines tally has its own capitalised names, ALERT_SHORT)
-const ROW_WORDS = {chat: "other players' chat", discovery: "target verdicts", arrival: "arrivals", game: "start and exit", jump: "jumps", honk: "the honk",
+const ROW_WORDS = {carriertrip: "carrier trips", chat: "other players' chat", discovery: "target verdicts", arrival: "arrivals", game: "start and exit", jump: "jumps", honk: "the honk",
   brief: "arrival briefings", fss: "the FSS", mapped: "mapped planets", leaving: "leaving with work left", fuel: "fuel",
   scoop: "tank full", scoopstop: "scooping stopped", supercharge: "supercharges", exo: "Exomastery routes", riches: "survey routes",
   trade: "trade routes", highway: "the Highway", refuelshort: "fuel short of a refuel", lastscoop: "last scoop", autotarget: "auto-target",
