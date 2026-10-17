@@ -9738,7 +9738,16 @@ function chatSpeakers() {
   return crewOn() ? crewRoles().map(r => r.id).filter(id => !off.has(id)).map(chatMember).filter(Boolean) : [];
 }
 const chatPersona = m => m.personality || "xo";
-const chatVoiceKey = m => { const v = crewVoice(m, m.personality); return `${v.voice || "main"}#${v.speaker ?? ""}`; };
+// the voice and person a station is really heard in, so two that sound alike never talk: a voice not installed is the
+// main voice (as heardVoice), the main voice named is the main voice, a person left unset on it is the main voice's
+// own; on another voice an unset person is the one picked for that voice, which the page does not know ("picked")
+const chatVoiceKey = m => {
+  const t = data && data.tts, main = (t && t.voice) || null, v = crewVoice(m, m.personality);
+  const own = v.voice && v.voice !== main && ((t && t.voices) || []).includes(v.voice) ? v.voice : null;
+  const missing = v.voice && v.voice !== main && !own;   // heard in the main voice, without that voice's person
+  const speaker = own ? v.speaker ?? "picked" : (missing ? null : v.speaker) ?? (t && t.speaker) ?? 0;
+  return `${own || main || "main"}#${speaker}`;
+};
 const chatMayTalk = (a, b) => a.role !== b.role && chatPersona(a) !== chatPersona(b) && chatVoiceKey(a) !== chatVoiceKey(b);
 // how a station is addressed: its name, else its station ("Engineer"); in captions "Engineer (Mira)"
 const chatTo = m => crewName(m.role) || crewTitle(m.role);

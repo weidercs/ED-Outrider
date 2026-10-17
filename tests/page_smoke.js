@@ -9019,7 +9019,7 @@ const releasePayloads = async () => {
       return Promise.resolve(new Response(JSON.stringify({ok: true, chatter}), {status: 200, headers: {"Content-Type": "application/json"}}));
     };
     const title = id => served.crew_roles.find(r => r.id === id).short;
-    w.eval(`window.__chat = {crew: data.crew, chatter: data.chatter, lib: speechLib, speak, pos: data.position, surface: data.surface,
+    w.eval(`window.__chat = {tts: data.tts, crew: data.crew, chatter: data.chatter, lib: speechLib, speak, pos: data.position, surface: data.surface,
         flags: [speechOn, isSpeaker], hush: hushState, alert: lastAlert, CHAT: JSON.stringify(CHAT), random: Math.random,
         items: speechItems, caps: captions.splice(0), store: ["speechStyles", "chatterNames", "speechHeard"].map(k => [k, localStorage.getItem(k)])};
       window.__spoken = [];
@@ -9038,6 +9038,7 @@ const releasePayloads = async () => {
         engineer: m("Mira", "sweet", "en_GB-b"), tactical: m(null, "sarcastic", "en_GB-c"), comms: m(null, "business", "en_GB-b")}};
       data.chatter = {on: true, level: "normal", off: ["science", "exobiologist", "quartermaster", "mining"], where: "space", why_not: null, since: Date.now() / 1000 - 600, since_ago: 600}; takeChatter(data.chatter);
       data.position = Object.assign({}, data.position, {name: "Sol"});
+      data.tts = Object.assign({}, data.tts, {voice: "en_GB-main", speaker: 3, voices: ["en_GB-main", "en_GB-a", "en_GB-b", "en_GB-c"]});
       speak = (t, o) => window.__spoken.push({t, kind: o.kind, tag: o.tag, voice: o.voice || null, role: o.role || null, still: o.still});
       window.__said = () => JSON.stringify(__spoken.splice(0).map(s => [s.t, s.kind, s.voice, s.role]));`);
     try {
@@ -9050,6 +9051,17 @@ const releasePayloads = async () => {
                                                {id: "home", kind: "personal", ask: ["navigator"], answer: ["tactical", "engineer"]}]};
         const pick = (members, x) => { const p = chatDialogue(members, info, () => x); return p && [p[0].role, p[1].role, p[2]]; };
         return JSON.stringify([pick(s, 0.9), pick(s, 0.1), pick([r("navigator"), r("tactical")], 0.1), pick([r("engineer")], 0.9)]); })()`));
+      // alike by what is heard, not by what is written (2026-10-16): the main voice named, its person left unset or
+      // picked, a personality's voice not installed (heard in the main voice) are one person; one voice's two people are two
+      got.heard = JSON.parse(w.eval(`(() => { const m = (role, personality, voice, speaker = null) => ({role, personality, voice, speaker});
+        const main = m("navigator", "sarcastic", null), may = (a, b) => chatMayTalk(a, b);
+        const out = [may(main, m("engineer", "sweet", "en_GB-main")), may(main, m("engineer", "sweet", "en_GB-main", 3)),
+          may(main, m("engineer", "sweet", null, 3)), may(main, m("engineer", "sweet", "en_GB-main", 4))];
+        const was = speechLib.styles.sweet; speechLib.styles.sweet = {label: "Sweet", voice: "en_GB-gone", speaker: 7};
+        out.push(may(main, m("comms", "sweet", null))); speechLib.styles.sweet = was;
+        out.push(may(m("comms", "sweet", "en_GB-b", 1), m("tactical", "business", "en_GB-b", 2)),
+                 may(m("comms", "sweet", "en_GB-b"), m("tactical", "business", "en_GB-b")));
+        return JSON.stringify(out); })()`));
       // a dialogue: ask, answer, a last word; the captions say who; an alert since drops the rest
       w.eval(`Math.random = () => 0; speechLib.chatter.dialogue = 1; speechLib.chatter.third = 1`);
       got.talk = [w.eval("chatterNow()"), JSON.parse(w.eval("__said()")), JSON.parse(w.eval("JSON.stringify(captions.map(c => c.shown))"))];
@@ -9108,7 +9120,7 @@ const releasePayloads = async () => {
       d.getElementById("chatTry").click();
       got.tryEmpty = d.getElementById("chatMsg").textContent;
     } finally {
-      w.eval(`const k = window.__chat; Object.assign(data, {crew: k.crew, chatter: k.chatter, position: k.pos, surface: k.surface});
+      w.eval(`const k = window.__chat; Object.assign(data, {tts: k.tts, crew: k.crew, chatter: k.chatter, position: k.pos, surface: k.surface});
         speechLib = k.lib; speak = k.speak; [speechOn, isSpeaker] = k.flags; hushState = k.hush; lastAlert = k.alert;
         Object.assign(CHAT, JSON.parse(k.CHAT)); Math.random = k.random; speechItems = k.items; captions.length = 0; captions.push(...k.caps);
         for (const [key, v] of k.store) { if (v === null) localStorage.removeItem(key); else localStorage.setItem(key, v); }
@@ -9119,6 +9131,7 @@ const releasePayloads = async () => {
     const nav = `${title("navigator")} (Ada)`, eng = `${title("engineer")} (Mira)`;
     const want = {
       pairs: [["xo", "navigator", "engineer", "comms", "tactical"], true, false, false, true, false],
+      heard: [false, false, false, true, false, true, false],
       dialogue: [["navigator", "engineer", "fuel"], ["navigator", "engineer", "home"], null, null],
       talk: [true, [["Mira, fuel?", "chatter", "en_GB-a", "navigator"], ["Plenty, Ada.", "chatter", "en_GB-b", "engineer"], ["Thanks, Mira.", "chatter", "en_GB-a", "navigator"]],
              [`${nav}: Mira, fuel?`, `${eng}: Plenty, Ada.`, `${nav}: Thanks, Mira.`]],

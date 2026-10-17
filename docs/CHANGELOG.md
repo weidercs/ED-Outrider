@@ -2,6 +2,16 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Space chatter: two stations that sound alike never talk, by what is heard
+- **The comparison:** two stations are kept apart by the voice and person you really hear (`chatVoiceKey`), not by
+  the settings as written. These now count as the same person:
+  - the main voice named explicitly, and left as the main voice;
+  - a person left unset on the main voice, and the main voice's own person picked;
+  - a personality's voice that is not installed (heard in the main voice), and the main voice.
+- **Unchanged:** one voice's two different people still talk to each other.
+- **A limit:** on a voice other than the main one, an unset person is "the one picked for that voice", which the page
+  does not know, so it counts as different from a number.
+
 ## 2026-10-16 · The terminal's lines: times first, subjects lined up, clearer start-up wording
 - **The terminal** (`outrider.serverlog.Console`, on the Tees main() already installs):
   - each line starts with the time, and a date line comes first and again when the day changes;
