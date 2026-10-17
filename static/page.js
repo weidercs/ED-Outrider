@@ -2712,6 +2712,8 @@ const spokenStar = c => !c ? "star" : /^D/.test(c) ? "white dwarf" : c === "N" ?
   : /^[OBAFGKM]_\w+$/.test(c) ? `${c[0]} ${c.slice(2).replace(/SuperGiant/g, "Supergiant").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}`
   : `${c} star`;
 // sample values for the ▶ try button
+// a key's sample values: LINE_SAMPLES, else space chatter's, which come with the lines (speechLib.chatter.samples, #15)
+const lineSample = key => LINE_SAMPLES[key] || (speechLib.chatter && speechLib.chatter.samples && speechLib.chatter.samples[key]) || {};
 const LINE_SAMPLES = {
   docking_granted: {pad: 34, station: "Jameson Memorial"}, docking_denied: {reason: "no pad free for your ship: try again shortly", station: "Jameson Memorial"},
   speech_on: {}, game_start: {}, game_exit: {}, heat: {},
@@ -8633,7 +8635,7 @@ function onData() {
   { const cn = bioColoursNote(); if (cn !== bioColoursDrawn) { bioColoursDrawn = cn; drawHereLegend(); } }   // S7's note in Here's legend
   // first payload, the server was restarted, or this window slept (see poll): no sounds for old state
   const firstNews = data.run_id !== runId || woke;
-  onHush(firstNews); takeCopilot(data.copilot, firstNews); nowStakesTick();
+  onHush(firstNews); takeCopilot(data.copilot, firstNews); takeChatter(data.chatter); nowStakesTick();
   if (data.ask_seq !== AL.seq) loadAskLog();   // S35: a new question while Questions asked is open
   const cpl = document.getElementById("copilotLine"), btn = data.copilot && data.copilot.button;
   cpl.hidden = !btn; cpl.textContent = btn ? `Co-pilot button: ${btn}` : "";
@@ -9712,8 +9714,14 @@ document.getElementById("vmPreload").onchange = e => vmPost("voices_preload", e.
 // its topics and gets an answer (sometimes a last word back); two stations of the same personality ("as the XO" is the
 // XO's), or of the same voice and person, never talk to each other. With the crew off, the main voice alone.
 const chatterNames = () => store.get("chatterNames", true) !== false;   // captions say who talks (per browser)
-const CHAT = {lastAt: Date.now(), gap: null, said: []};
+const CHAT = {lastAt: Date.now(), gap: null, level: null, said: []};   // level: the chattiness the gap was drawn for
 const chatInfo = () => (speechLib && speechLib.chatter) || null;
+// the server's chatter (a payload's, or a settings answer's) with since_local: since on this page's clock, from its age
+// (since_ago), as the hush does, so a tablet whose clock is off the PC's keeps the grace and {minutes} right
+function takeChatter(c) {
+  if (c && typeof c === "object") c.since_local = Number.isFinite(c.since_ago) ? Date.now() - c.since_ago * 1000 : null;
+  return c;
+}
 // a station as chatter's speaker ({role, personality, voice, speaker}), or null when it cannot speak itself (for an
 // alert the XO stands in; chatter leaves it out)
 function chatMember(role) {
@@ -9752,7 +9760,7 @@ function chatDialogue(members, info, rnd = Math.random) {
 function chatVars(c, extra = {}) {
   const ts = data && data.this_session, s = data && data.surface;
   return Object.assign({system: data && data.position && data.position.name,
-    minutes: c && c.where === "space" && c.since ? Math.max(1, Math.round((Date.now() / 1000 - c.since) / 60)) : null,
+    minutes: c && c.where === "space" && c.since_local ? Math.max(1, Math.round((Date.now() - c.since_local) / 60000)) : null,
     jumps: (ts && ts.jumps) || null, firsts: (ts && ts.firsts) || null,
     body: (s && s.body) || null, ship_dist: s && s.ship && s.ship.dist != null ? surfDist(s.ship.dist) : null}, extra);
 }
@@ -9763,10 +9771,11 @@ function chatPick(key, m, vars) {
   try { words = line(key, vars, ""); } finally { lineCrewForce = undefined; lineStrict = false; }
   return words ? {key, words, style: lineStyle, template: lineTemplate, m} : null;
 }
-function chatSpeak(p, still) {
-  const entry = logSpeech({kind: "chatter", tag: p.key, words: p.words});
+// `kind` "manual" for ▶ Try chatter: heard in any window and through a hush, as the other ▶ buttons
+function chatSpeak(p, still, kind = "chatter") {
+  const entry = logSpeech({kind, tag: p.key, words: p.words});
   entry.style = p.style; entry.key = p.key; entry.template = p.template;
-  speak(p.words, {kind: "chatter", tag: p.key, still, log: entry, ...crewVoice(p.m, p.style)});
+  speak(p.words, {kind, tag: p.key, still, log: entry, ...crewVoice(p.m, p.style)});
   addCaption(p.words, p.m ? chatWho(p.m) : null);
 }
 // say something now: a dialogue (with two stations that may talk, info.dialogue of the time; `force`: half) or a
@@ -9777,6 +9786,7 @@ function chatterNow({force = false} = {}) {
   const where = c.where || (force ? "space" : null);
   if (!where) return "nothing to chat about here";
   const started = Date.now(), alive = () => !(lastAlert && lastAlert.at > started);   // an alert since: the rest goes
+  const kind = force ? "manual" : "chatter";
   const speakers = chatSpeakers();
   if (speakers.length >= 2 && Math.random() < (force ? 0.5 : info.dialogue)) {
     const d = chatDialogue(speakers, info);
@@ -9785,9 +9795,9 @@ function chatterNow({force = false} = {}) {
       const ask = chatPick(`chat_${topic}_ask`, a, chatVars(c, {to: chatTo(b)}));
       const answer = ask && chatPick(`chat_${topic}_answer`, b, chatVars(c, {to: chatTo(a)}));
       if (ask && answer) {
-        chatSpeak(ask, alive); chatSpeak(answer, alive);
+        chatSpeak(ask, alive, kind); chatSpeak(answer, alive, kind);
         const react = Math.random() < info.third && chatPick("chatter_react", a, chatVars(c, {to: chatTo(b)}));
-        if (react) chatSpeak(react, alive);
+        if (react) chatSpeak(react, alive, kind);
         return true;
       }
     }
@@ -9796,7 +9806,7 @@ function chatterNow({force = false} = {}) {
   const key = where === "planet" ? (s && s.ship ? "chatter_planet_landed" : "chatter_planet_orbit") : "chatter_space";
   const p = chatPick(key, m, chatVars(c));
   if (!p) return info.written ? "nothing to say right now" : "no chatter lines yet: they come in a later update";
-  chatSpeak(p, alive);
+  chatSpeak(p, alive, kind);
   return true;
 }
 // every few seconds in the speaking window: whether both clocks have run out, and then say something
@@ -9804,8 +9814,8 @@ function chatterTick(now = Date.now()) {
   const c = data && data.chatter, info = chatInfo();
   if (!c || !c.on || !info || !c.where || c.why_not || !speakerHere() || !speechOn || hushed()) return false;
   const N = (info.levels[c.level] || 7) * 60000;
-  if (CHAT.gap == null) CHAT.gap = N * (1 + Math.random());
-  if (!c.since || now - c.since * 1000 < info.grace * 1000) return false;
+  if (CHAT.gap == null || CHAT.level !== c.level) { CHAT.gap = N * (1 + Math.random()); CHAT.level = c.level; }   // a new chattiness: at once
+  if (!c.since_local || now - c.since_local < info.grace * 1000) return false;
   if (lastAlert && now - lastAlert.at < N) return false;
   if (now - CHAT.lastAt < CHAT.gap) return false;
   CHAT.said = CHAT.said.filter(t => now - t < 3600000);
@@ -9836,7 +9846,7 @@ async function chatPost(body) {
   try { r = await apiJson("api/voice/chatter", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
   catch { r = {error: "Outrider not reachable"}; }
   r = r || {error: "?"};
-  if (!r.error && data && r.chatter) data.chatter = r.chatter;
+  if (!r.error && data && r.chatter) data.chatter = takeChatter(r.chatter);
   m.textContent = r.error ? `Not saved: ${r.error}` : ""; m.className = r.error ? "hint warnc" : "hint";
   drawChatter();
 }
@@ -10209,7 +10219,7 @@ function labLine(key, style, opts = {}) {
   const pool = styles.flatMap(st => (Array.isArray(e[st]) ? e[st] : []).filter(x => typeof x === "string" && x.trim() && keep(x)).map(x => [st, x]));
   if (!pool.length) return null;
   const [st, template] = pool[Math.floor(Math.random() * pool.length)];
-  return {key, style: st, template, text: fillLine(template, nameFor(lineVars({...(opts.names || {}), ...(LINE_SAMPLES[key] || {})}), st))};
+  return {key, style: st, template, text: fillLine(template, nameFor(lineVars({...(opts.names || {}), ...lineSample(key)}), st))};
 }
 // play a line: as its personality is heard (S40) when it has a voice or speaker of its own (picked in Personality voices,
 // else speech.json's; an uninstalled voice is the main voice, as in the alerts), else in the voice part's voice and

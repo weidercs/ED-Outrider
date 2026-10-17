@@ -268,6 +268,7 @@ class Speech(unittest.TestCase):
         self.assertEqual(outrider.speech.check(doc), [])
         # space chatter's keys (#15) only once its lines are written (outrider.chatter.LINES_WRITTEN)
         required = [k for k in outrider.speech.KEYS if outrider.chatter.LINES_WRITTEN or k not in outrider.speech.CHATTER_KEYS]
+        self.assertEqual(outrider.speech.spoken_keys(), required)
         for key in required:
             for style in list(doc["styles"]) + [s + "_profane" for s in ("sarcastic", "sweet")]:
                 self.assertGreaterEqual(len(doc["lines"].get(key, {}).get(style, [])), 10, f"{key}/{style}")
@@ -284,6 +285,9 @@ class Speech(unittest.TestCase):
                 for key in required:
                     for lst in [sid] + ([sid + "_profane"] if swears else []):
                         self.assertGreaterEqual(len(pdoc["lines"].get(key, {}).get(lst, [])), 10, f"{name}: {key}/{lst}")
+            # and Settings shows it complete: no "(60/100 alerts)" for the chatter not written yet (sweep 2026-10-16)
+            _, notes, info = outrider.speech.merge_personalities(doc, [("shipped", name, pdoc)])
+            self.assertEqual((notes, [i["covers"] == i["of"] == len(required) for i in info]), ([], [True] * len(pdoc["styles"])), name)
             doc["lines"] = {k: {**v, **pdoc["lines"].get(k, {})} for k, v in doc["lines"].items()}   # for the checks below
         # the voice calls you by your chosen names ({name}): commander names are often unpronounceable
         said = [x for e in doc["lines"].values() for k, v in e.items() if k != "when" for x in v]
@@ -346,7 +350,7 @@ class PersonalityFiles(unittest.TestCase):
         self.assertEqual(sorted(merged["lines"]["hull"]), ["business", "naval", "naval_profane", "when"])
         self.assertEqual(merged["lines"]["heat"], {"business": ["Heat {pct} percent."]})
         self.assertEqual((notes, info), ([], [{"id": "naval", "file": "naval.json", "source": "shipped", "covers": 1,
-                                               "of": len(outrider.speech.KEYS)}]))
+                                               "of": len(outrider.speech.spoken_keys())}]))
         self.assertNotIn("naval", self.BASE["styles"])   # the base document is left as it was
         self.assertEqual(sorted(self.BASE["lines"]["hull"]), ["business", "when"])
 

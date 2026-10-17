@@ -360,7 +360,7 @@ IMPORT_GAP_S = 10            # s between two of S67's import reads (a week of ED
 IMPORT_RATE_WAIT_S = 600     # s the import waits when EDSM asks it to slow down, before asking again
 IMPORT_LOOKUP_GAP_S = 3      # s between two of the import's name lookups (Spansh, then EDSM): up to RESOLVE_MAX of them
 LOOKUP_DOWN_S = 10 * 60      # s: Spansh or EDSM unavailable this long gets a card on the banner (S42; at once for no network)
-BIO_TAGS_SHOWN = 40          # the surface map draws at most this many tagged plants (nearest first)
+BIO_TAGS_SHOWN = 40          # the surface map draws about this many tagged plants (tags_shown: nearest first)
 SELLER_REFRESH_LY = 100      # look for the nearest places to sell again after moving this far
 SELLER_REFRESH_S = 6 * 3600  # ...or this long (carriers move)
 EDSM_SYSTEM = "https://www.edsm.net/api-v1/system"
@@ -563,6 +563,22 @@ class ScoopWatch:
         if not full and jumped:
             return None
         return {"pct": min(100, round(100 * fuel / capacity)), "full": full}
+
+
+def tags_shown(tags, cap=BIO_TAGS_SHOWN):
+    """The tagged plants the payload sends (bio_tags_here's, nearest first): each species' nearest usable tag always
+    (the map keeps it, at the rim when far: Kurbo26, 2026-10-16), then the nearest of the rest up to `cap`, nearest
+    first. Only the nearest `cap` lost a species beyond them (sweep 2026-10-16)."""
+    keep, seen = set(), set()
+    for i, t in enumerate(tags):
+        if t.get("usable") and t.get("species") not in seen:
+            seen.add(t.get("species"))
+            keep.add(i)
+    for i in range(len(tags)):
+        if len(keep) >= cap:
+            break
+        keep.add(i)
+    return [t for i, t in enumerate(tags) if i in keep]
 
 
 def fire_group_letter(group):
@@ -8079,7 +8095,7 @@ class State:
                 # SRV, on foot: always shows) and an altitude from the average radius (never shows)
                 "down": bool(h["flags"] & (FLAG_IN_SRV | FLAG_LANDED) or h["flags2"] & 1), "alt_avg": bool(h["flags"] & FLAG_ALT_AVG),
                 "sites": self.surface_sites(h["system"], h["body_id"], h), "locations": locs, "bio": self.surface_bio(h),
-                "tags": self.bio_tags_here(h)[:BIO_TAGS_SHOWN]}
+                "tags": tags_shown(self.bio_tags_here(h))}
 
     def bio_tags_here(self, h):
         """Plants tagged on this body (bio_tags) for species not finished here, nearest first: {species, genus,
@@ -14450,8 +14466,10 @@ class State:
         return True
 
     def chatter_summary(self):
-        """The payload's chatter: the settings and where you are for it ({on, level, off, where, why_not, since})."""
-        return {**self.chatter_raw(), **self._chatter}
+        """The payload's chatter: the settings and where you are for it ({on, level, off, where, why_not, since}), and
+        since_ago, how long ago since was: the page puts it on its own clock (a tablet's may be minutes off the PC's)."""
+        c = self._chatter
+        return {**self.chatter_raw(), **c, "since_ago": round(max(0.0, time.time() - c["since"]), 1) if c["since"] else None}
 
     def crew_raw(self):
         """meta crew as kept, the malformed left out: {on (default off), danger (default on), members, rows}."""
@@ -17170,7 +17188,8 @@ class State:
                     gist = lambda st: st and (round(st.get("fuel_main") or 0, 1), st.get("flags"), st.get("flags2"),
                                               st.get("body"), json.dumps(st.get("destination")), st.get("live"),
                                               st.get("selected_weapon"))
-                    if gist(self.journals.status_json) != gist(before) or self.chatter_watch():
+                    moved = self.chatter_watch()   # every read: the one that changes the flags most of all
+                    if gist(self.journals.status_json) != gist(before) or moved:
                         self.bump()
                     sm = self.sampling_summary()
                     skey = sm and (sm.get("clear"), (sm.get("to_go") or 0) // 10, sm.get("samples"), bool(sm.get("elsewhere")))

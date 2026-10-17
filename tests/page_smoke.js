@@ -9036,7 +9036,7 @@ const releasePayloads = async () => {
       const m = (name, personality, voice) => ({name, personality, voice, speaker: null, fill: null});
       data.crew = {on: true, danger: true, rows: {}, members: {xo: m(null, null, null), navigator: m("Ada", "sarcastic", "en_GB-a"),
         engineer: m("Mira", "sweet", "en_GB-b"), tactical: m(null, "sarcastic", "en_GB-c"), comms: m(null, "business", "en_GB-b")}};
-      data.chatter = {on: true, level: "normal", off: ["science", "exobiologist", "quartermaster", "mining"], where: "space", why_not: null, since: Date.now() / 1000 - 600};
+      data.chatter = {on: true, level: "normal", off: ["science", "exobiologist", "quartermaster", "mining"], where: "space", why_not: null, since: Date.now() / 1000 - 600, since_ago: 600}; takeChatter(data.chatter);
       data.position = Object.assign({}, data.position, {name: "Sol"});
       speak = (t, o) => window.__spoken.push({t, kind: o.kind, tag: o.tag, voice: o.voice || null, role: o.role || null, still: o.still});
       window.__said = () => JSON.stringify(__spoken.splice(0).map(s => [s.t, s.kind, s.voice, s.role]));`);
@@ -9067,19 +9067,25 @@ const releasePayloads = async () => {
       got.landed = JSON.parse(w.eval("chatterNow(), __said()"));
       w.eval(`data.surface = {body: "B 7", ship: null}`);
       got.orbit = JSON.parse(w.eval("chatterNow(), __said()"));
+      // the voice lab fills a chatter line with chatter's own samples (speechLib.chatter.samples; sweep 2026-10-16)
+      got.lab = JSON.parse(w.eval(`JSON.stringify([labLine("chatter_space", "business").text, labLine("chat_fuel_ask", "sarcastic").text])`));
       // the clocks (chatterTick(now)): due once both have run out, past the grace, under the rare cap, nothing queued
       w.eval(`data.chatter.where = "space"; data.position = Object.assign({}, data.position, {name: "Sol"}); Math.random = window.__chat.random`);
       got.ticks = JSON.parse(w.eval(`(() => { const t = Date.now(), c = data.chatter, out = {};
-        const due = () => { CHAT.lastAt = t - 5000; CHAT.gap = 4000; CHAT.said = []; };
+        const due = () => { CHAT.lastAt = t - 5000; CHAT.gap = 4000; CHAT.level = c.level; CHAT.said = []; };
         due(); c.on = false; out.off = chatterTick(t); c.on = true;
-        due(); c.since = t / 1000 - 30; out.grace = chatterTick(t); c.since = t / 1000 - 600;
+        due(); c.since_local = t - 30000; out.grace = chatterTick(t); c.since_local = t - 600000;
+        // the PC's clock far off this page's (a tablet): the grace goes by the age, not the PC's time (sweep 2026-10-16)
+        due(); Object.assign(c, {since: 1, since_ago: 30}); takeChatter(c); out.skew = chatterTick(Date.now()); c.since_local = t - 600000;
         due(); lastAlert = {at: t - 60000}; out.alert = chatterTick(t); lastAlert = null;
         due(); CHAT.lastAt = t - 1000; out.gap = chatterTick(t);
         due(); c.why_not = "the FSS"; out.fss = chatterTick(t); c.why_not = null;
         due(); speechItems = [{}]; out.queued = chatterTick(t); speechItems = [];
-        due(); c.level = "rare"; CHAT.said = [t - 1, t - 2, t - 3]; out.rare = chatterTick(t); c.level = "normal";
+        c.level = "rare"; due(); CHAT.said = [t - 1, t - 2, t - 3]; out.rare = chatterTick(t); c.level = "normal";
         due(); out.due = chatterTick(t); out.spoken = __spoken.length; out.next = chatterTick(t + 1);
         out.gapRange = CHAT.gap >= 7 * 60000 && CHAT.gap <= 14 * 60000;
+        // rare's long gap, then chatty picked: chatty's gap (4 to 8 minutes) at once, not after the next line (sweep 2026-10-16)
+        c.level = "rare"; due(); CHAT.lastAt = t - 10 * 60000; CHAT.gap = 25 * 60000; c.level = "chatty"; out.level = chatterTick(t); c.level = "normal";
         __spoken.length = 0; return JSON.stringify(out); })()`));
       // Settings: drawn from data.chatter, the switches post
       w.eval(`data.crew.on = true; data.chatter = Object.assign({}, data.chatter, {on: true, level: "chatty", off: ["comms"]}); drawChatter()`);
@@ -9095,6 +9101,9 @@ const releasePayloads = async () => {
       got.posted = [posts, w.eval("JSON.stringify(data.chatter.off)"), d.getElementById("chatOn").checked, !cb("tactical").checked, w.eval(`store.get("chatterNames")`)];
       w.eval(`data.crew.on = false; drawChatter()`);
       got.crewOff = box.hidden;
+      // ▶ Try chatter plays as the other ▶ buttons do (kind manual: any window, through a hush; sweep 2026-10-16)
+      d.getElementById("chatTry").click();
+      got.try = [JSON.parse(w.eval("__said()")), d.getElementById("chatMsg").textContent];
       w.eval(`speechLib.lines = {}`);
       d.getElementById("chatTry").click();
       got.tryEmpty = d.getElementById("chatMsg").textContent;
@@ -9119,10 +9128,12 @@ const releasePayloads = async () => {
       strict: ["no chatter lines yet: they come in a later update", []],
       landed: [["The ship is 300 m away on B 7.", "chatter", null, null]],
       orbit: [["The ship is up there over B 7.", "chatter", null, null]],
-      ticks: {off: false, grace: false, alert: false, gap: false, fss: false, queued: false, rare: false, due: true, spoken: 1, next: false, gapRange: true},
+      lab: ["Quiet in Drojau LL-O b26-3.", "Mira, fuel?"],
+      ticks: {off: false, grace: false, skew: false, alert: false, gap: false, fss: false, queued: false, rare: false, due: true, spoken: 1, next: false, gapRange: true, level: true},
       drawn: [true, "chatty", false, 9, false, true, false],
       posted: [[{on: false}, {role: "tactical", takes_part: false}], JSON.stringify(["comms", "tactical"]), false, true, true],
       crewOff: true,
+      try: [[["Quiet in Sol.", "manual", null, null]], ""],
       tryEmpty: "no chatter lines yet: they come in a later update",
     };
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));

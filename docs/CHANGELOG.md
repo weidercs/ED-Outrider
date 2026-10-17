@@ -2,6 +2,23 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-16 · Sweep fixes: personalities shown complete, chatter's clocks and ▶, every tagged species on the map
+- A Fable sweep of everything since 99759e4 (four areas, each finding verified; the overlay's came back clean).
+- **Settings → Voice → Personalities:** every shipped personality showed "(60/100 alerts)". The 40 chatter keys
+  counted, though no chatter lines are written yet. Coverage now counts them only once `LINES_WRITTEN` is True
+  (`outrider.speech.spoken_keys`).
+- **The voice lab:** it filled a chatter line with blanks ("Quiet in ."). It now uses chatter's own sample values
+  (`lineSample`).
+- **Chatter's place:** the server skipped its watcher on exactly the Status.json reads where the flags changed, such
+  as leaving supercruise. It now watches every read.
+- **Chatter's grace and {minutes}:** these compared the PC's clock with the browser's, so they were off on a tablet
+  whose clock differs. The server now sends `since_ago` and the page puts it on its own clock.
+- **How often:** changing it now applies at once, not after the next line.
+- **▶ Try chatter:** it now plays like the other ▶ buttons, in any window and through a hush. Before, it was silent
+  in a window that was not the speaking one.
+- **The surface map and the overlay radar:** past 40 tagged plants on a body, a species beyond the nearest 40 lost its
+  ring and legend row again. Each species' nearest usable tag is now always sent (`tags_shown`).
+
 ## 2026-10-16 · Space chatter on a planet: the temperature alone never stops it, a planetary port's concourse does
 - The suit's very cold and very hot no longer keep chatter quiet: they are common on the worlds you sample, and once
   the temperature hurts, low health (still a blocker, with low oxygen) says so.

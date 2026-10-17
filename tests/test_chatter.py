@@ -2,6 +2,7 @@
 keys and topics, the settings in meta chatter (POST /api/voice/chatter) and the payload's chatter. The page talks
 (tests/page_smoke.js)."""
 import asyncio
+import time
 import types
 import unittest
 
@@ -104,6 +105,44 @@ class Settings(unittest.TestCase):
         self.assertEqual((st.chatter_summary()["where"], st.chatter_summary()["since"]), (None, None))
         self.j.status_json = dict(self.j.status_json, live=False, flags=SC)
         self.assertFalse(st.chatter_watch(now=140))   # an old Status.json (the game not running): nowhere
+        # its age too, which the page puts on its own clock (a tablet's may be minutes off the PC's; sweep 2026-10-16)
+        self.j.status_json = dict(self.j.status_json, live=True)
+        st.chatter_watch(now=time.time() - 42)
+        self.assertAlmostEqual(st.chatter_summary()["since_ago"], 42, delta=1)
+        self.j.status_json = dict(self.j.status_json, flags=0)
+        st.chatter_watch()
+        self.assertIsNone(st.chatter_summary()["since_ago"])
+
+    def test_the_tick_watches_every_status_read(self):
+        """The tick's Status.json read updates chatter's place even when the flags changed, the very read that leaves
+        supercruise (the bump's test used to stop at the changed flags; sweep 2026-10-16)."""
+        import os
+        import tempfile
+        import unittest.mock
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        path = os.path.join(d, "Status.json")
+        with open(path, "w") as f:
+            f.write("{}")
+        reads = iter([{"live": True, "flags": SC, "flags2": 0}, {"live": True, "flags": C.F_IN_MAIN_SHIP, "flags2": 0}])
+        later = ("watch_status", "maybe_refresh", "apply_own_changes", "maybe_classify_target", "maybe_unsold",
+                 "maybe_sale_left", "maybe_locate_carrier", "maybe_find_sellers", "maybe_backup_on_quit")
+        mtimes, seen = {}, []
+        with unittest.mock.patch.object(ed_outrider, "LIVE_DIRS", [d]), \
+                unittest.mock.patch.object(self.j, "read_status", lambda folder: setattr(self.j, "status_json", next(reads))):
+            patches = [unittest.mock.patch.object(self.state, n, lambda *a: None) for n in later]
+            for p in patches:
+                p.start()
+            try:
+                for _ in range(2):
+                    m = os.path.getmtime(path) + 5 * (len(seen) + 1)
+                    os.utime(path, (m, m))
+                    self.state.tick(mtimes)
+                    seen.append(self.state.chatter_summary()["where"])
+            finally:
+                for p in patches:
+                    p.stop()
+        self.assertEqual(seen, ["space", None])
 
     def test_route(self):
         from aiohttp.test_utils import TestClient, TestServer

@@ -140,6 +140,14 @@ KEYS = {
 # space chatter's lines (outrider/chatter.py, #15): the monologues, a dialogue's asks and answers per topic, the last word
 KEYS.update(_chatter.KEYS)
 CHATTER_KEYS = tuple(_chatter.KEYS)
+
+
+def spoken_keys():
+    """The alerts a personality is expected to have lines for: every key, the chatter's only once its lines are written
+    (outrider.chatter.LINES_WRITTEN), so a personality covering every alert is not shown as incomplete meanwhile."""
+    return [k for k in KEYS if _chatter.LINES_WRITTEN or k not in CHATTER_KEYS]
+
+
 # keys with lines in speech.json that nothing speaks yet (the shipped-lines test allows them); none now
 RESERVED = ()
 ALWAYS = ("name", "cmdr", "ship", "here")
@@ -373,9 +381,10 @@ def merge_personalities(base, addons):
                 if key not in KEYS or not got:
                     continue
                 lines[key] = {**(lines.get(key) if isinstance(lines.get(key), dict) else {}), **got}
-            covers = sum(1 for k in KEYS if isinstance(lines.get(k), dict)
+            counted = spoken_keys()
+            covers = sum(1 for k in counted if isinstance(lines.get(k), dict)
                          and any(lines[k].get(lst) for lst in (sid, sid + "_profane")))
-            info.append({"id": sid, "file": fname, "source": source, "covers": covers, "of": len(KEYS)})
+            info.append({"id": sid, "file": fname, "source": source, "covers": covers, "of": len(counted)})
     return dict(base, styles=styles, lines=lines), notes, info
 
 
