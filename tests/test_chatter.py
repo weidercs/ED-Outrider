@@ -64,7 +64,19 @@ class Keys(unittest.TestCase):
         info = C.page_info()
         self.assertEqual([t["id"] for t in info["topics"]], [t[0] for t in C.TOPICS])
         self.assertEqual((info["levels"], info["written"]), (C.LEVELS, C.LINES_WRITTEN))
-        self.assertTrue(all(3 <= m <= 30 for m in C.LEVELS.values()))
+        self.assertTrue(all(2 <= m <= 30 for m in C.LEVELS.values()))
+        # five steps, quietest first, each with its words in Settings (the author, 2026-10-17)
+        self.assertEqual(list(C.LEVELS), ["rare", "occasional", "normal", "chatty", "nonstop"])
+        self.assertEqual(sorted(C.LEVELS.values(), reverse=True), list(C.LEVELS.values()))
+        import os
+        import re
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.html"), encoding="utf-8") as f:
+            html = f.read()
+        sel = re.search(r'<select id="chatLevel".*?</select>', html, re.S).group(0)
+        opts = re.findall(r'<option value="(\w+)">([^<]+)</option>', sel)
+        self.assertEqual(opts, list(C.LEVEL_WORDS.items()))
+        for lv, m in C.LEVELS.items():
+            self.assertIn(f"every {m} to {2 * m} min", C.LEVEL_WORDS[lv])
 
 
 class Settings(unittest.TestCase):

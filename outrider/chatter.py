@@ -58,7 +58,11 @@ def where(flags, flags2=0, gui_focus=0):
 
 
 # ---- chattiness: the quiet before the first line and between lines (minutes; the page randomises N to 2N) ----
-LEVELS = {"rare": 15, "normal": 7, "chatty": 4}
+# five, quietest first (the author, 2026-10-17: "essentially 1 to 5"); Settings shows each with its words
+LEVELS = {"rare": 15, "occasional": 10, "normal": 7, "chatty": 4, "nonstop": 2}
+LEVEL_WORDS = {"rare": "Rare: every 15 to 30 min", "occasional": "Occasional: every 10 to 20 min",
+               "normal": "Normal: every 7 to 14 min", "chatty": "Chatty: every 4 to 8 min",
+               "nonstop": "Non-stop: every 2 to 4 min"}
 LEVEL_DEFAULT = "normal"
 RARE_PER_HOUR = 3          # "rare" also caps it at this many an hour
 GRACE_S = 60               # quiet after entering supercruise, or stepping out on a planet, before anyone talks

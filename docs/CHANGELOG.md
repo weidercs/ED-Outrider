@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-17 · Space chatter: five chattiness steps with their timings, the section on one line
+- **How often:** Rare, Occasional, Normal, Chatty, Non-stop (`outrider.chatter.LEVELS`: 15, 10, 7, 4, 2 minutes).
+  Each option says its timing ("Chatty: every 4 to 8 min"); a test keeps the options in step with LEVELS and
+  LEVEL_WORDS.
+- **Tighter:** the switch, How often, Name the speaker in captions and ▶ Try chatter on one line, with the
+  explanation as one short hint under them.
+
 ## 2026-10-17 · Space chatter's lines: all eleven personalities (11,443 lines)
 - **What each personality has** (in `resources/speech.json` for Down to business, Sarcastic and Sweet, and in each
   file in `resources/personalities/`):

@@ -805,13 +805,15 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <span id="padDelayMsg" class="hint" role="status"></span></label>
       <div id="chatBox" class="mod" data-find-block="space chatter">
         <h4 class="vmhead">Space chatter</h4>
-        <label class="mod"><input type="checkbox" id="chatOn"> Talk in quiet moments
-          <span class="hint">in supercruise, or while you are on foot or in the SRV on a planet, after a while with no alert; never in
-          danger, during a jump, or with the FSS, the DSS or a map open. With the crew on, its stations talk among themselves now and then
-          (the Crew table's Chatter column, below, picks which)</span></label>
-        <label class="mod">How often <select id="chatLevel" aria-label="how often"><option value="rare">rare</option><option value="normal">normal</option><option value="chatty">chatty</option></select></label>
-        <label class="mod"><input type="checkbox" id="chatNames"> Say who is talking in the captions</label>
-        <div class="mod"><button type="button" class="try" id="chatTry">▶ Try chatter</button> <span id="chatMsg" class="hint" role="status"></span></div>
+        <div class="inlineopts chatrow"><label><input type="checkbox" id="chatOn"> Talk in quiet moments</label>
+          <label>How often <select id="chatLevel" aria-label="how often"><option value="rare">Rare: every 15 to 30 min</option>
+            <option value="occasional">Occasional: every 10 to 20 min</option><option value="normal">Normal: every 7 to 14 min</option>
+            <option value="chatty">Chatty: every 4 to 8 min</option><option value="nonstop">Non-stop: every 2 to 4 min</option></select></label>
+          <label><input type="checkbox" id="chatNames"> Name the speaker in captions</label>
+          <button type="button" class="try" id="chatTry">▶ Try chatter</button> <span id="chatMsg" class="hint" role="status"></span></div>
+        <div class="hint">In supercruise, or on foot or in the SRV on a planet, once no alert has come for a while; never in danger,
+          during a jump, or with a map, the FSS or the DSS open. With the crew on, its stations talk among themselves (the Crew
+          table's Chatter column picks which).</div>
       </div>
       <div id="crewBox" class="crewbox" data-find-block="crew">
         <h4 class="crewhead">Crew</h4>
