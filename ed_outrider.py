@@ -10591,12 +10591,20 @@ class State:
                                  " ORDER BY tons DESC, name", (id64,)):
             mined.setdefault(r["body_id"], []).append({"name": r["name"], "tons": r["tons"], "last": r["last_ts"]})
         codex = {}
-        for r in self.db.execute("SELECT body_id, name, is_new, voucher, entry_id, subcategory FROM codex WHERE system=?", (id64,)):
-            codex.setdefault(r["body_id"], []).append({"name": r["name"], "new": bool(r["is_new"]), "voucher": r["voucher"],
+        seen = {}   # one line per entry and body: the game logs a CodexEntry for each composition scan of a species
+        for r in self.db.execute("SELECT body_id, name, is_new, voucher, entry_id, subcategory FROM codex WHERE system=?"
+                                 " ORDER BY ts", (id64,)):
+            had = seen.get((r["body_id"], r["entry_id"]))
+            if had:
+                had["new"] = had["new"] or bool(r["is_new"])
+                had["voucher"] = max(had["voucher"] or 0, r["voucher"] or 0) or None
+                continue
+            seen[(r["body_id"], r["entry_id"])] = row = {"name": r["name"], "new": bool(r["is_new"]), "voucher": r["voucher"],
                                                        # an organic entry's id: Canonn Bioforge's statistics for it (the
                                                        # category is "Biological and Geological" for both: the
                                                        # subcategory tells a plant from a geyser)
-                                                       "entry_id": r["entry_id"] if "organic" in (r["subcategory"] or "").lower() else None})
+                                                       "entry_id": r["entry_id"] if "organic" in (r["subcategory"] or "").lower() else None}
+            codex.setdefault(r["body_id"], []).append(row)
         odyssey = True
         star_row = self.db.execute("SELECT star_class FROM jumps WHERE id64=? ORDER BY ts DESC LIMIT 1", (id64,)).fetchone()
         star = star_row["star_class"] if star_row else None

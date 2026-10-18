@@ -2,6 +2,13 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-18 · A species scanned twice is one bio line
+- The game logs a CodexEntry for each composition scan of a species, not only the first one. Two scans of Tussock
+  Cultro on one body (the author) showed it twice in the body's bio list: once with its value, once as a bare 📖
+  line.
+- A body's codex list now has one line per entry. It keeps the "new" flag and the voucher from whichever scan had
+  them.
+
 ## 2026-10-18 · The Carrier tile's meeting line, short
 - "you → it ≈ 1 jump (tank 22) · it → you ≈ 1 carrier jump · ≈ 21 t tritium" was too long for the tile (the author).
   It now reads "To it 1 jump · to you 1, ≈21 t", and "· 632 t short" when the depot cannot cover it.
