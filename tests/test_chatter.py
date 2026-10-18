@@ -156,6 +156,31 @@ class Settings(unittest.TestCase):
                     p.stop()
         self.assertEqual(seen, ["space", None])
 
+    def test_quiet_once_the_game_quits(self):
+        """The author, 2026-10-17: the game closed in supercruise left Status.json saying so (no "empty" status after
+        it), then wrote its Shutdown; chatter went on talking. The Shutdown makes the reading stale at once, and a
+        Status.json from before the last Shutdown is never live (after a restart too)."""
+        import json
+        import os
+        import tempfile
+        st = self.state
+        self.j.commander = {"name": "Hefay"}
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        with open(os.path.join(d, "Status.json"), "w") as f:   # the author's own last Status.json (2026-10-17)
+            json.dump({"timestamp": "2026-10-17T03:50:06Z", "event": "Status", "Flags": 150994968, "Flags2": 0, "GuiFocus": 0,
+                       "Fuel": {"FuelMain": 155.3, "FuelReservoir": 0.01}}, f)
+        self.j.read_status(d)
+        self.assertTrue(st.chatter_watch(now=100))
+        self.assertEqual(st.chatter_summary()["where"], "space")
+        self.j.handle({"timestamp": "2026-10-17T03:50:13Z", "event": "Shutdown"})
+        self.assertTrue(st.chatter_watch(now=110))
+        self.assertIsNone(st.chatter_summary()["where"])
+        # a restart: the same Status.json read again is not live (the Shutdown's time is kept)
+        self.j.status_json = None
+        self.j.read_status(d)
+        self.assertFalse(self.j.status_json["live"])
+
     def test_route(self):
         from aiohttp.test_utils import TestClient, TestServer
 

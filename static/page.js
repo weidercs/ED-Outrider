@@ -1349,7 +1349,7 @@ function renderNow() {
   if (lastAlert && Date.now() - lastAlert.at < 15000)
     lines.push(`<div class="now-card alert">${esc(lastAlert.title)}${lastAlert.body ? ` <span class="unk">${esc(lastAlert.body)}</span>` : ""}</div>`);
   if (captions.length) lines.push(`<div class="now-caps">${captions.slice().reverse().map(c =>
-    `<div class="now-cap" data-words="${esc(c.words)}" title="say it again (through the window that is speaking)">▶ ${esc(c.shown || c.words)} <span class="unk">${agoText(c.at)}</span></div>`).join("")}</div>`);
+    `<div class="now-cap" data-words="${esc(c.words)}"${c.priv ? ` data-priv="1"` : ""} title="say it again (through the window that is speaking)">▶ ${esc(c.shown || c.words)} <span class="unk">${agoText(c.at)}</span></div>`).join("")}</div>`);
   if (nowHintUntil && Date.now() < nowHintUntil && !window.OutriderApp)   // the Android app keeps the screen on itself
     lines.push(`<div class="now-line now-small now-hint">screen may sleep: set the tablet's screen timeout, or open over localhost/HTTPS</div>`);
   el.innerHTML = lines.join("");
@@ -1686,6 +1686,8 @@ function pinLineHtml() {
   const a = pinActive();
   return a ? `<div class="spacing pinline" title="the pin you fly to (tap another in the map's legend)">📍 <b>${esc(a.name)}</b>: ${esc(surfDist(a.dist))}, ${esc(pinTurnWords(a))}</div>` : "";
 }
+// the counts are the system you are in: another system shown in Here gets none (sweep 2026-10-17: its "A 1" is not yours)
+const pinMarkFor = (sys, short) => sys != null && String(sys) === String(posId()) ? pinMark(short) : "";
 const pinMark = short => { const n = data && data.pins && data.pins.counts && data.pins.counts[short];
   return n ? ` <span class="pinmark" title="${n} pin${n === 1 ? "" : "s"} on this body">📍</span>` : ""; };
 const PINS = {list: null, sig: null};
@@ -1892,9 +1894,10 @@ const captions = [];
 // only markup and symbols go. `said` is the spoken form, to match the line last said for its voice and pace.
 const captionText = t => String(t).replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 // `who`: space chatter's speaker ("Engineer (Mira)"), shown before the words when chatterNames is on (#15)
-function addCaption(words, who = null) {
+// priv (#17): another player's chat: a replay of it stays private too (sweep 2026-10-17)
+function addCaption(words, who = null, priv = false) {
   const w = captionText(words || ""); if (!w) return;
-  captions.push({words: w, shown: who && chatterNames() ? `${who}: ${w}` : w, said: spokenText(w), at: Date.now()});
+  captions.push({words: w, shown: who && chatterNames() ? `${who}: ${w}` : w, said: spokenText(w), at: Date.now(), priv: !!priv});
   if (captions.length > 3) captions.shift();
   if (view === "now" && data) renderNow();
   drawLastSaid();
@@ -1912,7 +1915,8 @@ function drawLastSaid() {
 document.getElementById("lastSaidBtn").onclick = () => {
   const c = captions[captions.length - 1];
   const same = c && lastSaid && lastSaid.words === c.said;
-  if (c) speak(same ? lastSaid.words : c.words, {kind: "manual", voice: same ? lastSaid.voice : null, speaker: same ? lastSaid.speaker : null, pace: same ? lastSaid.pace || 1 : 1});
+  if (c) speak(same ? lastSaid.words : c.words, {kind: "manual", voice: same ? lastSaid.voice : null, speaker: same ? lastSaid.speaker : null, pace: same ? lastSaid.pace || 1 : 1,
+                private: same ? !!lastSaid.priv : !!c.priv});
 };
 const agoText = at => { const s = Math.max(0, Math.round((Date.now() - at) / 1000));
   return s < 10 ? "just now" : s < 90 ? `${s} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; };
@@ -1980,7 +1984,7 @@ document.getElementById("nowBack").onclick = ev => { ev.stopPropagation(); leave
 document.getElementById("nowView").addEventListener("dblclick", ev => { if (!ev.target.closest("#nowBar, .now-cap")) leaveNow(); });
 document.getElementById("nowView").addEventListener("click", ev => {
   const cap = ev.target.closest(".now-cap");
-  if (cap) { ev.stopPropagation(); postCopilot({action: "replay", words: cap.dataset.words}, "replay the line"); }
+  if (cap) { ev.stopPropagation(); postCopilot(Object.assign({action: "replay", words: cap.dataset.words}, cap.dataset.priv === "1" ? {private: true} : {}), "replay the line"); }
 });
 document.getElementById("nowSpeech").onclick = ev => { ev.stopPropagation(); speechBtn.onclick(); drawNowBar(); };
 document.getElementById("nowHush").onclick = async ev => {
@@ -2483,14 +2487,14 @@ function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still =
     // who says it (the crew, when on): the member line() picked the words for, else the row's by the line's tag
     const crew = lineCrew !== undefined ? lineCrew : crewMember(kind, tag || lineKey);
     speak(words, {delay: plays ? delay + soundLead(snd) : delay, kind, tag, still, log: entry, private: priv, ...crewVoice(crew, lineStyle)});
-    addCaption(caption || words);
+    addCaption(caption || words, null, priv);
     return true;
   }
   // another window speaks it: Now's captions get its plain wording (a personality line picked here would not be
   // the one said there)
   if (!loud && alertSpeak[kind] && !UNSPOKEN.has(kind) && !quiet && !hush) {
     linePlain = true;
-    try { addCaption(caption || (typeof say === "function" ? say() : say) || title); } catch { addCaption(title); } finally { linePlain = false; }
+    try { addCaption(caption || (typeof say === "function" ? say() : say) || title, null, priv); } catch { addCaption(title, null, priv); } finally { linePlain = false; }
   }
   setFate(entry, !loud ? `silent: ${hushReason()}` : !speechOn ? "silent: speech off" : UNSPOKEN.has(kind) ? `not spoken (${UNSPOKEN_WHY[kind]})`
     : quiet ? (typeof quiet === "string" ? quiet : "merged into another line (quiet)")
@@ -2641,7 +2645,7 @@ async function speechWorker() {
         e.took = Date.now() - t0; e.engine = item.engine || null;
         setFate(e, item.unsaid ? `not said: ${item.unsaid}` : item.timedOut ? "timed out (the browser voice hung)"
           : item.capped ? "cut short: the PC's player ran past the line's length" : "said");
-        if (e.fate === "said") lastSaid = {words: item.words, voice: item.voice, speaker: item.speaker ?? null, pace: item.pace};   // "say again"
+        if (e.fate === "said") lastSaid = {words: item.words, voice: item.voice, speaker: item.speaker ?? null, pace: item.pace, priv: !!item.priv};   // "say again"
       }
       if (item.unsaid || item.timedOut) uncool(item);
     }
@@ -4321,7 +4325,7 @@ function renderHere() {
     const firsts = [b.first_discovered && `<span class="fl" title="first discovered">🏁</span>`, b.first_mapped && `<span class="fl" title="first mapped">🗺</span>`,
                     !b.first_mapped && b.mapped && `<span class="fl unk" title="mapped (not first)">🗺</span>`,
                     b.first_footfall && `<span class="fl" title="first footfall">👣</span>`, !b.scanned && `<span class="unk" title="known to Spansh, not scanned by you">—</span>`].filter(Boolean).join("");
-    return `<tr class="${b.main ? "main" : ""}${selectedBody === b.name ? " sel" : ""}${destBody === b ? " dest" : ""}${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}"><td class="name" data-name="${esc(b.name)}">${ind}${esc(b.name)}${pinMark(b.name)}${codexTypeMark(b.codex_type, h.region)}${codexGeoMark(b.codex_geo, h.region)}${b.ggg ? " " + gggIcon(!!b.ggg.confirmed, gggTitle(b.ggg)) : ""}${(b.curiosities || []).length ? ` <span class="cur" title="${b.curiosities.map(c => esc(c.tag + ": " + c.why)).join("&#10;")}">🔭</span>` : ""}${b.notable ? ` <span class="nb ${b.notable}">${b.notable}</span>` : ""}${b.terraformable ? ` <span class="nb T">T</span>` : ""}${firsts ? `<div class="sf2 sub2">${firsts}</div>` : ""}</td>
+    return `<tr class="${b.main ? "main" : ""}${selectedBody === b.name ? " sel" : ""}${destBody === b ? " dest" : ""}${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}"><td class="name" data-name="${esc(b.name)}">${ind}${esc(b.name)}${pinMarkFor(h.id64, b.name)}${codexTypeMark(b.codex_type, h.region)}${codexGeoMark(b.codex_geo, h.region)}${b.ggg ? " " + gggIcon(!!b.ggg.confirmed, gggTitle(b.ggg)) : ""}${(b.curiosities || []).length ? ` <span class="cur" title="${b.curiosities.map(c => esc(c.tag + ": " + c.why)).join("&#10;")}">🔭</span>` : ""}${b.notable ? ` <span class="nb ${b.notable}">${b.notable}</span>` : ""}${b.terraformable ? ` <span class="nb T">T</span>` : ""}${firsts ? `<div class="sf2 sub2">${firsts}</div>` : ""}</td>
       <td>${sfText(b.type === "Star" ? "star" : "planet", b.subtype || "")}${b.type === "Star" ? (b.scoopable ? ` <span class="scoop">⛽</span>` : "") : ""}${b.rings ? `<span class="sf2"> ${icon("ring", "i-ring", b.rings, ringsText(b))}</span>` : ""}${b.dist_ls != null ? `<div class="sf2 sub2 unk">${Math.round(b.dist_ls).toLocaleString()} ls</div>` : ""}</td>
       <td class="num c2hide">${b.dist_ls != null ? Math.round(b.dist_ls).toLocaleString() : ""}</td>
       <td class="num${b.gravity >= highGravity() ? " noscoop" : ""}">${b.gravity != null && b.type === "Planet" ? b.gravity.toFixed(2) : ""}${atm ? `<div class="sf2 atm2" title="${esc(atm)}">${esc(shortForm("atmosphere", atm))}</div>` : ""}</td>
@@ -8920,8 +8924,9 @@ function copilotDo(cp) {
     speak(text, {kind: "manual", piperOnly: true}); addCaption(text);
   } else if (cp.action === "again") {
     const text = lastSaid ? lastSaid.words : "Nothing said yet.";
-    speak(text, {kind: "manual", voice: lastSaid && lastSaid.voice, speaker: lastSaid ? lastSaid.speaker : null, pace: lastSaid ? lastSaid.pace || 1 : 1, piperOnly: true}); addCaption(text);
-  } else if (cp.action === "replay" && cp.words) { speak(cp.words, {kind: "manual", piperOnly: true}); addCaption(cp.words); }
+    speak(text, {kind: "manual", voice: lastSaid && lastSaid.voice, speaker: lastSaid ? lastSaid.speaker : null, pace: lastSaid ? lastSaid.pace || 1 : 1, piperOnly: true,
+                 private: !!(lastSaid && lastSaid.priv)}); addCaption(text, null, !!(lastSaid && lastSaid.priv));
+  } else if (cp.action === "replay" && cp.words) { speak(cp.words, {kind: "manual", piperOnly: true, private: !!cp.private}); addCaption(cp.words, null, !!cp.private); }
   // an answer to a question by voice (POST api/ask): said here, as a line you asked for (a hush's answer too, onHush
   // leaving it the news); "caption": shown only (unhush's: the end of the hush is announced)
   else if (cp.action === "say" && cp.words) { speak(cp.words, {kind: "manual", piperOnly: true}); addCaption(cp.words); }
@@ -10082,12 +10087,15 @@ function chatSpeakers() {
   const off = new Set((data && data.chatter && data.chatter.off) || []);
   return crewOn() ? crewRoles().map(r => r.id).filter(id => !off.has(id)).map(chatMember).filter(Boolean) : [];
 }
-const chatPersona = m => m.personality || "xo";
+// the XO (and a member "as the XO") speaks as the one personality ticked, in its own voice, when only one is (the Main
+// personality dropdown): compared as that (sweep 2026-10-17: it could talk to a station of that same personality)
+const chatXoStyle = () => { const st = speechStyles(); return st.length === 1 && st[0] in (speechLib.styles || {}) ? st[0] : null; };
+const chatPersona = m => m.personality || chatXoStyle() || "xo";
 // the voice and person a station is really heard in, so two that sound alike never talk: a voice not installed is the
 // main voice (as heardVoice), the main voice named is the main voice, a person left unset on it is the main voice's
 // own; on another voice an unset person is the one picked for that voice, which the page does not know ("picked")
 const chatVoiceKey = m => {
-  const t = data && data.tts, main = (t && t.voice) || null, v = crewVoice(m, m.personality);
+  const t = data && data.tts, main = (t && t.voice) || null, v = crewVoice(m, m.personality || chatXoStyle());
   const own = v.voice && v.voice !== main && ((t && t.voices) || []).includes(v.voice) ? v.voice : null;
   const missing = v.voice && v.voice !== main && !own;   // heard in the main voice, without that voice's person
   const speaker = own ? v.speaker ?? "picked" : (missing ? null : v.speaker) ?? (t && t.speaker) ?? 0;
@@ -10256,7 +10264,7 @@ function chatSay(group, extra = "") {
 // every second: what may be said now
 function chatPump(now = Date.now()) {
   const q = CHATQ.queue;
-  while (q.length && now - q[0].at > CHAT_STALE) { const x = q.shift(); addCaption(`${x.m.sender}: ${chatClean(x.m.text, x.m.more)}`); }
+  while (q.length && now - q[0].at > CHAT_STALE) { const x = q.shift(); addCaption(`${x.m.sender}: ${chatClean(x.m.text, x.m.more)}`, null, true); }
   if (!q.length) return false;
   const mi = q.findIndex(x => x.m.mention), due = now - CHATQ.spokenAt >= CHAT_GAP;
   if (mi < 0 && !due) return false;
@@ -10267,7 +10275,7 @@ function chatPump(now = Date.now()) {
   let extra = "";
   if (q.length >= CHAT_SUMMARY) {
     const by = {};
-    for (const x of q.splice(0)) { by[CHAT_WORD[x.m.channel] || x.m.channel] = (by[CHAT_WORD[x.m.channel] || x.m.channel] || 0) + 1; addCaption(`${x.m.sender}: ${chatClean(x.m.text, x.m.more)}`); }
+    for (const x of q.splice(0)) { by[CHAT_WORD[x.m.channel] || x.m.channel] = (by[CHAT_WORD[x.m.channel] || x.m.channel] || 0) + 1; addCaption(`${x.m.sender}: ${chatClean(x.m.text, x.m.more)}`, null, true); }
     extra = " And " + Object.entries(by).map(([w, n]) => `${n} more ${w === "direct" ? "directly" : "on " + w}`).join(", ") + ".";
   }
   CHATQ.spokenAt = now;

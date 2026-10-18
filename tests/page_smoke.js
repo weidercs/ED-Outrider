@@ -9008,6 +9008,63 @@ const releasePayloads = async () => {
     console.log(goodTL ? "OK" : "FAIL", "| header tiles shown |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "Settings → Display ticks the tiles this device shows: left out of the row and the one line, a column each, at least one stays, the fold modes kept", errors.slice(before));
   }
+  // The Fable sweep of 2026-10-17's page fixes: a chat line replayed (▶, a Now caption, the co-pilot's again) stays private;
+  // Here's 📍 only for the system you are in; the XO compared as the one personality ticked; the legend's first 📍
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, got = {}, posts = [];
+    const realFetch = w.fetch;
+    w.fetch = (u, o) => /^api\/(pins|copilot)/.test(String(u)) && o && o.method === "POST" ? (posts.push([String(u), JSON.parse(o.body)]),
+      Promise.resolve(new Response(JSON.stringify({ok: true, pins: [], seq: 1}), {status: 200, headers: {"Content-Type": "application/json"}}))) : realFetch(u, o);
+    w.eval(`window.__sw = {speak, caps: captions.splice(0), last: lastSaid, pins: data.pins, pos: data.position, lib: speechLib, crew: data.crew, styles: localStorage.getItem("speechStyles"), view, tts: data.tts};
+      window.__spoken = []; speak = (t, o) => window.__spoken.push([t, !!o.private]);`);
+    try {
+      // a chat line said: its caption and lastSaid carry the flag; ▶ (same and caption) and again replay it private
+      w.eval(`lastSaid = {words: "Kurbo: o7", voice: null, speaker: null, pace: 1, priv: true}; addCaption("Kurbo: o7", null, true)`);
+      d.getElementById("lastSaidBtn").click();
+      w.eval(`lastSaid = null`); d.getElementById("lastSaidBtn").click();   // the caption alone
+      w.eval(`lastSaid = {words: "Kurbo: o7", priv: true}; copilotDo({action: "again"})`);
+      w.eval(`copilotDo({action: "replay", words: "Kurbo: o7", private: true})`);
+      got.replays = JSON.parse(w.eval("JSON.stringify(__spoken.splice(0))"));
+      // a Now caption of a chat line asks the speaking window for a private replay
+      w.eval(`view = "now"; renderNow()`);
+      const cap = d.querySelector(".now-cap[data-priv]");
+      if (cap) cap.click();
+      await sleep(30);
+      got.capTap = posts.filter(p => /copilot/.test(p[0])).map(p => p[1]);
+      // Here's 📍: only for the system you are in
+      w.eval(`data.position = Object.assign({}, data.position, {id64: 42, id: "42"}); data.pins = {counts: {"A 1": 1}, here: null}`);
+      got.mark = [w.eval(`pinMarkFor(42, "A 1")`).includes("📍"), w.eval(`pinMarkFor(43, "A 1")`)];
+      // the XO speaks as the one personality ticked: never with a station of that personality
+      w.eval(`speechLib = Object.assign({}, speechLib, {styles: {business: "B", sarcastic: "S"}, crew_roles: speechLib.crew_roles});
+        data.tts = Object.assign({}, data.tts, {voice: "en_GB-main", speaker: 0, voices: ["en_GB-main", "en_GB-x", "en_GB-y"]});
+        localStorage.setItem("speechStyles", '["sarcastic"]');`);
+      got.xo = JSON.parse(w.eval(`(() => { const xo = {role: "xo", personality: null, voice: null, speaker: null}, nav = {role: "navigator", personality: "sarcastic", voice: "en_GB-x", speaker: null},
+        eng = {role: "engineer", personality: "business", voice: "en_GB-y", speaker: null};
+        const a = chatMayTalk(xo, nav), b = chatMayTalk(xo, eng); localStorage.setItem("speechStyles", '["business","sarcastic"]');
+        return JSON.stringify([a, b, chatMayTalk(xo, nav)]); })()`));
+      // the legend's 📍 on a body with no pins yet: the body is named, the pin is added
+      w.eval(`data.pins = {counts: {}, here: {body: "Sys B 7", pins: [], active: null}}`);
+      w.eval(`window.__go = document.createElement("button"); __go.dataset.pingo = "1.5,2.5"; __go.dataset.pinname = "Ship"; pinLegendClick({target: __go})`);
+      await sleep(30);
+      got.firstPin = posts.filter(p => /pins/.test(p[0])).map(p => { const b = Object.assign({}, p[1]); delete b.sysname; return b; });
+    } finally {
+      w.fetch = realFetch;
+      w.eval(`const k = window.__sw; speak = k.speak; captions.length = 0; captions.push(...k.caps); lastSaid = k.last;
+        Object.assign(data, {pins: k.pins, position: k.pos, crew: k.crew, tts: k.tts}); speechLib = k.lib; view = k.view;
+        if (k.styles === null) localStorage.removeItem("speechStyles"); else localStorage.setItem("speechStyles", k.styles);
+        render(); delete window.__sw; delete window.__spoken; delete window.__go;`);
+      await releasePayloads();
+    }
+    const want = {replays: [["Kurbo: o7", true], ["Kurbo: o7", true], ["Kurbo: o7", true], ["Kurbo: o7", true]],
+      capTap: [{action: "replay", words: "Kurbo: o7", private: true}], mark: [true, ""], xo: [false, true, true],
+      firstPin: [{action: "add", system: "42", body: "Sys B 7", name: "Ship", lat: 1.5, lon: 2.5, active: true}]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodSW = !bad.length && errors.length === before;
+    allOk = allOk && goodSW;
+    console.log(goodSW ? "OK" : "FAIL", "| sweep fixes 2026-10-17 |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "a chat line replayed stays private (▶, a Now caption, again, replay), Here's 📍 for your system only, the XO as heard, the first pin from the legend", errors.slice(before));
+  }
   // Surface pins (#16): the coordinates read in every common layout; the spoken words; the active pin's line; the map's
   // pins and the legend (tap one to go there, 📍 on a site pins it); a body panel's Pins (what it reads as, Add); the 📍
   // on a body with pins; Bookmarks' list; the Navigator's line; the status report leads with it

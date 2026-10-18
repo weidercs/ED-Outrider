@@ -3496,6 +3496,9 @@ class Journals:
             if self.commander is not None and ts > (c.get("shutdown_ts") or ""):
                 c["shutdown_ts"] = ts
                 meta_set(self.db, "commander", c)
+            # the game quit: the Status.json it left (often still "in supercruise") is no longer live (2026-10-17)
+            if self.status_json and (self.status_json.get("ts") or "") <= ts:
+                self.status_json = dict(self.status_json, live=False)
             self.last_shutdown = ts   # an automatic backup, if this quit is live (State decides)
             return
         if name in BODY_EVENTS:
@@ -5013,6 +5016,12 @@ class Journals:
                                 "destination": st.get("Destination"), "gui_focus": st.get("GuiFocus"),
                                 "fire_group": st.get("FireGroup"), "selected_weapon": st.get("SelectedWeapon"),   # the rail's Bio Scanner
                                 "live": True}
+            # the game quit after writing it (the author, 2026-10-17: the game closed in supercruise left a Status.json
+            # that said so, and the Shutdown after it; chatter went on talking): a reading from before the last Shutdown
+            # is not live (kept across restarts in meta commander shutdown_ts)
+            sd = (self.commander or {}).get("shutdown_ts")
+            if sd and isinstance(st.get("timestamp"), str) and st["timestamp"] <= sd:
+                self.status_json["live"] = False
         elif self.status_json:  # game closed or at the menu: keep the last reading, mark it stale
             self.status_json = dict(self.status_json, live=False)
         else:
@@ -7714,13 +7723,14 @@ class State:
         return {"mode": h["mode"], "until": h["until"], "left": round(h["until"] - time.time(), 1) if h["until"] else None,
                 "sys": str(h["sys"]) if h["sys"] is not None else None}
 
-    def copilot_action(self, action, words=None, hush=None):
+    def copilot_action(self, action, words=None, hush=None, private=False):
         """A co-pilot request for the speaking window. "hush" is done here: a hold starts a hush until the next jump,
         and another hold (while any hush runs) ends it. `hush`: the mode a voice question set (S32), whose answer the
         page says in place of its own news of that hush."""
         if action == "hush":
             self.set_hush("off" if self.hush_info() else "jump")
-        self.copilot = {"seq": self.copilot["seq"] + 1, "action": action, "words": words, "hush": hush}
+        # private (#17): a replayed chat line, kept private by the speaking window too (sweep 2026-10-17)
+        self.copilot = {"seq": self.copilot["seq"] + 1, "action": action, "words": words, "hush": hush, "private": bool(private)}
         self.bump()
 
     COPILOT_TARGET_DELAY_S = 0.5   # after a single press is known to be one, before the keys (your hands off the controls)
@@ -16265,13 +16275,12 @@ class State:
         if pos:
             for r in self.db.execute("SELECT body, count(*) AS n FROM surface_pins WHERE system=? GROUP BY body", (pos["id64"],)):
                 out["counts"][short_name(pos.get("name") or "", r["body"])] = r["n"]
-        if h:
+        if h:   # the body you are on, pins or not (sweep 2026-10-17: the legend's first 📍 needs its name)
             pins = self.pins_body(h["system"], h["name"])
-            if pins:
-                act = self.pin_active(h["system"], h["name"], pins)
-                rows = [dict(self.pin_where(h, p), id=p["id"], name=p["name"], lat=p["lat"], lon=p["lon"],
-                             reached=bool(p["reached_ts"]), active=bool(act and p["id"] == act["id"])) for p in pins]
-                out["here"] = {"body": h["name"], "pins": rows, "active": next((r for r in rows if r["active"]), None)}
+            act = self.pin_active(h["system"], h["name"], pins) if pins else None
+            rows = [dict(self.pin_where(h, p), id=p["id"], name=p["name"], lat=p["lat"], lon=p["lon"],
+                         reached=bool(p["reached_ts"]), active=bool(act and p["id"] == act["id"])) for p in pins]
+            out["here"] = {"body": h["name"], "pins": rows, "active": next((r for r in rows if r["active"]), None)}
         return out
 
     def pins_list(self):
@@ -16374,9 +16383,10 @@ class State:
         if d <= PIN_ARRIVE_M["ground" if ground else "ship"]:
             self.db.execute("UPDATE surface_pins SET reached_ts=? WHERE id=?", (ts, act["id"]))
             nxt = self.pin_active(h["system"], h["name"])
-            self.journals.moment("pin", ts, what="arrived", name=act["name"],
-                                 next=dict(self.pin_where(h, nxt), name=nxt["name"]) if nxt else None)
-            self._pin_seen = (nxt["id"], 0) if nxt else None
+            nw = self.pin_where(h, nxt) if nxt else None
+            self.journals.moment("pin", ts, what="arrived", name=act["name"], next=dict(nw, name=nxt["name"]) if nxt else None)
+            # the next pin's band as it is now: its way was just said (sweep 2026-10-17: it was said again a tick later)
+            self._pin_seen = (nxt["id"], sum(1 for b in PIN_BANDS if nw["dist"] < b)) if nxt else None
         elif self._pin_seen is None or self._pin_seen[0] != act["id"]:
             self._pin_seen = (act["id"], band)
             self.journals.moment("pin", ts, what="set", name=act["name"], **w)
@@ -16478,12 +16488,19 @@ class State:
         t = meta_get(self.db, "carrier_trip")
         c = self.journals.carrier or {}
         cid = c.get("id64")
-        if not t or t.get("done_ts") or cid is None or cid == t.get("seen_id64"):
+        if not t or cid is None or cid == t.get("seen_id64"):
             return False
+        if t.get("done_ts"):   # the carrier moved on after the trip's end: it is over (its "complete" was said once)
+            meta_set(self.db, "carrier_trip", None)
+            return True
         t["seen_id64"] = cid
         legs, at = t["legs"], t.get("at") or 0
-        j = next((i for i in range(at + 1, len(legs)) if legs[i].get("id64") == cid
-                  or norm_name(legs[i]["system"]) == norm_name(c.get("system") or "")), None)
+        hit = lambda i: legs[i].get("id64") == cid or norm_name(legs[i]["system"]) == norm_name(c.get("system") or "")
+        # any leg (sweep 2026-10-17): the start when the trip was planned from elsewhere, the current one after a detour,
+        # a later one skipped to; the nearest ahead first
+        j = next((i for i in range(at, len(legs)) if hit(i)), None)
+        if j is None:
+            j = next((i for i in range(at - 1, -1, -1) if hit(i)), None)
         if j is None:
             t["off"] = {"system": c.get("system"), "id64": cid}
         else:
@@ -17499,7 +17516,8 @@ class State:
         mtimes_before = dict(route_mtimes)
         # the error shown is this tick's: a row that failed to build sets it again below, and stays visible
         last_error, self.tail_error = self.tail_error, None
-        seq_before = self.journals.moment_seq
+        seq_before, chat_before = self.journals.moment_seq, self.journals.chat_seq
+        pins_before = (self._pin_seen, self._pin_key)   # #16: rolled back with the moments it raised (sweep 2026-10-17)
         try:
             late = None
             for d in LIVE_DIRS:
@@ -17557,6 +17575,8 @@ class State:
                 self.bump()
             if self.pin_watch():   # #16: the active pin's distance and turn, said at its bands and on arrival
                 self.bump()
+            if self.chatter_watch():   # #15: every tick, not only on a Status.json read: a Shutdown silences it (2026-10-17)
+                self.bump()
             self.uploads_hub.idle()   # EDDN: a companion file written after its line, signals after a quiet spell
             self.rail_device()
             self.db.commit()
@@ -17584,7 +17604,8 @@ class State:
                     self.follow_up_failed(name, e)
             # a new moment (approach, left body, FSD supercharged...) is a call-out: the long poll answers now,
             # not at the next unrelated bump
-            if self.tail_error != last_error or self.journals.moment_seq != seq_before:
+            # #17: so is another player's message (sweep 2026-10-17: a chat-only tick waited for an unrelated bump)
+            if self.tail_error != last_error or self.journals.moment_seq != seq_before or self.journals.chat_seq != chat_before:
                 self.bump()
         except Exception as e:
             # Never let one bad line, a locked database or a malformed NavRoute stop the
@@ -17602,6 +17623,7 @@ class State:
                 self.journals.new_sales = sales
             if not committed:   # the lines are read again: their moments and codex counts must not double
                 self.journals.restore(cp)
+                self._pin_seen, self._pin_key = pins_before   # #16: the retry says what was lost with them
                 route_mtimes.clear()
                 route_mtimes.update(mtimes_before)
             self.tail_error = f"{type(e).__name__}: {e}"
@@ -19500,7 +19522,8 @@ def make_app(state, hosts=None):
         words = body.get("words")
         if body["action"] == "replay" and not (isinstance(words, str) and words.strip()):
             return web.json_response({"error": "replay needs the words"}, status=400)
-        state.copilot_action(body["action"], outrider.tts.clip_text(words) if body["action"] == "replay" else None)
+        state.copilot_action(body["action"], outrider.tts.clip_text(words) if body["action"] == "replay" else None,
+                             private=body.get("private") is True)
         return web.json_response({"ok": True, "seq": state.copilot["seq"]})
 
     async def autohonk_test_view(_):

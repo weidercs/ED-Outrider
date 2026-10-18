@@ -69,6 +69,38 @@ class Chat(unittest.TestCase):
         self.j.handle(text("wing", "Kurbo26", "on my way"))
         self.assertEqual([(m["channel"], m["text"]) for m in state.payload()["chat"]], [("wing", "on my way")])
 
+    def test_a_chat_line_wakes_the_page(self):
+        """The sweep of 2026-10-17: a tick that reads only another player's message bumps the long poll (it waited for an
+        unrelated change), and a replay of a chat line goes to the speaking window marked private."""
+        import json
+        import os
+        import tempfile
+        import unittest.mock
+        state = ed_outrider.State(self.db, self.j, types.SimpleNamespace(cached=lambda i: (None, None)), 25)
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        later = ("watch_status", "maybe_refresh", "apply_own_changes", "maybe_classify_target", "maybe_unsold",
+                 "maybe_sale_left", "maybe_locate_carrier", "maybe_find_sellers", "maybe_backup_on_quit")
+        with unittest.mock.patch.object(ed_outrider, "LIVE_DIRS", [d]):
+            patches = [unittest.mock.patch.object(state, n, lambda *a: None) for n in later]
+            for p in patches:
+                p.start()
+            try:
+                state.tick({})
+                v = state.version
+                with open(os.path.join(d, "Journal.2026-10-17T120000.01.log"), "w") as f:
+                    f.write(json.dumps(text("squadron", "Kurbo26", "o7 Hefay"), separators=(",", ":")) + "\n")   # as the game writes it
+                state.tick({})
+            finally:
+                for p in patches:
+                    p.stop()
+        self.assertEqual([m["text"] for m in self.j.chat], ["o7 Hefay"])
+        self.assertGreater(state.version, v)
+        state.copilot_action("replay", "Kurbo: o7", private=True)
+        self.assertTrue(state.copilot["private"])
+        state.copilot_action("replay", "Tank full.")
+        self.assertFalse(state.copilot["private"])
+
     def test_sender_names(self):
         self.assertEqual([ed_outrider.chat_sender(x) for x in ("$cmdr_decorate:#name=Bob;", "CMDR Alice", "cmdr  Zed", "$npc_x;", "", None)],
                          ["Bob", "Alice", "Zed", None, None, None])

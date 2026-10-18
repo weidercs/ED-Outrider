@@ -2,6 +2,31 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-17 · The game closed means quiet; the Fable sweep's nine fixes
+- **Chatter with the game closed** (the author): the game quit in supercruise wrote its Shutdown but no "empty"
+  Status.json after it, so the last reading stayed live and chatter went on talking (and pin guidance would have
+  too).
+  - A Shutdown now makes the reading stale at once.
+  - A Status.json from before the last Shutdown is never live, after a restart too (meta commander shutdown_ts).
+  - Chatter's place is checked every tick, not only when Status.json changes.
+- **The Fable sweep of everything since 4710250** (4 areas, each finding verified): 9 confirmed, all fixed.
+  - **Pins:**
+    - 📍 on a site in the legend works on a body with no pins yet (the payload names the body you are on, pins or
+      not);
+    - after arriving, the next pin's way is said once, not again a tick later;
+    - Here's 📍 shows only for the system you are in;
+    - a failed tick rolls the pins' spoken state back with its moments.
+  - **Carrier trips:**
+    - a finished trip says "complete" once, then is gone at the carrier's next move;
+    - reaching the trip's own start (a typed From) or coming back to the current leg after a detour is not "off
+      the trip": every leg is checked.
+  - **Chat:**
+    - a replayed chat line stays private: ▶ last said, a Now caption tapped (through the co-pilot's replay, which now
+      carries `private`) and the co-pilot's "say again";
+    - a tick that reads only a chat message wakes the page.
+  - **Chatter:** the XO, which speaks as the one personality picked, is compared as that personality and its voice,
+    so it never chatters with a station of the same personality.
+
 ## 2026-10-17 · Surface pins: body bookmarks with fly-to guidance (NEXT-VERSION #16)
 - **Pins:** named points on a body (table `surface_pins`, live-only; GET/POST `/api/pins`).
   - **Added:** in a body panel's folded 📍 Pins section (typed or pasted coordinates in any common layout,

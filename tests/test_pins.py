@@ -98,6 +98,36 @@ class Pins(unittest.TestCase):
         self.state.pin_watch()
         self.assertEqual(self.said()[5:], [("set", "Wreck")])
 
+    def test_sweep_fixes(self):
+        """The sweep of 2026-10-17: the body you are on is named with no pins yet (the legend's first 📍 needs it); after
+        arriving, the next pin's way is said once (not again a tick later); a rolled-back tick says its lost line again."""
+        here = self.state.pins_summary()["here"]
+        self.assertEqual((here["body"], here["pins"], here["active"]), ("Sys B 7", [], None))
+        self.post(action="add", system="1", sysname="Sys", body="Sys B 7", name="A", lat=0.0, lon=lon_for(500))
+        self.post(action="add", system="1", sysname="Sys", body="Sys B 7", name="B", lat=0.0, lon=lon_for(1300))
+        self.state.pin_watch()
+        self.at(0.0, lon_for(490))
+        self.state.pin_watch()
+        self.state.pin_watch()                     # unmoved: B's 810 m was just said with the arrival
+        self.assertEqual(self.said(), [("set", "A"), ("arrived", "A")])
+        # a tick that fails after pin_watch: its moment goes back, and so does the memory of having said it
+        import contextlib
+        import io
+        import unittest.mock
+        self.db.commit()                           # (the real tick commits what pin_watch marked)
+        self.at(0.0, lon_for(1250))                # 50 m from B, on foot: arrived
+        n = len(self.said())
+        with unittest.mock.patch.object(ed_outrider, "LIVE_DIRS", []), \
+                unittest.mock.patch.object(self.state.uploads_hub, "idle", side_effect=[RuntimeError("boom"), None]), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.state.tick({})
+            self.assertEqual(len(self.said()), n)     # rolled back
+            self.j.body_here = {"system": 1, "name": "Sys B 7", "body_id": 7}   # (the failed tick reloaded the reader)
+            self.j.pos = {"id64": 1, "name": "Sys", "x": 0, "y": 0, "z": 0}
+            self.at(0.0, lon_for(1250))
+            self.state.tick({})
+        self.assertEqual(self.said()[n:], [("arrived", "B")])     # said on the retry, not lost
+
     def test_pins_route(self):
         from aiohttp.test_utils import TestClient, TestServer
 

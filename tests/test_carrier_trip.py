@@ -111,6 +111,32 @@ class Trip(unittest.TestCase):
         self.state.carrier_trip_clear()
         self.assertIsNone(self.state.carrier_trip_summary()["trip"])
 
+    def test_sweep_fixes(self):
+        """The sweep of 2026-10-17: a trip planned from where the carrier is not yet: arriving at its start is no detour;
+        back on the current leg after a detour clears "off"; a finished trip says "complete" once, then goes."""
+        self.j.carrier.update(system="Elsewhere", id64=5)   # the carrier is not at the trip's start (a typed From)
+        self.plot({"from": "Sol", "to": "Colonia"})
+        legs = self.state.carrier_trip_summary()["trip"]["legs"]
+        self.j.carrier.update(system="Sol", id64=legs[0]["id64"])
+        self.state.carrier_trip_follow()
+        t = self.state.carrier_trip_summary()["trip"]
+        self.assertEqual((t["at"], t["off"]), (0, None))
+        self.j.carrier.update(system=legs[1]["system"], id64=legs[1]["id64"])
+        self.state.carrier_trip_follow()
+        self.j.carrier.update(system="Detour", id64=77)
+        self.state.carrier_trip_follow()
+        self.assertEqual(self.state.carrier_trip_summary()["trip"]["off"], {"system": "Detour", "id64": 77})
+        self.j.carrier.update(system=legs[1]["system"], id64=legs[1]["id64"])   # back where it was
+        self.state.carrier_trip_follow()
+        t = self.state.carrier_trip_summary()["trip"]
+        self.assertEqual((t["at"], t["off"]), (1, None))
+        self.j.carrier.update(system=legs[-1]["system"], id64=legs[-1]["id64"])
+        self.state.carrier_trip_follow()
+        self.assertTrue(self.state.carrier_trip_summary()["trip"]["done"])     # this payload says "complete"
+        self.j.carrier.update(system="Later", id64=88)                           # a later jump: the trip is over
+        self.assertTrue(self.state.carrier_trip_follow())
+        self.assertIsNone(self.state.carrier_trip_summary()["trip"])
+
     def test_spansh_refuses(self):
         sp = ed_outrider.Spansh(self.db)
         sp.session = _HwSession([(400, {"error": "Could not find destination system Nowhere"})])
