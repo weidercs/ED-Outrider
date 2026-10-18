@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-18 · Chat's header choices name no real commander
+- Settings → Voice → Chat's "as" list showed a real commander's name as its example ("Kurbo: …"). It now shows
+  `<CommanderName>: …` and `Commander <CommanderName> on <Channel>: …` (the author), and the guide likewise.
+
 ## 2026-10-18 · A species scanned twice is one bio line
 - The game logs a CodexEntry for each composition scan of a species, not only the first one. Two scans of Tussock
   Cultro on one body (the author) showed it twice in the body's bio list: once with its value, once as a bare 📖
