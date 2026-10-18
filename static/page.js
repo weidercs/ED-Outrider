@@ -419,12 +419,12 @@ const CARRIER_BURN_TITLE = "the game's fuel formula, checked against real carrie
 const carrierBurnTitle = f => CARRIER_BURN_TITLE + (!f ? "; your carrier's own jumps check it once 3 are measured (your journals hold none yet)" :
   `; checked against your carrier's last ${f.n} jumps: ${f.k === 1 ? "no correction needed" : `scaled ×${f.k}`}${f.raw !== f.k ? ` (they measured ×${f.raw}, held to 0.8–1.2)` : ""}` +
   " (tritium other players donate is not in your journal: such a jump reads low)");
+// short on the tile (the author, 2026-10-18: the line was too long for it): ", ≈21 t" and "· 632 t short", the rest in hovers
 const carrierTripHtml = (t, f) => !t ? "" :
-  ` · <span title="equal jumps of up to 500 ly in a straight line (the real trip is never shorter), each lighter than the last; ${esc(carrierBurnTitle(f))}">≈ <b>${t.burn.toLocaleString()} t</b> tritium</span>` +
-  (t.short ? ` · <span class="${t.covered ? "warnc" : "noscoop"}" title="${!t.covered ? "the depot and the confirmed tritium in its hold (a sell order) do not cover the trip"
+  `, <span title="the tritium for its trip to you: equal jumps of up to 500 ly in a straight line (the real trip is never shorter), each lighter than the last; ${esc(carrierBurnTitle(f))}">≈${t.burn.toLocaleString()} t</span>` +
+  (t.short ? ` · <span class="${t.covered ? "warnc" : "noscoop"}" title="the depot holds ${t.depot.toLocaleString()} t: ${!t.covered ? "it and the confirmed tritium in its hold (a sell order) do not cover the trip"
     : t.top_up === "on_the_way" ? `the ${t.hold.toLocaleString()} t of tritium on a sell order in its hold covers it, but the depot holds 1,000 t: fill it before the jumps and top it up again on the way`
-    : `the ${t.hold.toLocaleString()} t of tritium on a sell order in its hold covers it: move it into the depot before the jumps`}">depot ${t.depot.toLocaleString()} t: ${t.short.toLocaleString()} t short${
-    !t.covered ? "" : t.top_up === "on_the_way" ? ", enough if topped up on the way" : ", enough after topping up"}</span>` : "");
+    : `the ${t.hold.toLocaleString()} t of tritium on a sell order in its hold covers it: move it into the depot before the jumps`}">${t.short.toLocaleString()} t short</span>` : "");
 // a booked jump's burn and the depot after it (S13 A)
 const carrierPlanBurn = (pl, f) => pl.burn == null ? "" : ` ≈ <span title="${esc(carrierBurnTitle(f))}">${pl.burn} t</span>; ` +
   (pl.depot_after < 0 ? `<span class="noscoop">depot ${-pl.depot_after} t short</span>` : `depot after ≈ ${pl.depot_after.toLocaleString()} t`);
@@ -477,9 +477,10 @@ function renderCarrier() {
     const jr = effRange(), f = data.fuel;
     const mine = jr ? jumpsFor(c.distance) : null, theirs = c.trip ? c.trip.jumps : Math.ceil(c.distance / (c.jump_range || 500));
     const tank = f && f.jumps_max != null ? f.jumps_max : null;
-    meet = (mine != null ? `you → it ≈ <b>${mine}</b> jump${mine === 1 ? "" : "s"}` +
-             (tank != null ? ` <span class="${tank < mine ? "warnc" : "unk"}" title="jumps at max range your tank covers now">(tank ${tank})</span>` : "") : "") +
-           ` · it → you ≈ <b>${theirs}</b> carrier jump${theirs === 1 ? "" : "s"}` + carrierTripHtml(c.trip, c.burn_factor);
+    // "To it 1 jump · to you 1, ≈21 t" (the author, 2026-10-18): your jumps to it (amber when the tank covers fewer),
+    // its carrier jumps to you and their tritium; the counts are straight-line lower bounds
+    meet = (mine != null ? `<span class="${tank != null && tank < mine ? "warnc" : ""}" title="about ${mine} jump${mine === 1 ? "" : "s"} for you to reach it${tank != null ? `; your tank covers ${tank} at max range now` : ""}">To it <b>${mine}</b> jump${mine === 1 ? "" : "s"}</span> · ` : "") +
+           `<span title="about ${theirs} carrier jump${theirs === 1 ? "" : "s"} for it to reach you">to you <b>${theirs}</b></span>` + carrierTripHtml(c.trip, c.burn_factor);
   }
   let plan = "";
   const pl = c.planned, trip = carrierTripNow();

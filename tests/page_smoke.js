@@ -1987,12 +1987,12 @@ const releasePayloads = async () => {
       data.carrier = Object.assign({}, data.carrier, {trip: Object.assign({}, data.carrier.trip, {hold: 5000, covered: true}),
         finance: Object.assign({}, data.carrier.finance, {balance: 40000000, weeks: 2.9, warn: true, ts: "2026-09-27T12:00:00Z"})});
       renderCarrier();
-      o.amber = [...line().querySelectorAll(".warnc")].map(x => x.textContent).filter(t => /depot|balance/i.test(t));   // not the tank's
+      o.amber = [...line().querySelectorAll(".warnc")].map(x => [x.textContent, x.title]).filter(([t]) => /short|balance/i.test(t)).map(([t, ti]) => /short/.test(t) ? [t, /move it into the depot before the jumps/.test(ti)] : t);   // not the tank's
       o.asOf = [line().textContent, (line().querySelector("#carrierFin") || {}).title || ""];
       // more than one top-up gives (the depot holds 1,000 t): covered only by topping up again on the way
       data.carrier = Object.assign({}, data.carrier, {trip: Object.assign({}, data.carrier.trip, {top_up: "on_the_way"})});
       renderCarrier();
-      o.onTheWay = [...line().querySelectorAll(".warnc")].filter(x => /depot/.test(x.textContent)).map(x => [x.textContent, /again on the way/.test(x.title)]);
+      o.onTheWay = [...line().querySelectorAll(".warnc")].filter(x => /short/.test(x.textContent)).map(x => [x.textContent, /again on the way/.test(x.title)]);
       data.sellers = {from: "Here", moved: 0, vista: {nearest: null, fresh: null, station: null},
                       uc: {nearest: {name: "G0X-85Z", system: "Home", distance: 1200, carrier: true, yours: true, carrier_jumps: 3, age_days: null},
                            fresh: null, station: null}};
@@ -2002,16 +2002,17 @@ const releasePayloads = async () => {
       return o;
     })()`);
     const bad = [];
-    if (!/it → you ≈ 3 carrier jumps · ≈ 1,300 t tritium · depot 668 t: 632 t short/.test(got.trip)) bad.push("trip " + got.trip);
+    // short (the author, 2026-10-18): "To it N jumps · to you 3, ≈1,300 t · 632 t short", the rest in the hovers
+    if (!/To it \d+ jumps? · to you 3, ≈1,300 t · 632 t short/.test(got.trip) || /it → you|tritium ·/.test(got.trip)) bad.push("trip " + got.trip);
     if (!/\(432 ly jump ≈ 96 t; depot after ≈ 572 t\)/.test(got.booked) || /it → you/.test(got.booked)) bad.push("booked jump " + got.booked);
     // only UC and Vista (the author, 2026-10-17: the redemption office and the rest are dropped from the tile)
-    if (JSON.stringify(got.red) !== JSON.stringify(["depot 668 t: 632 t short", "UC ✗ (hover: suspended)"])) bad.push("red " + JSON.stringify(got.red));
+    if (JSON.stringify(got.red) !== JSON.stringify(["632 t short", "UC ✗ (hover: suspended)"])) bad.push("red " + JSON.stringify(got.red));
     if (!/Vista ✓/.test(got.trip)) bad.push("vista");
     if (got.fin[0] !== "Balance 1.33B · ~96 wks upkeep" || got.fin[1] !== "" || !got.fin[2] || /as of/.test(got.trip)) bad.push("finance " + JSON.stringify(got.fin));
-    if (JSON.stringify(got.amber) !== JSON.stringify(["depot 668 t: 632 t short, enough after topping up", "Balance 40.0M · ~2.9 wks upkeep"])) bad.push("amber " + JSON.stringify(got.amber));
+    if (JSON.stringify(got.amber) !== JSON.stringify([["632 t short", true], "Balance 40.0M · ~2.9 wks upkeep"])) bad.push("amber " + JSON.stringify(got.amber));
     // "~N wks upkeep" only on the line (the author, 2026-10-14); how old the stats are only in its hover
     if (/as of/.test(got.asOf[0]) || !/as of (Sep 27|27 Sep)/.test(got.asOf[1])) bad.push("as of " + JSON.stringify(got.asOf));
-    if (JSON.stringify(got.onTheWay) !== JSON.stringify([["depot 668 t: 632 t short, enough if topped up on the way", true]])) bad.push("on the way " + JSON.stringify(got.onTheWay));
+    if (JSON.stringify(got.onTheWay) !== JSON.stringify([["632 t short", true]])) bad.push("on the way " + JSON.stringify(got.onTheWay));
     if (!/G0X-85Z \(your carrier\) · Home · 1,200 ly.* · ≈ 3 carrier jumps to you/.test(got.sell)) bad.push("seller");
     const goodCT = !bad.length && errors.length === before;
     allOk = allOk && goodCT;

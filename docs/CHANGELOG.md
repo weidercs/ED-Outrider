@@ -2,6 +2,12 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-18 · The Carrier tile's meeting line, short
+- "you → it ≈ 1 jump (tank 22) · it → you ≈ 1 carrier jump · ≈ 21 t tritium" was too long for the tile (the author).
+  It now reads "To it 1 jump · to you 1, ≈21 t", and "· 632 t short" when the depot cannot cover it.
+- The tank's count, the fuel formula and how the hold covers a shortfall moved into the hovers. "To it" turns amber
+  when your tank covers fewer jumps than you need.
+
 ## 2026-10-17 · The game closed means quiet; the Fable sweep's nine fixes
 - **Chatter with the game closed** (the author): the game quit in supercruise wrote its Shutdown but no "empty"
   Status.json after it, so the last reading stayed live and chatter went on talking (and pin guidance would have
