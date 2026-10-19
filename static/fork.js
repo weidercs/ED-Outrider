@@ -12,6 +12,9 @@ const FX = {parts: new Set(), grades: new Set(), ship: null, trip: null, tripNot
 try { const t = JSON.parse(localStorage.getItem("fxTrip") || "null"); if (t && Array.isArray(t.stops)) FX.trip = t; } catch {}
 const fxPlain = n => String(n || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const fxGradeKey = (b, g) => `${b.module}|${b.id}|${g.grade}`;
+// the picked grades that count: with parts picked, only those of a picked part (a grade picked before its part was
+// unpicked stays hidden and out of the trip, and comes back with the part). Pure.
+const fxLiveGrades = (parts, grades) => parts.size ? new Set([...grades].filter(k => parts.has(k.slice(0, k.indexOf("|"))))) : grades;
 const fxRedraw = () => { if (typeof cmdrDrawBody === "function" && view === "cmdr" && CM.tab === "engineering") cmdrDrawBody(); };
 // every engineer with their system, progress and distance (GET /api/engineers), asked when the tab is drawn and after a jump
 async function fxEngLoad() {
@@ -69,13 +72,14 @@ function fxEngineersHtml(sup, q) {
 // the parts (each module of the table), Load my ship, Clear and Clear filters. Pure.
 function fxPartsHtml(blueprints) {
   const all = [...new Set(blueprints.map(b => b.module))].sort((a, b) => a.localeCompare(b));
+  const live = fxLiveGrades(FX.parts, FX.grades).size;
   const any = FX.parts.size || FX.grades.size, filters = any || CM.q || CM.craft || FX.ship;
   return `<div class="cmparts" role="group" aria-label="parts"><span class="unk">Parts:</span>` +
     all.map(p => `<button type="button" class="mini cmpart${FX.parts.has(p) ? " on" : ""}" data-fxpart="${esc(p)}" aria-pressed="${FX.parts.has(p)}">${esc(p)}</button>`).join("") +
     (any ? ` <button type="button" class="mini" data-fxclear title="every part and grade again">Clear</button>` : "") + `</div>` +
     `<div class="cmtripctl"><button type="button" class="mini" data-fxship title="pick the parts the ship you fly has, and the grade each engineered module is at">Load my ship</button>` +
     (filters ? ` <button type="button" class="mini" data-fxclearall title="the search, only what I can craft, the parts, the grades and the ship: all off">Clear filters</button>` : "") +
-    (FX.grades.size ? ` <span class="unk">· ${FX.grades.size} grade${FX.grades.size === 1 ? "" : "s"} picked (click a grade below to pick or unpick it)</span>` : "") + `</div>`;
+    (live ? ` <span class="unk">· ${live} grade${live === 1 ? "" : "s"} picked (click a grade below to pick or unpick it)</span>` : "") + `</div>`;
 }
 // "Load my ship" (GET /api/engineers/ship): the ship's parts and its engineered modules' grades picked
 async function fxLoadShip() {
@@ -99,8 +103,10 @@ function fxShipHtml(sh) {
   return `<div class="cmship"><b>${esc(shipLabel(sh.ship.name, sh.ship.type))}</b> <span class="unk">${sh.modules.length} module${sh.modules.length === 1 ? "" : "s"} with blueprints, ` +
     `${done.length} engineered: their parts and grades picked (experimental effects are named, not picked)</span><div class="cmstats">${sh.modules.map(mod).join("")}</div></div>`;
 }
-// what the picks ask for: a picked grade is one requirement, a picked part with no picked grade "that part, any grade". Pure.
+// what the picks ask for: a picked grade is one requirement, a picked part with no picked grade "that part, any grade";
+// a grade of a part not picked (while parts are) asks for nothing. Pure.
 function fxTripRequirements(blueprints, parts, grades) {
+  grades = fxLiveGrades(parts, grades);
   const reqs = [], graded = new Set();
   for (const b of blueprints) for (const g of b.grades) {
     if (!grades.has(fxGradeKey(b, g))) continue;
@@ -127,7 +133,7 @@ function fxTripShort(blueprints, grades) {
 function fxTripSave() { try { localStorage.setItem("fxTrip", JSON.stringify(FX.trip)); } catch {} }
 async function fxPlanTrip() {
   const rows = (CM.data.engineering || {}).blueprints || [];
-  const requirements = fxTripRequirements(rows, FX.parts, FX.grades);
+  const requirements = fxTripRequirements(rows, FX.parts, FX.grades), live = fxLiveGrades(FX.parts, FX.grades);
   if (!requirements.length) { FX.tripNote = "pick a part or a grade first"; return fxRedraw(); }
   FX.tripNote = "planning…"; fxRedraw();
   let d;
@@ -137,7 +143,7 @@ async function fxPlanTrip() {
   } catch (err) { d = {error: err.message}; }
   if (!d || d.error) { FX.tripNote = `could not plan it: ${(d && d.error) || "no answer"}`; return fxRedraw(); }
   FX.tripNote = null;
-  FX.trip = Object.assign({}, d, {done: [], short: fxTripShort(rows, FX.grades), at: Date.now()});
+  FX.trip = Object.assign({}, d, {done: [], short: fxTripShort(rows, live), at: Date.now()});
   fxTripSave();
   fxRedraw();
 }
@@ -186,7 +192,7 @@ function forkEngineeringHtml(d) {
   if (d.unreadable) return `<div class="short">Blueprint table unreadable: resources/blueprints.json is missing or damaged (a fresh copy of Outrider brings it back).</div>`;
   const q = CM.q.trim().toLowerCase(), rows = d.blueprints || [];
   const eng = d.engineers || [], unlocked = eng.filter(e => e.progress === "Unlocked").length;
-  const sup = fxSupports(rows, FX.parts, FX.grades);
+  const sup = fxSupports(rows, FX.parts, fxLiveGrades(FX.parts, FX.grades));
   const gradeRow = (g, b) => {
     const key = fxGradeKey(b, g), on = FX.grades.has(key);
     const mats = g.materials.map(x => x.have >= x.need ? `<span class="cmmat ok" title="you hold ${cmNum(x.have)}">${esc(x.name)} ${cmNum(x.have)}/${cmNum(x.need)}</span>`

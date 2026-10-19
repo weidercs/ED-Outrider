@@ -9348,6 +9348,18 @@ const releasePayloads = async () => {
       body().querySelector("[data-fxcopy]").click();
       got.copySystem = copied[1];
       body().querySelector("[data-fxtripforget]").click();
+      // a grade picked, then another part picked: the grade is hidden, and out of the trip and the Engineers list
+      body().querySelector("[data-fxclear]").click();
+      body().querySelector('[data-fxgrade="Missile rack|Weapon_HighCapacity|1"]').click();
+      body().querySelector('[data-fxpart="Missile rack"]').click();
+      body().querySelector('[data-fxpart="Power plant"]').click();
+      body().querySelector('[data-fxpart="Missile rack"]').click();
+      bodies.length = 0;
+      body().querySelector("[data-fxplan]").click();
+      await sleep(80);
+      const tb2 = bodies.find(b => b[0] === "api/engineers/tour");
+      got.hiddenGrade = [tb2 && tb2[1].requirements.map(r => `${r.label}|${r.grade}`), engNames(), text(body().querySelector(".cmtripctl"))];
+      body().querySelector("[data-fxtripforget]").click();
       d.getElementById("cmFilter").value = "x"; w.eval(`CM.q = "x"`);
       body().querySelector("[data-fxclearall]").click();
       got.cleared = [body().querySelectorAll(".cmpart.on, .cmgrade.on").length, !!body().querySelector(".cmship, .cmtrip"), d.getElementById("cmFilter").value,
@@ -9368,6 +9380,7 @@ const releasePayloads = async () => {
       ship: [["Power plant"], ["Power plant|PowerPlant_Boosted|5"], "Sample 1 module with blueprints, 1 engineered: their parts and grades picked (experimental effects are named, not picked)Power Plant Boosted G5 · Thermal Spread"],
       asked: ["Power plant: Overcharged G5|5|Hera Tani+Etienne Dorn"],
       trip: ["Trip from Sol: 1 stop, 108.4 ly", "Plot next stop: Kuwemaki"], copied: true, copySystem: "Kuwemaki",
+      hiddenGrade: [["Power plant (any grade)|null"], ["Hera Tani · Power plant", "Etienne Dorn · Power plant", "Marco Qwent · Power plant"], "Load my ship Clear filters"],
       cleared: [0, false, "", "", false],
     };
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));

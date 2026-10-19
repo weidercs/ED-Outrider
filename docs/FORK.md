@@ -155,6 +155,12 @@ Beside upstream's ([DESIGN_NOTES.md](DESIGN_NOTES.md)):
 
 Newest first. Upstream's is [CHANGELOG.md](CHANGELOG.md).
 
+## 2026-10-18 · This fork: Plan the trip asks only for the picked parts' grades
+- A grade picked for a part that was then unpicked (Load my ship, then a part turned off) stayed in the picks while
+  hidden: Plan the trip still asked for it, adding engineers for modules not picked, and the Engineers list and the
+  "grades picked" count still went by it. With parts picked, only their grades count now (`fxLiveGrades`); picking
+  the part again brings its grades back. Test: `tests/page_smoke.js` (fork engineering, `hiddenGrade`).
+
 ## 2026-10-18 · This fork: upstream's 2026.10.26 merged in
 - Upstream's space chatter, chat read aloud, surface pins, carrier trips (Plot Route's Carrier plotter and the
   Carrier tile), the Terraformable worlds route, the terminal's timed lines.
