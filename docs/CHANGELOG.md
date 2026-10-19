@@ -2,6 +2,18 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-19 · Pre-Odyssey Spansh data called out (Kurbo26, discussion #11)
+- A system whose Spansh records all predate the legacy split (`LEGACY_CUTOFF`, 29 Nov 2022: thin-atmosphere worlds
+  marked not landable, life never reported) is "pre-Odyssey" (`spansh_date`, `spansh_old`; in the Spansh summaries,
+  CACHE_VERSION 18, and in `system_detail`, `merged_records`, `arrival_facts`), whatever its bodies (the old data tag
+  needed a thin-atmosphere world the rules allow life on).
+- **Nearby:** a "Spansh: pre-Odyssey" pill (🪦 when narrow; "· 2 may have life" with candidates; the date in its
+  hover), `spanshOldTag`. **Here:** the header says when Spansh last heard ("Spansh: pre-Odyssey, Feb 2019", or the
+  plain date). **The overlay's system strip:** "Spansh ✓ (pre-Odyssey)".
+- **Never routine** (`isRoutine`) until your own scans have every body; **the arrival briefing** ends with the clause
+  ("Spansh's data here is from February 2019, before Odyssey: worth a rescan." and the worlds that may hold life), a
+  line of its own (`old_data`, 15 a list, under the briefing's row). **Now:** a 🪦 line until every body is yours.
+
 ## 2026-10-18 · Version 2026.10.26, The Release with Personality
 - The eight new personalities and over 70,000 lines, the crew as characters, space chatter, chat read aloud, surface
   pins, carrier trips, the terraformable worlds route, the fixes since 2026.10.25. What's new has its section. No

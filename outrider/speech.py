@@ -58,6 +58,9 @@ KEYS = {
     "phenomena": "the FSS found notable stellar phenomena in a system where you have none on record (said with delight, in "
                  "every style: the co-pilot loves new things): {what} (already phrased, e.g. 'three notable stellar "
                  "phenomena, all in rings')",
+    "old_data": "after the arrival briefing, in a system whose Spansh data predates Odyssey (thin-atmosphere worlds marked "
+                "not landable, life never reported) and that you have not resolved yourself: worth a rescan (Kurbo26's idea, "
+                "discussion #11): {year} (the year it was last reported, e.g. '2019')",
     "rare_star": "a rare star resolved, by the arrival's own scan or the FSS (said with delight, in every style): {what} "
                  "(already phrased, e.g. 'a black hole at B', 'a Wolf-Rayet star, the main star')",
     "surface_site": "surface sites found on a body: Guardian or Thargoid sites (the DSS's map says them) or an unknown "
@@ -608,7 +611,7 @@ SAMPLES = {
     "docking_granted": {"pad": 34, "station": "Jameson Memorial"},
     "docking_denied": {"reason": "no pad free for your ship: try again shortly", "station": "Jameson Memorial"},
     "phenomena": {"what": "three notable stellar phenomena, all in rings"},
-    "rare_star": {"what": "a black hole at B"},
+    "rare_star": {"what": "a black hole at B"}, "old_data": {"year": "2019"},
     "surface_site": {"what": "Guardian sites on B 3"},
     "signal_poi": {"what": "a Guardian beacon"},
     "curious": {},
@@ -676,7 +679,7 @@ CREW_ROW_ROLE = {row: r[0] for r in CREW_ROLES for row in r[3]}   # an alert row
 # with the page. (rig_leash: a danger tag with plain words, no lines of its own.)
 ROW_KEYS = {
     "arrival": ("arrival_undiscovered", "arrival_discovered", "region", "streak_new", "streak_known"),
-    "game": ("game_start", "welcome_back", "game_exit", "session_recap"), "jump": ("fsd_charge",), "brief": ("arrival_brief",),
+    "game": ("game_start", "welcome_back", "game_exit", "session_recap"), "jump": ("fsd_charge",), "brief": ("arrival_brief", "old_data"),
     "fss": ("fss_done", "fss_nothing", "fss_unfinished"), "leaving": ("leaving",),
     "fuel": ("fuel_low", "fuel_star", "fuel_target", "fuel_topup"), "scoop": ("tank_full",), "scoopstop": ("scoop_stopped",),
     "supercharge": ("supercharged",), "refuelshort": ("fuel_short",), "lastscoop": ("fuel_last_scoop",),
