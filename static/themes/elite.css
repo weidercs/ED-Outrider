@@ -25,6 +25,7 @@
   --tb-group-bg: transparent; --tb-group-fg: var(--el-orange); --tb-group-open-bg: var(--el-orange); --tb-group-open-fg: var(--el-ink);
   --tb-group-radius: 0; --tb-page-radius: 0;
   --tb-page-bg: transparent; --tb-page-fg: var(--el-text); --tb-page-on-bg: rgba(63, 200, 244, .14); --tb-page-on-fg: var(--el-cyan);
+  --tb-maptag-bg: var(--el-cyan); --tb-maptag-fg: var(--el-ink);   /* the see-through page colour would be faint on cyan */
   --tb-fill: transparent;
   --tb-btn-bg: transparent; --tb-btn-fg: var(--el-orange); --tb-btn-on-bg: var(--el-cyan); --tb-btn-on-fg: var(--el-ink); --tb-btn-radius: 0;
   --tb-link-ok: var(--el-cyan); --tb-link-stale: #FFC400; --tb-link-none: var(--el-alert);

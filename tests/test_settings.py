@@ -298,6 +298,23 @@ class WritingFile(TempConfig):
         self.assertEqual(self.save({"server": {"game_pc": "maybe"}})[0], 400)
 
 
+
+class DialogLayout(unittest.TestCase):
+    def test_wide_sections_span_the_columns(self):
+        """On a big screen Settings runs in columns; Server settings, Spoken lines and Voice (the author, 2026-10-16:
+        its crew and voice tables need the room) span them all."""
+        import re
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.css"), encoding="utf-8") as f:
+            css = f.read()
+        with open(os.path.join(ed_outrider.STATIC_DIR, "page.html"), encoding="utf-8") as f:
+            html = f.read()
+        rule = re.search(r"([^{}]*)\{\s*column-span:\s*all;\s*\}", css)
+        wide = set(re.findall(r"#alertDialog #(\w+)", rule.group(1)))
+        self.assertEqual(wide, {"serverSettings", "speechLogBox", "voiceSettings"})
+        for sid in wide:
+            self.assertRegex(html, r'<details[^>]*class="[^"]*setsec[^"]*"[^>]*id="%s"|<details id="%s"[^>]*setsec' % (sid, sid), sid)
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -1,5 +1,5 @@
 {
- "_note": "Spansh's Road to Riches router asked for one body type (2026-10-13, scripts/route_probe.py): POST /api/riches/route with body_types (a repeated form field) and min_value 1, as spansh.co.uk/earth and /ammonia send it; there is no /api/earth/route or /api/ammonia/route (404). The answers are Road to Riches' shape.",
+ "_note": "Spansh's Road to Riches router asked for one body type (2026-10-13, scripts/route_probe.py): POST /api/riches/route with body_types (a repeated form field) and min_value 1, as spansh.co.uk/earth and /ammonia send it; there is no /api/earth/route or /api/ammonia/route (404). The answers are Road to Riches' shape. tf: the terraformable route (Rocky body + High metal content world, min_value 100000), probed 2026-10-17 from Colonia.",
  "elw": {
   "created_at": "2026-10-13T06:34:12",
   "job": "1A3465DA-C6D0-11F1-8441-F44B233821C1",
@@ -251,5 +251,269 @@
   "state": "completed",
   "status": "ok",
   "updated_at": "2026-10-13T06:34:15"
+ },
+ "tf": {
+  "parameters": {
+   "body_types": [
+    "Rocky body",
+    "High metal content world"
+   ],
+   "min_value": "100000"
+  },
+  "result": [
+   {
+    "bodies": [],
+    "id64": "3238296097059",
+    "jumps": 1,
+    "name": "Colonia",
+    "x": -9530.5,
+    "y": -910.28125,
+    "z": 19808.125
+   },
+   {
+    "bodies": [
+     {
+      "distance_to_arrival": 35235.548629,
+      "estimated_mapping_value": 616954,
+      "estimated_scan_value": 169804,
+      "id": 1981599787442327843,
+      "id64": "1981599787442327843",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou PX-T d3-464 B 5",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 35665.642486,
+      "estimated_mapping_value": 616881,
+      "estimated_scan_value": 169784,
+      "id": 1945570990423363875,
+      "id64": "1945570990423363875",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou PX-T d3-464 B 4",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 35670.965247,
+      "estimated_mapping_value": 634945,
+      "estimated_scan_value": 174756,
+      "id": 1909542193404399907,
+      "id64": "1909542193404399907",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou PX-T d3-464 B 3",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 39107.782384,
+      "estimated_mapping_value": 668361,
+      "estimated_scan_value": 183953,
+      "id": 2017628584461291811,
+      "id64": "2017628584461291811",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou PX-T d3-464 B 6",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     }
+    ],
+    "id64": "15951399309603",
+    "jumps": 1,
+    "name": "Eol Prou PX-T d3-464",
+    "x": -9532.28125,
+    "y": -896.15625,
+    "z": 19781.90625
+   },
+   {
+    "bodies": [
+     {
+      "distance_to_arrival": 1510.710348,
+      "estimated_mapping_value": 584707,
+      "estimated_scan_value": 160929,
+      "id": 396357663777968419,
+      "id64": "396357663777968419",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou PX-T d3-1190 A 6",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 1837.477398,
+      "estimated_mapping_value": 641065,
+      "estimated_scan_value": 176440,
+      "id": 504444054834860323,
+      "id64": "504444054834860323",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou PX-T d3-1190 A 8",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 1846.26123,
+      "estimated_mapping_value": 621510,
+      "estimated_scan_value": 171058,
+      "id": 468415257815896355,
+      "id64": "468415257815896355",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou PX-T d3-1190 A 7",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 2799.141979,
+      "estimated_mapping_value": 598013,
+      "estimated_scan_value": 164591,
+      "id": 540472851853824291,
+      "id64": "540472851853824291",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou PX-T d3-1190 A 9",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     }
+    ],
+    "id64": "40896569364771",
+    "jumps": 1,
+    "name": "Eol Prou PX-T d3-1190",
+    "x": -9516.5,
+    "y": -900.71875,
+    "z": 19790.59375
+   },
+   {
+    "bodies": [
+     {
+      "distance_to_arrival": 1156.113916,
+      "estimated_mapping_value": 567199,
+      "estimated_scan_value": 156110,
+      "id": 216256009897578795,
+      "id64": "216256009897578795",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou WY-R d4-2422 A 4",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 1710.206996,
+      "estimated_mapping_value": 585928,
+      "estimated_scan_value": 161265,
+      "id": 252284806916542763,
+      "id64": "252284806916542763",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou WY-R d4-2422 A 5",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 15145.103644,
+      "estimated_mapping_value": 481503,
+      "estimated_scan_value": 132524,
+      "id": 540515183068254507,
+      "id64": "540515183068254507",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou WY-R d4-2422 B 4 a",
+      "subtype": "Rocky body",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 16079.753927,
+      "estimated_mapping_value": 676147,
+      "estimated_scan_value": 186096,
+      "id": 432428792011362603,
+      "id64": "432428792011362603",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou WY-R d4-2422 B 3",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 16081.587575,
+      "estimated_mapping_value": 486662,
+      "estimated_scan_value": 133944,
+      "id": 468457589030326571,
+      "id64": "468457589030326571",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou WY-R d4-2422 B 3 a",
+      "subtype": "Rocky body",
+      "type": "Planet"
+     }
+    ],
+    "id64": "83227783794987",
+    "jumps": 1,
+    "name": "Eol Prou WY-R d4-2422",
+    "x": -9502.21875,
+    "y": -928.96875,
+    "z": 19819.03125
+   },
+   {
+    "bodies": [
+     {
+      "distance_to_arrival": 1110.371792,
+      "estimated_mapping_value": 652396,
+      "estimated_scan_value": 179559,
+      "id": 216216977234792747,
+      "id64": "216216977234792747",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou WY-R d4-1286 A 2",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 1111.327632,
+      "estimated_mapping_value": 462777,
+      "estimated_scan_value": 127370,
+      "id": 252245774253756715,
+      "id64": "252245774253756715",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou WY-R d4-1286 A 2 a",
+      "subtype": "Rocky body",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 1484.583523,
+      "estimated_mapping_value": 625492,
+      "estimated_scan_value": 172154,
+      "id": 360332165310648619,
+      "id64": "360332165310648619",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou WY-R d4-1286 A 4",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     },
+     {
+      "distance_to_arrival": 1487.485306,
+      "estimated_mapping_value": 647786,
+      "estimated_scan_value": 178290,
+      "id": 324303368291684651,
+      "id64": "324303368291684651",
+      "is_terraformable": true,
+      "landmark_value": null,
+      "name": "Eol Prou WY-R d4-1286 A 3",
+      "subtype": "High metal content world",
+      "type": "Planet"
+     }
+    ],
+    "id64": "44195121008939",
+    "jumps": 1,
+    "name": "Eol Prou WY-R d4-1286",
+    "x": -9503.9375,
+    "y": -908.15625,
+    "z": 19827.28125
+   }
+  ]
  }
 }

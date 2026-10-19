@@ -294,11 +294,11 @@ class StateSwitches(unittest.TestCase):
         """The console says whether each upload is on, and EDDN's test schemas whenever OUTRIDER_EDDN_TEST is set."""
         st = self.state
         with unittest.mock.patch.dict(os.environ, {U.TEST_ENV: ""}):
-            self.assertEqual(st.uploads_line(), "uploads: EDDN off, EDSM off, Inara off (switched in Settings -> Uploads)")
+            self.assertEqual(st.uploads_line(), "uploads: EDDN off, EDSM off, Inara off (change them in Settings -> Uploads)")
         st.upload_cfg["eddn"]["enabled"] = True
         with unittest.mock.patch.dict(os.environ, {U.TEST_ENV: "1"}):
             self.assertEqual(st.uploads_line(), "uploads: EDDN on (TEST: EDDN's test schemas only, OUTRIDER_EDDN_TEST is set), "
-                                                "EDSM off, Inara off (switched in Settings -> Uploads)")
+                                                "EDSM off, Inara off (change them in Settings -> Uploads)")
             self.assertTrue(st.uploads_summary()["eddn"]["test"])
 
     def test_written_in_place(self):

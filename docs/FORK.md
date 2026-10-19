@@ -155,6 +155,16 @@ Beside upstream's ([DESIGN_NOTES.md](DESIGN_NOTES.md)):
 
 Newest first. Upstream's is [CHANGELOG.md](CHANGELOG.md).
 
+## 2026-10-18 · This fork: upstream's 2026.10.26 merged in
+- Upstream's space chatter, chat read aloud, surface pins, carrier trips (Plot Route's Carrier plotter and the
+  Carrier tile), the Terraformable worlds route, the terminal's timed lines.
+- Plot Route's plotter row and `hwyFormShow` conflicted where both sides added a plotter (the fork's Unscanned (bio),
+  upstream's Terraformable and Carrier): all kept, the fork's after Trade and before Carrier. `page.css` and
+  `tests/page_smoke.js` only had blocks added on both sides.
+- Upstream's start-up test (`test_verify_server_reads_the_fixture_journals_whatever_ED_JOURNALS_says`) failed on
+  upstream's own tree too: the terminal's new date line and times come first unless `JOURNAL_STREAM` is set. The test
+  now sets it for that start-up.
+
 ## 2026-10-16 · This fork: upstream's 2026.10.25 merged in
 - Upstream's personalities as drop-in files (`resources/personalities/`, yours in `data/personalities/`), with eight
   new ones, the install guide's updating section, the screenshots.

@@ -70,6 +70,43 @@ class ServerLog(unittest.TestCase):
         self.assertEqual(t.write("x\n"), 2)
         self.assertEqual(log.since(3)["lines"][0]["text"], "x")
 
+    def test_the_terminal_shows_times_and_lines_up(self):
+        """The terminal's lines (the author, 2026-10-16): the time first, the date before the first line and when the
+        day changes, the subject padded so the rest lines up, a long line wrapped under its text on a terminal; the log
+        keeps each line as printed; under systemd (its journal has its own times) no times."""
+        import time as _t
+        day = _t.mktime((2026, 10, 16, 23, 59, 56, 0, 0, -1))   # the 5th line is past midnight
+        clock = iter([day, day + 1, day + 2, day + 3, day + 4, day + 5]).__next__
+        out, log = io.StringIO(), L.ServerLog(clock=Clock())
+        console = L.Console(clock=clock)
+        tee = L.Tee(out, log, "out", console)
+        tee.write("auto honk: ready")
+        tee.write("\n")
+        tee.write("two")                       # a line written in parts gets one time
+        tee.write(" and a half\n")
+        tee.write("  a continuation, as printed\nhighway auto-target: off\n")
+        tee.write("spoken alerts: Piper voice ready\n")   # past midnight: the new day's line first
+        stamp = lambda t: _t.strftime("%H:%M:%S  ", _t.localtime(t))
+        pad = lambda s: s.ljust(L.SUBJECT_WIDTH)
+        self.assertEqual(out.getvalue().split("\n"), [
+            "-- Friday 16 October 2026 --", stamp(day) + pad("auto honk:") + "ready",
+            stamp(day + 1) + "two and a half", stamp(day + 2) + "  a continuation, as printed",
+            stamp(day + 3) + pad("highway auto-target:") + "off",
+            "-- Saturday 17 October 2026 --", stamp(day + 4) + pad("spoken alerts:") + "Piper voice ready", ""])
+        self.assertEqual([x["text"] for x in log.since()["lines"]], ["auto honk: ready", "two and a half",
+                         "  a continuation, as printed", "highway auto-target: off", "spoken alerts: Piper voice ready"])
+        # not a subject: a path, an exception's name, a long phrase
+        for text in ("/data/x: not found", "ValueError: bad", "backup before the journal re-read written: x"):
+            self.assertEqual(L.Console(times=False).line(text), text)
+        # wrapped to the terminal's width under its text; systemd: no times, no date
+        long = "warning: " + " ".join(["word"] * 30)
+        rows = L.Console(times=False).line(long, width=60).split("\n")
+        self.assertTrue(all(len(r) <= 60 for r in rows) and len(rows) > 1, rows)
+        self.assertEqual({r[:L.SUBJECT_WIDTH] for r in rows[1:]}, {" " * L.SUBJECT_WIDTH})
+        self.assertEqual(" ".join(" ".join(rows).split()), "warning: " + " ".join(["word"] * 30))   # no word lost
+        # a pipe (Docker's log, a file): never wrapped
+        self.assertEqual(tee.width(), 0)
+
     def test_keeps_the_last_lines_and_the_file_beside_the_database(self):
         log = L.ServerLog(keep=3, clock=Clock())
         for i in range(5):

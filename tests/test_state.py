@@ -1112,6 +1112,26 @@ class Batch3Server(unittest.TestCase):
         bodies = [b for b in self.state.system_detail(7)["bodies"] if b.get("type") == "Planet"]
         self.assertEqual([(b["name"], b["codex"]) for b in bodies], [("Sys 1", []), ("Sys 2", [])])
 
+    def test_a_species_scanned_twice_is_one_codex_line(self):
+        """The game logs a CodexEntry for each composition scan of a species, not only its first: two scans of Tussock
+        Cultro on one body showed it twice in the body's bio list, the second without its value (the author 2026-10-18)."""
+        self.j.handle({"event": "FSDJump", "timestamp": "2026-01-01T00:00:00Z", "StarSystem": "Sys", "SystemAddress": 7,
+                       "StarPos": [0, 0, 0]})
+        self.j.handle({"timestamp": "2026-01-01T00:00:30Z", "event": "Scan", "ScanType": "Detailed", "BodyName": "Sys 1",
+                       "BodyID": 1, "StarSystem": "Sys", "SystemAddress": 7, "PlanetClass": "Rocky body",
+                       "DistanceFromArrivalLS": 10, "WasDiscovered": True, "WasMapped": True})
+        for ts, new in (("2026-01-01T00:01:00Z", True), ("2026-01-01T00:09:00Z", False)):
+            self.j.handle({"timestamp": ts, "event": "CodexEntry", "EntryID": 2450403, "Name": "$Codex_Ent_Tussocks_08_F_Name;",
+                           "Name_Localised": "Tussock Cultro - Green", "SubCategory": "$Codex_SubCategory_Organic_Structures;", "SubCategory_Localised": "Organic structures",
+                           "Category": "$Codex_Category_Biology;", "SystemAddress": 7, "System": "Sys", "BodyID": 1,
+                           "IsNewEntry": new, "VoucherAmount": 2500 if new else None})
+        base = {"v": ed_outrider.CACHE_VERSION, "name": "Sys", "x": 0, "y": 0, "z": 0, "body_count": 1, "records": [
+            {"name": "Sys 1", "body_id": 1, "type": "Planet", "subtype": "Rocky body", "full": True}]}
+        self.state.bases[7] = ("spansh", base)
+        body = [b for b in self.state.system_detail(7)["bodies"] if b.get("type") == "Planet"][0]
+        self.assertEqual([(c["name"], c["new"], c["voucher"], c["entry_id"]) for c in body["codex"]],
+                         [("Tussock Cultro - Green", True, 2500, 2450403)])
+
     def test_dump_replaces_an_edsm_stand_in(self):
         """A system first found through EDSM (find_system's fallback) and later filled from Spansh's dump is Spansh's:
         it kept the edsm marker, so spansh_verdict ignored it (review 2026-10-11)."""
@@ -3079,6 +3099,7 @@ class JournalsRegistry(unittest.TestCase):
         "docking_said": "live-only: grants counted this session for #12's green-lights cadence, live lines only",
         "highway": "live-only: the Highway route (DESIGN_NOTES), cannot be rebuilt from journals",
         "riches": "live-only: the Road to Riches route (Spansh's plot), cannot be rebuilt from journals",
+        "carrier_trip": "live-only: the carrier trip (#19, Spansh's carrier router), cannot be rebuilt from journals",
         "next_stop": "live-only: the player's chosen next stop (stamp_next_stop keeps it through the re-read)",
         "plan_first": "live-only: the first stop picked where you are (S30); an arrival elsewhere after it clears it, "
                       "the re-read's older ones do not (stamp_next_stop)",

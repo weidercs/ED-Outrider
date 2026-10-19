@@ -62,7 +62,10 @@ a.tb-btn { display: inline-flex; align-items: center; text-decoration: none; }  
   font: 17px var(--tb-font-display); text-transform: var(--tb-case); letter-spacing: var(--tb-track);
   display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 14px; cursor: pointer; }
 .tb-page.on { background: var(--tb-page-on-bg); color: var(--tb-page-on-fg); font-weight: 600; }
-.tb-maptag { padding: 1px 8px; border-radius: 10px; background: var(--tb-page-on-fg); color: var(--tb-page-on-bg); font-size: 13px; font-weight: 600; }
+/* Now's Map pill: the selected page's colours swapped, unless a theme's selected page is see-through (Elite, Sith:
+   its text would be faint on the solid colour; Kurbo26, 2026-10-16), where the theme sets its own pair */
+.tb-maptag { padding: 1px 8px; border-radius: 10px; background: var(--tb-maptag-bg, var(--tb-page-on-fg));
+  color: var(--tb-maptag-fg, var(--tb-page-on-bg)); font-size: 13px; font-weight: 600; }
 .tb-navfill { flex: 1 1 auto; min-height: 12px; background: var(--tb-fill); position: relative; container-type: size; }
 /* a theme's emblem (static/emblems/, credited there), centred in the free space under the page list; decoration, never
    a control. Off unless the theme sets one; gone when the space is too short to show it well */

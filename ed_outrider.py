@@ -224,6 +224,7 @@ import outrider.overlay_runner  # Outrider runs that window itself on the game P
 import outrider.ggg        # potential green gas giants: the community's seven-layer ladder model (pure)
 import outrider.serverlog  # Outrider's own log: the terminal's lines kept for Show log and in <db dir>/outrider.log
 import outrider.notices    # the notices banner: start-up problems shown on every page until fixed or dismissed
+import outrider.chatter    # space chatter (#15): its keys and topics, where you are for it (pure; the page talks)
 import outrider.pads       # where your landing pad is: starport and carrier layouts, the words, the diagrams (#12; pure)
 import outrider.boxel      # boxel exploration: the cube a procedural name places a system in, its systems, its id64s (pure)
 import outrider.codex_bodies  # star and planet types as codex entries: what a body would log (pure)
@@ -298,6 +299,15 @@ SPANSH_EXO = "https://spansh.co.uk/api/exobiology/route"   # Expressway to Exoma
 SPANSH_TRADE = "https://spansh.co.uk/api/trade/route"      # the trade planner: the same job, station-to-station hops
 SPANSH_TOURIST = "https://spansh.co.uk/api/tourist/route"  # the tourist router (S51's sweep): the same job, a visiting order
 TRADE_PLOT_TIMEOUT = 600    # s: the trade planner is slow (4 hops from Sol took 136 s on 2026-10-07)
+# Carrier trips (#19, the author 2026-10-17): Spansh's carrier router (probed 2026-10-17: names accepted; capacity_used
+# must include the tritium stored in the hold), planned in Plot Route, followed on the Carrier tile
+SPANSH_FC = "https://spansh.co.uk/api/fleetcarrier/route"
+CARRIER_TYPES = {"fleet": (25000, 25000), "squadron": (60000, 15000)}   # capacity, mass (Spansh's own figures)
+PIN_NAME_MAX = 40         # characters of a surface pin's name (#16)
+PIN_ARRIVE_M = {"ground": 50, "ship": 250}   # m: arrived at a pin, on foot or in the SRV / in the ship
+PIN_BANDS = (10000, 1000, 100)   # m: the active pin's distance said as you pass each (after "set", before "arrived")
+CARRIER_COOLDOWN_S = 300   # s after a carrier jump before the next can be booked (a busy system's servers take longer)
+CARRIER_LEG_S = 20 * 60    # s a leg takes: the 15-minute countdown and the cooldown (the plan's estimate)
 RICHES_METHOD = "POST"      # form fields (checked against the live API 2026-10-06; scripts/riches_probe.py checks it again)
 RICHES = {"radius": 25, "max_results": 25, "max_distance": 50000, "min_value": 100000,   # defaults of the plot form
           "use_mapping_value": True, "avoid_thargoids": True, "loop": False}
@@ -377,7 +387,7 @@ IMPORT_GAP_S = 10            # s between two of S67's import reads (a week of ED
 IMPORT_RATE_WAIT_S = 600     # s the import waits when EDSM asks it to slow down, before asking again
 IMPORT_LOOKUP_GAP_S = 3      # s between two of the import's name lookups (Spansh, then EDSM): up to RESOLVE_MAX of them
 LOOKUP_DOWN_S = 10 * 60      # s: Spansh or EDSM unavailable this long gets a card on the banner (S42; at once for no network)
-BIO_TAGS_SHOWN = 40          # the surface map draws at most this many tagged plants (nearest first)
+BIO_TAGS_SHOWN = 40          # the surface map draws about this many tagged plants (tags_shown: nearest first)
 SELLER_REFRESH_LY = 100      # look for the nearest places to sell again after moving this far
 SELLER_REFRESH_S = 6 * 3600  # ...or this long (carriers move)
 EDSM_SYSTEM = "https://www.edsm.net/api-v1/system"
@@ -498,7 +508,8 @@ SHUTDOWN_LIVE_S = 300      # s: a Shutdown older than this is a journal being ca
 # Page settings saved on the server for browsers that have not set them ("use these for new browsers"):
 # only these localStorage keys, at most this size. Per-device keys (the view, layouts, the search form, which
 # screen speaks) stay out. The page has the same list (SETTINGS_KEYS in page.js).
-BROWSER_SETTINGS = ("alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechNames", "speechSpeed",
+BROWSER_SETTINGS = ("alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechMix", "speechNames", "chatterNames",
+                    "chatRead", "chatChannels", "chatHeader", "chatMuted", "speechSpeed",
                     "speechProfanity", "speechProfanityPct", "speechDangerBusiness", "speechShift", "sayBio", "sayGeo", "sayHazard",
                     "sayMapped", "honkAnnounce", "sound", "unsoldCfg", "highlightCfg", "bioMinCfg", "maxBonus", "codexNewCounts",
                     "highG", "streakCfg", "skipFloor", "sort", "sorts", "showVisited", "showExplored", "oneJump", "map",
@@ -584,6 +595,22 @@ class ScoopWatch:
         if not full and jumped:
             return None
         return {"pct": min(100, round(100 * fuel / capacity)), "full": full}
+
+
+def tags_shown(tags, cap=BIO_TAGS_SHOWN):
+    """The tagged plants the payload sends (bio_tags_here's, nearest first): each species' nearest usable tag always
+    (the map keeps it, at the rim when far: Kurbo26, 2026-10-16), then the nearest of the rest up to `cap`, nearest
+    first. Only the nearest `cap` lost a species beyond them (sweep 2026-10-16)."""
+    keep, seen = set(), set()
+    for i, t in enumerate(tags):
+        if t.get("usable") and t.get("species") not in seen:
+            seen.add(t.get("species"))
+            keep.add(i)
+    for i in range(len(tags)):
+        if len(keep) >= cap:
+            break
+        keep.add(i)
+    return [t for i, t in enumerate(tags) if i in keep]
 
 
 def fire_group_letter(group):
@@ -1399,9 +1426,16 @@ CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "M
 # one back to the ship moves it back, and a MarketSell counts as mining up to what it holds (mining_sales; the rest of
 # the sale is trade)
 SALE_DOCK_EVENTS = ("Docked", "Undocked", "Location")
+# Chat read aloud by Comms (NEXT-VERSION #17, the author 2026-10-17): other players' messages, live only (never a catch-up
+# or a re-read), never the NPCs'. Kept in memory only (Journals.chat, CHAT_KEEP): never in the database, outrider.log
+# or the voice's cache; the page decides what to say (the channels ticked, mutes, the rate)
+CHAT_EVENTS = ("ReceiveText",)
+CHAT_KEEP = 32               # messages the payload carries (a burst between two polls loses none)
+CHAT_CHANNELS = ("squadron", "wing", "player", "friend", "local", "starsystem", "voicechat")
+CHAT_MAX = 300               # characters of a message kept (the page says "and more" past it)
 MINED_EVENTS = ("MiningRefined", "CargoTransfer", "EjectCargo", "Died", "MarketSell", "CarrierBuy")
 _OTHER_EVENTS = (POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS + CMDR_EVENTS + MATERIAL_EVENTS
-                 + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + DOCKING_EVENTS + ("Loadout", "Shutdown", "Fileheader"))
+                 + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + DOCKING_EVENTS + CHAT_EVENTS + ("Loadout", "Shutdown", "Fileheader"))
 # The Commander view (outrider/commander.py): Journals.handle_commander folds these into the meta keys of
 # outrider.commander.COMMANDER_META and the play_activity table, and each one bumps Journals.commander_version (the page's
 # cue to ask for the open tab again); COMMANDER_ONLY are read for it alone
@@ -1705,6 +1739,12 @@ CREATE TABLE IF NOT EXISTS surface_rigs (
     placed_ts TEXT, picked_ts TEXT, lost INTEGER, site_lat REAL, site_lon REAL, minerals TEXT,
     tons INTEGER NOT NULL DEFAULT 0, last_ts TEXT);
 -- surface_sites: a collection with no rig marked near it (an unmarked site), kept so a good spot is not lost.
+-- surface_pins (#16, the author 2026-10-17): named points on a body (its system and full name), kept until deleted:
+-- body bookmarks with fly-to guidance. Live-only: never in RESET_JOURNAL_DATA. ord: their order on the body;
+-- reached_ts: arrived at (dimmed, reset by hand)
+CREATE TABLE IF NOT EXISTS surface_pins (
+    id INTEGER PRIMARY KEY, system INTEGER NOT NULL, body TEXT NOT NULL, sysname TEXT, name TEXT NOT NULL,
+    lat REAL NOT NULL, lon REAL NOT NULL, ord INTEGER NOT NULL DEFAULT 0, reached_ts TEXT, created_ts TEXT);
 CREATE TABLE IF NOT EXISTS surface_sites (
     id INTEGER PRIMARY KEY, system INTEGER, body_id INTEGER, body TEXT, lat REAL, lon REAL, minerals TEXT,
     tons INTEGER NOT NULL DEFAULT 0, first_ts TEXT, last_ts TEXT);
@@ -2086,6 +2126,19 @@ def live_event(ts, now=None):
         return (time.time() if now is None else now) - ts_seconds(ts) <= SHUTDOWN_LIVE_S
     except (TypeError, ValueError):
         return False
+
+
+def chat_sender(raw):
+    """A chat message's sender as a name to say: "$cmdr_decorate:#name=Kurbo;" (local chat) and "CMDR Kurbo" become
+    "Kurbo"; an NPC's "$..." localisation key is None."""
+    raw = str(raw or "").strip()
+    m = re.match(r"\$cmdr_decorate:#name=(.*?);?$", raw)
+    if m:
+        raw = m.group(1)
+    elif raw.startswith("$"):
+        return None
+    raw = re.sub(r"(?i)^cmdr\s+", "", raw).strip()
+    return raw or None
 
 
 def second_before(ts):
@@ -2650,6 +2703,8 @@ class Journals:
         # recent moments the page may announce: {seq, ts, kind, ...}; kinds: scan, bio (a body worth a
         # look, priced by State), heat, interdicted, undocked (the undock warning). seq only grows; the page remembers the last it saw.
         self.moments = collections.deque(maxlen=16)
+        self.chat = collections.deque(maxlen=CHAT_KEEP)   # live chat {seq, ts, channel, sender, text, more, mention}
+        self.chat_seq = 0
         self.jump_arrival = None   # the latest hyperspace arrival {id64, name, ts} (auto honk)
         self.supercruise_entry = None   # the latest SupercruiseEntry {id64, ts} (auto-target's danger wait)
         self.last_honk = None      # the latest discovery scan {id64, ts, bodies, progress}
@@ -2703,6 +2758,22 @@ class Journals:
         """A system's own data changed: State rebuilds its rows (dirty) and leaving_summary's cache moves on."""
         self.dirty.add(system)
         self.data_seq += 1
+
+    def handle_chat(self, ev, ts):
+        """ReceiveText (#17): another player's message, live only, never an NPC's or your own; kept for the page in
+        memory only. `mention`: your commander name in it (it gets through an unticked channel and the rate)."""
+        channel = str(ev.get("Channel") or "").lower()
+        if channel not in CHAT_CHANNELS or not live_event(ts):
+            return
+        sender = chat_sender(ev.get("From"))
+        text = " ".join(str(ev.get("Message_Localised") or ev.get("Message") or "").split())
+        me = ((self.commander or {}).get("name") or "").strip()
+        if not sender or not text or (me and sender.lower() == me.lower()):
+            return
+        self.chat_seq += 1
+        mention = bool(me) and re.search(r"(?<![\w])" + re.escape(me) + r"(?![\w])", text, re.I) is not None
+        self.chat.append({"seq": self.chat_seq, "ts": ts, "channel": channel, "sender": sender, "text": text[:CHAT_MAX],
+                          "more": len(text) > CHAT_MAX, "mention": mention})
 
     def moment(self, kind, ts, **kw):
         self.moment_seq += 1
@@ -3148,11 +3219,13 @@ class Journals:
                 set(self.body_touched), set(self.approached), self.brief_key,
                 set(self.regions_said), self.region_entered, self.jumponium, dict(self.sale_run or {}) or None,
                 json.loads(json.dumps(self.burst)), self.uploads.snapshot() if self.uploads else None,
-                json.loads(json.dumps(self.nsp_burst)), json.loads(json.dumps(self.docking_hold)))
+                json.loads(json.dumps(self.nsp_burst)), json.loads(json.dumps(self.docking_hold)), self.chat_seq, list(self.chat))
 
     def restore(self, cp):
         (self.moment_seq, moments, self.last_heat, touched, approached, self.brief_key,
-         regions, self.region_entered, self.jumponium, self.sale_run, self.burst, uploads, self.nsp_burst, self.docking_hold) = cp
+         regions, self.region_entered, self.jumponium, self.sale_run, self.burst, uploads, self.nsp_burst, self.docking_hold,
+         self.chat_seq, chat) = cp
+        self.chat = collections.deque(chat, maxlen=CHAT_KEEP)
         if self.uploads and uploads:
             self.uploads.restore(uploads)
         self.body_touched, self.approached, self.regions_said = set(touched), set(approached), set(regions)
@@ -3402,6 +3475,9 @@ class Journals:
             self.note_sale_dock(name, ev, ts)
         # before the Commander view's fold: its Sessions count a sale's mined part as this works it out (one rule)
         mined = self.note_mined(name, ev, ts) if name in MINED_EVENTS else None
+        if name in CHAT_EVENTS:
+            self.handle_chat(ev, ts)
+            return
         if name in DOCKING_WATCH:
             self.handle_docking(name, ev, ts)
             if name in DOCKING_EVENTS:
@@ -3497,6 +3573,9 @@ class Journals:
             if self.commander is not None and ts > (c.get("shutdown_ts") or ""):
                 c["shutdown_ts"] = ts
                 meta_set(self.db, "commander", c)
+            # the game quit: the Status.json it left (often still "in supercruise") is no longer live (2026-10-17)
+            if self.status_json and (self.status_json.get("ts") or "") <= ts:
+                self.status_json = dict(self.status_json, live=False)
             self.last_shutdown = ts   # an automatic backup, if this quit is live (State decides)
             return
         if name in BODY_EVENTS:
@@ -5014,6 +5093,12 @@ class Journals:
                                 "destination": st.get("Destination"), "gui_focus": st.get("GuiFocus"),
                                 "fire_group": st.get("FireGroup"), "selected_weapon": st.get("SelectedWeapon"),   # the rail's Bio Scanner
                                 "live": True}
+            # the game quit after writing it (the author, 2026-10-17: the game closed in supercruise left a Status.json
+            # that said so, and the Shutdown after it; chatter went on talking): a reading from before the last Shutdown
+            # is not live (kept across restarts in meta commander shutdown_ts)
+            sd = (self.commander or {}).get("shutdown_ts")
+            if sd and isinstance(st.get("timestamp"), str) and st["timestamp"] <= sd:
+                self.status_json["live"] = False
         elif self.status_json:  # game closed or at the menu: keep the last reading, mark it stale
             self.status_json = dict(self.status_json, live=False)
         else:
@@ -7078,6 +7163,8 @@ class State:
         self.sounds = outrider.tts.SoundBank()   # static/sounds.json rendered to WAV for it
         self.speech = None         # outrider.speech.SpeechLines, set at start (None in tests)
         self.crew_noted = set()    # (voice or personality, why) a crew fill-in was logged for: once each per run
+        # space chatter (#15): where you are for it, what keeps it quiet, and since when you have been there (time.time())
+        self._chatter = {"where": None, "why_not": None, "since": None}
         self.honker = None         # outrider.honk.Honker, set at start (None in tests)
         self.simulate = False      # --simulate: the panels act as if the game were running (shown_status)
         self.game_pc = True        # [server] game_pc: False on a server away from the game PC (no keys, devices, clipboard, PC sound)
@@ -7291,6 +7378,10 @@ class State:
         # Road to Riches: the plot under way (as highway_plotting), its task, the arrival whose next system was copied
         self.riches_plotting = None
         self.riches_task = None
+        self.carrier_trip_plotting = None   # #19: {state, from, to, started, error} of the last carrier trip plot
+        self._pin_seen = None   # #16: (the active pin's id, the distance band said last)
+        self._pin_key = None    # #16: the guidance last sent (the page hears of a change)
+        self.carrier_trip_task = None
         self.dock_cache = {}   # the Nearest finder's last Spansh search and permit check (DOCK_CACHE_S)
         # uploads (EDDN, EDSM, Inara: opt-in, off by default; outrider/uploads.py): switched in Settings -> Uploads, which
         # writes [eddn]/[edsm]/[inara] enabled into the config file. senders: {service: async fn(rows)}.
@@ -7390,6 +7481,7 @@ class State:
             "tts": self.speaker.info() if self.speaker else None,
             "style_picks": self.style_picks(),   # S40: each personality's voice and speaker picked in Settings
             "crew": self.crew_summary(),          # the crew: who speaks each alert row, and who cannot (the XO speaks for it)
+            "chatter": self.chatter_summary(),    # space chatter (#15): its settings, where you are for it
             "pad_delay": self.journals.pad_delay,   # [speech] pad_delay: Settings -> Voice
             "voice_memory": self.voice_memory(),  # the voices besides the main one in use, their memory and how many are kept
             "sound_files": self.sounds.info() if self.sounds and self.sounds.own_dir else None,   # your own sounds (S16)
@@ -7430,6 +7522,7 @@ class State:
             "destination": self.destination(),
             "plan_first": self.plan_first(),   # S30: the body you made the suggested order's first stop here
             "moments": self.moments_summary(),
+            "chat": list(self.journals.chat),   # #17: live chat, in memory only (the page reads it aloud if asked)
             "hull": self.journals.hull,
             "modules": self.modules_summary(),
             "last_sale": self.journals.last_sale,
@@ -7474,6 +7567,8 @@ class State:
             "fuel": self.fuel_summary(),
             "ship": self.journals.ship,
             "carrier": self.carrier_summary(),
+            "carrier_trip": self.carrier_trip_summary(),   # #19: a carrier trip planned in Plot Route
+            "pins": self.pins_summary(),   # #16: surface pins (body bookmarks) and the active one's guidance
             "here_star": self.here_star(),
             "codex_recent": self.codex_recent(),
             "tail_error": self.tail_error,
@@ -7754,13 +7849,14 @@ class State:
         return {"mode": h["mode"], "until": h["until"], "left": round(h["until"] - time.time(), 1) if h["until"] else None,
                 "sys": str(h["sys"]) if h["sys"] is not None else None}
 
-    def copilot_action(self, action, words=None, hush=None):
+    def copilot_action(self, action, words=None, hush=None, private=False):
         """A co-pilot request for the speaking window. "hush" is done here: a hold starts a hush until the next jump,
         and another hold (while any hush runs) ends it. `hush`: the mode a voice question set (S32), whose answer the
         page says in place of its own news of that hush."""
         if action == "hush":
             self.set_hush("off" if self.hush_info() else "jump")
-        self.copilot = {"seq": self.copilot["seq"] + 1, "action": action, "words": words, "hush": hush}
+        # private (#17): a replayed chat line, kept private by the speaking window too (sweep 2026-10-17)
+        self.copilot = {"seq": self.copilot["seq"] + 1, "action": action, "words": words, "hush": hush, "private": bool(private)}
         self.bump()
 
     COPILOT_TARGET_DELAY_S = 0.5   # after a single press is known to be one, before the keys (your hands off the controls)
@@ -8201,7 +8297,10 @@ class State:
                 # SRV, on foot: always shows) and an altitude from the average radius (never shows)
                 "down": bool(h["flags"] & (FLAG_IN_SRV | FLAG_LANDED) or h["flags2"] & 1), "alt_avg": bool(h["flags"] & FLAG_ALT_AVG),
                 "sites": self.surface_sites(h["system"], h["body_id"], h), "locations": locs, "bio": self.surface_bio(h),
-                "tags": self.bio_tags_here(h)[:BIO_TAGS_SHOWN]}
+                "tags": tags_shown(self.bio_tags_here(h)),
+                # #16: this body's pins with where each is (the map and the overlay's radar draw them; the active one
+                # guided): the payload's pins.here, also here so the overlay needs no second look
+                "pins": (self.pins_summary()["here"] or {}).get("pins") or []}
 
     def bio_tags_here(self, h):
         """Plants tagged on this body (bio_tags) for species not finished here, nearest first: {species, genus,
@@ -10680,12 +10779,20 @@ class State:
                                  " ORDER BY tons DESC, name", (id64,)):
             mined.setdefault(r["body_id"], []).append({"name": r["name"], "tons": r["tons"], "last": r["last_ts"]})
         codex = {}
-        for r in self.db.execute("SELECT body_id, name, is_new, voucher, entry_id, subcategory FROM codex WHERE system=?", (id64,)):
-            codex.setdefault(r["body_id"], []).append({"name": r["name"], "new": bool(r["is_new"]), "voucher": r["voucher"],
+        seen = {}   # one line per entry and body: the game logs a CodexEntry for each composition scan of a species
+        for r in self.db.execute("SELECT body_id, name, is_new, voucher, entry_id, subcategory FROM codex WHERE system=?"
+                                 " ORDER BY ts", (id64,)):
+            had = seen.get((r["body_id"], r["entry_id"]))
+            if had:
+                had["new"] = had["new"] or bool(r["is_new"])
+                had["voucher"] = max(had["voucher"] or 0, r["voucher"] or 0) or None
+                continue
+            seen[(r["body_id"], r["entry_id"])] = row = {"name": r["name"], "new": bool(r["is_new"]), "voucher": r["voucher"],
                                                        # an organic entry's id: Canonn Bioforge's statistics for it (the
                                                        # category is "Biological and Geological" for both: the
                                                        # subcategory tells a plant from a geyser)
-                                                       "entry_id": r["entry_id"] if "organic" in (r["subcategory"] or "").lower() else None})
+                                                       "entry_id": r["entry_id"] if "organic" in (r["subcategory"] or "").lower() else None}
+            codex.setdefault(r["body_id"], []).append(row)
         odyssey = True
         star_row = self.db.execute("SELECT star_class FROM jumps WHERE id64=? ORDER BY ts DESC LIMIT 1", (id64,)).fetchone()
         star = star_row["star_class"] if star_row else None
@@ -13939,7 +14046,7 @@ class State:
             parts[2] += f" (DRY RUN: built and logged, nothing sent, {outrider.inara.DRY_ENV} is set)"
         elif outrider.inara.dev_mode():
             parts[2] += f" (development mode: {outrider.inara.DEV_ENV} is set)"
-        return "uploads: " + ", ".join(parts) + ("" if self.simulate else " (switched in Settings -> Uploads)")
+        return "uploads: " + ", ".join(parts) + ("" if self.simulate else " (change them in Settings -> Uploads)")
 
     def start_uploads(self):
         """The sending loops (one per service with a sender), and the lease watch, started in run()."""
@@ -14659,6 +14766,62 @@ class State:
     # same thing), its personality the main one; only its name is kept here. The page resolves each line (page.js
     # crewMember / crewVoice); the server says which members cannot speak (crew_fill: the XO speaks for them) and logs it.
     CREW_NAME_MAX = 40
+
+    # ---- space chatter (#15): settings in meta chatter (live-only like meta crew: a re-read keeps it, backups carry it) ----
+
+    def chatter_raw(self):
+        """meta chatter as kept: {on (default off), level (outrider.chatter.LEVELS), off: [roles that take no part]}."""
+        raw = meta_get(self.db, "chatter")
+        raw = raw if isinstance(raw, dict) else {}
+        level = raw.get("level") if raw.get("level") in outrider.chatter.LEVELS else outrider.chatter.LEVEL_DEFAULT
+        off = [r for r in outrider.speech.CREW_IDS if r in (raw.get("off") if isinstance(raw.get("off"), list) else ())]
+        return {"on": raw.get("on") is True, "level": level, "off": off}
+
+    def set_chatter(self, body):
+        """POST /api/voice/chatter: one change ({on}, {level} or {role, takes_part}), for every browser and the tablet.
+        (answer, status): {ok, chatter} (the payload's chatter)."""
+        if not isinstance(body, dict) or not body:
+            return {"error": "expected {on}, {level} or {role, takes_part}"}, 400
+        c = self.chatter_raw()
+        if "on" in body:
+            if not isinstance(body["on"], bool):
+                return {"error": "on must be true or false"}, 400
+            c["on"] = body["on"]
+        elif "level" in body:
+            if body["level"] not in outrider.chatter.LEVELS:
+                return {"error": f"level must be one of {', '.join(outrider.chatter.LEVELS)}"}, 400
+            c["level"] = body["level"]
+        elif "role" in body:
+            role, part = body.get("role"), body.get("takes_part")
+            if not isinstance(role, str) or role not in outrider.speech.CREW_IDS or not isinstance(part, bool):
+                return {"error": "expected {role: a crew station, takes_part: true or false}"}, 400
+            off = (set(c["off"]) - {role}) | (set() if part else {role})
+            c["off"] = [r for r in outrider.speech.CREW_IDS if r in off]
+        else:
+            return {"error": "expected {on}, {level} or {role, takes_part}"}, 400
+        meta_set(self.db, "chatter", c)
+        self.db.commit()
+        self.bump()
+        return {"ok": True, "chatter": self.chatter_summary()}, 200
+
+    def chatter_watch(self, now=None):
+        """Where you are for chatter from the live Status.json (outrider.chatter.where); since when, kept for the
+        page's grace after entering supercruise or stepping out on a planet. Whether that changed (the payload says it)."""
+        st = self.journals.status_json or {}
+        place, why = outrider.chatter.where(st.get("flags"), st.get("flags2"), st.get("gui_focus")) if st.get("live") else (None, None)
+        c = self._chatter
+        if (place, why) == (c["where"], c["why_not"]):
+            return False
+        if place != c["where"]:
+            c["since"] = (time.time() if now is None else now) if place else None
+        c["where"], c["why_not"] = place, why
+        return True
+
+    def chatter_summary(self):
+        """The payload's chatter: the settings and where you are for it ({on, level, off, where, why_not, since}), and
+        since_ago, how long ago since was: the page puts it on its own clock (a tablet's may be minutes off the PC's)."""
+        c = self._chatter
+        return {**self.chatter_raw(), **c, "since_ago": round(max(0.0, time.time() - c["since"]), 1) if c["since"] else None}
 
     def crew_raw(self):
         """meta crew as kept, the malformed left out: {on (default off), danger (default on), members, rows}."""
@@ -16656,6 +16819,296 @@ class State:
         self._rc_copied = None
         return rc
 
+    # ---- surface pins (#16, the author 2026-10-17): named points on a body kept until deleted, one active at a time
+    # (meta pin_active {system, body, id}; else the first not reached, in order), guided from orbit down ----
+    def pins_body(self, system, body):
+        return [dict(r) for r in self.db.execute("SELECT * FROM surface_pins WHERE system=? AND body=? ORDER BY ord, id",
+                                                 (system, body))]
+
+    def pin_active(self, system, body, pins=None):
+        """The pin guided to on this body: the one tapped (not yet reached), else the first not reached."""
+        pins = self.pins_body(system, body) if pins is None else pins
+        a = meta_get(self.db, "pin_active") or {}
+        if a.get("system") == system and a.get("body") == body:
+            p = next((x for x in pins if x["id"] == a.get("id") and not x["reached_ts"]), None)
+            if p:
+                return p
+        return next((x for x in pins if not x["reached_ts"]), None)
+
+    @staticmethod
+    def pin_where(h, p):
+        """{dist (m), bearing, turn (degrees, right positive; None without a heading), way} of pin p from where you are."""
+        d = surface_m(h["lat"], h["lon"], p["lat"], p["lon"], h["radius"])
+        brg = surface_bearing(h["lat"], h["lon"], p["lat"], p["lon"])
+        turn = None if h.get("heading") is None else round(((brg - h["heading"] + 540) % 360) - 180)
+        return {"dist": round(d), "bearing": round(brg) % 360, "turn": turn, "way": which_way(brg, h.get("heading"))}
+
+    def pins_summary(self):
+        """The payload's pins: counts per body of this system (short names: the 📍 in Here and Overview), and on a body
+        with a position (from orbit down), its pins with where each is, the active one marked."""
+        pos, h = self.journals.pos, self.surface_here()
+        out = {"counts": {}, "here": None}
+        if pos:
+            for r in self.db.execute("SELECT body, count(*) AS n FROM surface_pins WHERE system=? GROUP BY body", (pos["id64"],)):
+                out["counts"][short_name(pos.get("name") or "", r["body"])] = r["n"]
+        if h:   # the body you are on, pins or not (sweep 2026-10-17: the legend's first 📍 needs its name)
+            pins = self.pins_body(h["system"], h["name"])
+            act = self.pin_active(h["system"], h["name"], pins) if pins else None
+            rows = [dict(self.pin_where(h, p), id=p["id"], name=p["name"], lat=p["lat"], lon=p["lon"],
+                         reached=bool(p["reached_ts"]), active=bool(act and p["id"] == act["id"])) for p in pins]
+            out["here"] = {"body": h["name"], "pins": rows, "active": next((r for r in rows if r["active"]), None)}
+        return out
+
+    def pins_list(self):
+        """GET /api/pins: every pin, by system and body (Bookmarks' Pins list)."""
+        return {"pins": [{"id": r["id"], "system": str(r["system"]), "sysname": r["sysname"], "body": r["body"],
+                          "short": short_name(r["sysname"] or "", r["body"]), "name": r["name"], "lat": r["lat"], "lon": r["lon"],
+                          "reached": bool(r["reached_ts"])}
+                         for r in self.db.execute("SELECT * FROM surface_pins ORDER BY sysname, body, ord, id")]}
+
+    def pins_post(self, body):
+        """POST /api/pins {action: add {system, sysname, body, name, lat, lon, active?} | here {name} | delete | reset |
+        activate | rename {name} | move {dir: -1 or 1}, with id}: (answer, HTTP status); the answer has that body's pins."""
+        act = body.get("action")
+        name_of = lambda v: " ".join(str(v).split())[:PIN_NAME_MAX] if isinstance(v, str) else ""
+
+        def coord(k, lim):
+            v = body.get(k)
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not -lim <= v <= lim:
+                raise ValueError(f"{'latitude' if k == 'lat' else 'longitude'} must be a number from -{lim} to {lim}")
+            return float(v)
+        if act in ("add", "here"):
+            if act == "here":
+                h = self.surface_here()
+                if not h:
+                    return {"error": "no position on a body here (Status.json gives one from orbital cruise down)"}, 400
+                system, bname, lat, lon = h["system"], h["name"], h["lat"], h["lon"]
+                sysname = (self.journals.pos or {}).get("name")
+            else:
+                sid, bname = str(body.get("system") or ""), name_of(body.get("body") or "")[:200] if isinstance(body.get("body"), str) else ""
+                if not sid.isdigit() or not bname:
+                    return {"error": "give the system (its id64) and the body's full name"}, 400
+                system, sysname = int(sid), name_of(body.get("sysname") or "") or None
+                bname = " ".join(body["body"].split())
+                try:
+                    lat, lon = coord("lat", 90), coord("lon", 180)
+                except ValueError as e:
+                    return {"error": str(e)}, 400
+            n = self.db.execute("SELECT count(*), max(ord) FROM surface_pins WHERE system=? AND body=?", (system, bname)).fetchone()
+            name = name_of(body.get("name")) or f"Pin {(n[0] or 0) + 1}"
+            cur = self.db.execute("INSERT INTO surface_pins (system, body, sysname, name, lat, lon, ord, created_ts) "
+                                  "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (system, bname, sysname, name, lat, lon, (n[1] or 0) + 1,
+                                                                         iso_ts(time.time())))
+            if body.get("active") is True:
+                meta_set(self.db, "pin_active", {"system": system, "body": bname, "id": cur.lastrowid})
+        else:
+            pid = body.get("id")
+            row = self.db.execute("SELECT * FROM surface_pins WHERE id=?", (pid,)).fetchone() \
+                if isinstance(pid, int) and not isinstance(pid, bool) else None
+            if not row:
+                return {"error": "no such pin"}, 404
+            system, bname = row["system"], row["body"]
+            if act == "delete":
+                self.db.execute("DELETE FROM surface_pins WHERE id=?", (pid,))
+            elif act == "reset":
+                self.db.execute("UPDATE surface_pins SET reached_ts=NULL WHERE id=?", (pid,))
+            elif act == "activate":
+                self.db.execute("UPDATE surface_pins SET reached_ts=NULL WHERE id=?", (pid,))
+                meta_set(self.db, "pin_active", {"system": system, "body": bname, "id": pid})
+            elif act == "rename":
+                name = name_of(body.get("name"))
+                if not name:
+                    return {"error": "give the pin a name"}, 400
+                self.db.execute("UPDATE surface_pins SET name=? WHERE id=?", (name, pid))
+            elif act == "move":
+                d = body.get("dir")
+                if d not in (-1, 1):
+                    return {"error": "dir must be -1 or 1"}, 400
+                pins = self.pins_body(system, bname)
+                i = next(k for k, p in enumerate(pins) if p["id"] == pid)
+                j = i + d
+                if 0 <= j < len(pins):
+                    pins[i], pins[j] = pins[j], pins[i]
+                    for k, p in enumerate(pins):
+                        self.db.execute("UPDATE surface_pins SET ord=? WHERE id=?", (k + 1, p["id"]))
+            else:
+                return {"error": "action must be add, here, delete, reset, activate, rename or move"}, 400
+        self.db.commit()
+        self._pin_seen = None   # a change: the active pin is said again ("set")
+        self.bump()
+        return {"ok": True, "pins": [{"id": p["id"], "name": p["name"], "lat": p["lat"], "lon": p["lon"], "reached": bool(p["reached_ts"])}
+                                     for p in self.pins_body(system, bname)]}, 200
+
+    def pin_watch(self):
+        """Each tick: the active pin's guidance. Said (moment "pin", the Navigator's): when it becomes active with you on
+        its body ("set"), as you pass PIN_BANDS, and on arrival (PIN_ARRIVE_M: then the next one is active). True when
+        the page should hear of a new distance or turn (the line under the map moves from orbit down)."""
+        h = self.surface_here()
+        if not h:
+            changed, self._pin_seen, self._pin_key = self._pin_key is not None, None, None
+            return changed
+        pins = self.pins_body(h["system"], h["name"])
+        act = self.pin_active(h["system"], h["name"], pins) if pins else None
+        if not act:
+            changed, self._pin_seen, self._pin_key = self._pin_key is not None, None, None
+            return changed
+        w = self.pin_where(h, act)
+        d, ts = w["dist"], iso_ts(time.time())
+        band = sum(1 for b in PIN_BANDS if d < b)
+        ground = bool(h["flags"] & FLAG_IN_SRV or h["flags2"] & 1)
+        if d <= PIN_ARRIVE_M["ground" if ground else "ship"]:
+            self.db.execute("UPDATE surface_pins SET reached_ts=? WHERE id=?", (ts, act["id"]))
+            nxt = self.pin_active(h["system"], h["name"])
+            nw = self.pin_where(h, nxt) if nxt else None
+            self.journals.moment("pin", ts, what="arrived", name=act["name"], next=dict(nw, name=nxt["name"]) if nxt else None)
+            # the next pin's band as it is now: its way was just said (sweep 2026-10-17: it was said again a tick later)
+            self._pin_seen = (nxt["id"], sum(1 for b in PIN_BANDS if nw["dist"] < b)) if nxt else None
+        elif self._pin_seen is None or self._pin_seen[0] != act["id"]:
+            self._pin_seen = (act["id"], band)
+            self.journals.moment("pin", ts, what="set", name=act["name"], **w)
+        elif band > self._pin_seen[1]:
+            self._pin_seen = (act["id"], band)
+            self.journals.moment("pin", ts, what="near", name=act["name"], **w)
+        step = 10 if d < 1000 else 100 if d < 10000 else 1000
+        key = (act["id"], round(d / step), None if w["turn"] is None else round(w["turn"] / 10))
+        changed, self._pin_key = key != self._pin_key, key
+        return changed
+
+    # ---- carrier trips (#19): Spansh's carrier router, planned in Plot Route, followed on the Carrier tile (meta
+    # carrier_trip: {id, created_ts, request, legs, at (the leg reached), arrived_ts, seen_id64, off, done_ts}; live-only)
+    def carrier_trip_defaults(self):
+        """The plot form's figures from the journal: where the carrier is, its depot, the confirmed tritium in its hold
+        (a sell order) and the capacity in use (which includes that tritium), and its type."""
+        c = self.journals.carrier or {}
+        st = self.carrier_cargo() if c.get("id") is not None else None
+        stats = (st or {}).get("stats") or {}
+        used = stats["used"] + st["after_stats"] if isinstance(stats.get("used"), int) else None
+        line = ((st or {}).get("lines") or {}).get("tritium")
+        hold = line["count"] if line and line.get("state") == "confirmed" else 0
+        return {"from": c.get("system"), "fuel": c.get("fuel") if isinstance(c.get("fuel"), int) else None, "hold": hold,
+                "used": max(used, hold) if used is not None else hold or None,
+                "type": "squadron" if str(c.get("type") or "").lower().startswith("squadron") else "fleet"}
+
+    def carrier_trip_plot(self, body):
+        """POST /api/carrier/trip {to, via?, from?, fuel, hold, used, type}: ask Spansh's carrier router in the
+        background (the payload's carrier_trip.plotting says how it went), (answer, HTTP status)."""
+        if self.carrier_trip_task and not self.carrier_trip_task.done():
+            return {"error": "a carrier trip is being plotted already"}, 409
+        d = self.carrier_trip_defaults()
+        name = lambda v: " ".join(v.split()) if isinstance(v, str) else ""
+        frm, to, via = name(body.get("from")) or d["from"] or "", name(body.get("to")), name(body.get("via"))
+        if not frm:
+            return {"error": "no carrier seen yet: give the system it is in"}, 400
+        if not to or max(len(frm), len(to), len(via)) > FIND_NAME_MAX:
+            return {"error": f"give the destination system (up to {FIND_NAME_MAX} characters)"}, 400
+        kind = body.get("type") or d["type"]
+        if kind not in CARRIER_TYPES:
+            return {"error": "type must be fleet or squadron"}, 400
+        capacity, mass = CARRIER_TYPES[kind]
+
+        def whole(k, lo, hi, default):
+            v = body.get(k, default)
+            if v is None or v == "":
+                v = default
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or v != int(v) or not lo <= v <= hi:
+                raise ValueError(f"{k} must be a whole number from {lo:,} to {hi:,}")
+            return int(v)
+        try:
+            fuel = whole("fuel", 0, outrider.cargo.CARRIER_DEPOT_MAX, d["fuel"] if d["fuel"] is not None else 1000)
+            hold = whole("hold", 0, capacity, d["hold"] or 0)
+            used = whole("used", 0, capacity, d["used"] if d["used"] is not None else hold)
+        except ValueError as e:
+            return {"error": str(e)}, 400
+        if used < hold:
+            return {"error": "the cargo in use includes the tritium in the hold: it cannot be less"}, 400
+        request = {"from": frm, "to": to, "via": via or None, "fuel": fuel, "hold": hold, "used": used, "type": kind}
+        params = {"source": frm, "destinations": tuple(x for x in (via, to) if x), "capacity": capacity, "mass": mass,
+                  "capacity_used": used, "calculate_starting_fuel": 0, "fuel_loaded": fuel, "tritium_stored": hold}
+        self.carrier_trip_plotting = {"state": "running", "from": frm, "to": to, "started": iso_ts(time.time()), "error": None}
+        self.carrier_trip_task = asyncio.get_running_loop().create_task(self._carrier_trip_plot(params, request))
+        self.bump()
+        return {"ok": True, "plotting": self.carrier_trip_plotting}, 202
+
+    async def _carrier_trip_plot(self, params, request):
+        p = self.carrier_trip_plotting
+        try:
+            result = await self.spansh.plot(globals()["SPANSH_FC"], params, method="POST")
+            got = outrider.cargo.carrier_route_legs(result, request["fuel"], request["hold"])
+            if not got:
+                raise HighwayError("Spansh's answer was no carrier route")
+            legs, totals = got
+            c = self.journals.carrier or {}
+            meta_set(self.db, "carrier_trip", {"id": int(time.time() * 1000), "created_ts": iso_ts(time.time()),
+                                               "request": request, "legs": legs, "totals": totals, "at": 0,
+                                               "arrived_ts": None, "seen_id64": c.get("id64"), "off": None, "done_ts": None})
+            self.db.commit()
+            p.update(state="done")
+        except HighwayError as e:
+            p.update(state="failed", error=str(e))
+        except Exception as e:  # noqa: BLE001 -- said on the page rather than lost in a task
+            p.update(state="failed", error=f"{type(e).__name__}: {e}")
+        self.bump()
+
+    def carrier_trip_clear(self):
+        """POST /api/carrier/trip {clear: true}: forget the trip (and stop a plot under way)."""
+        if self.carrier_trip_task and not self.carrier_trip_task.done():
+            self.carrier_trip_task.cancel()
+        self.carrier_trip_plotting = None
+        meta_set(self.db, "carrier_trip", None)
+        self.db.commit()
+        self.bump()
+
+    def carrier_trip_follow(self):
+        """The carrier somewhere new: the trip moves to that leg (a later one skips ahead), the last ends it, anywhere
+        else marks it off course (re-plotted only when asked). True when anything changed."""
+        t = meta_get(self.db, "carrier_trip")
+        c = self.journals.carrier or {}
+        cid = c.get("id64")
+        if not t or cid is None or cid == t.get("seen_id64"):
+            return False
+        if t.get("done_ts"):   # the carrier moved on after the trip's end: it is over (its "complete" was said once)
+            meta_set(self.db, "carrier_trip", None)
+            return True
+        t["seen_id64"] = cid
+        legs, at = t["legs"], t.get("at") or 0
+        hit = lambda i: legs[i].get("id64") == cid or norm_name(legs[i]["system"]) == norm_name(c.get("system") or "")
+        # any leg (sweep 2026-10-17): the start when the trip was planned from elsewhere, the current one after a detour,
+        # a later one skipped to; the nearest ahead first
+        j = next((i for i in range(at, len(legs)) if hit(i)), None)
+        if j is None:
+            j = next((i for i in range(at - 1, -1, -1) if hit(i)), None)
+        if j is None:
+            t["off"] = {"system": c.get("system"), "id64": cid}
+        else:
+            t.update(at=j, arrived_ts=c.get("moved_ts") or iso_ts(time.time()), off=None)
+            if j == len(legs) - 1:
+                t["done_ts"] = iso_ts(time.time())
+        meta_set(self.db, "carrier_trip", t)
+        return True
+
+    def carrier_trip_summary(self):
+        """The payload's carrier_trip: the plot's state, the form's figures, and the trip ({legs, at, n, next, totals,
+        hours, off, done, ready_at (epoch s: the cooldown's end after the last arrival), sure (the journal saw the
+        jump: not only the booked one)}), or None without one."""
+        out = {"plotting": self.carrier_trip_plotting, "defaults": self.carrier_trip_defaults(), "trip": None}
+        t = meta_get(self.db, "carrier_trip")
+        if not t:
+            return out
+        legs, at = t["legs"], t.get("at") or 0
+        c = self.journals.carrier or {}
+        ready = None
+        if at and t.get("arrived_ts") and not t.get("done_ts"):
+            try:
+                ready = ts_seconds(t["arrived_ts"]) + CARRIER_COOLDOWN_S
+            except (TypeError, ValueError):
+                ready = None
+        n = len(legs) - 1
+        out["trip"] = {"id": t["id"], "legs": legs, "at": at, "n": n, "next": legs[at + 1] if at < n else None,
+                       "totals": t.get("totals"), "hours": round((n - at) * CARRIER_LEG_S / 3600, 1),
+                       "request": t.get("request"), "off": t.get("off"), "done": bool(t.get("done_ts")),
+                       "ready_at": ready, "sure": not c.get("assumed")}
+        return out
+
     def riches_clear(self):
         """POST /api/riches/clear: forget the route (and stop a plot under way)."""
         if self.riches_task and not self.riches_task.done():
@@ -17640,7 +18093,8 @@ class State:
         mtimes_before = dict(route_mtimes)
         # the error shown is this tick's: a row that failed to build sets it again below, and stays visible
         last_error, self.tail_error = self.tail_error, None
-        seq_before = self.journals.moment_seq
+        seq_before, chat_before = self.journals.moment_seq, self.journals.chat_seq
+        pins_before = (self._pin_seen, self._pin_key)   # #16: rolled back with the moments it raised (sweep 2026-10-17)
         try:
             late = None
             for d in LIVE_DIRS:
@@ -17681,7 +18135,8 @@ class State:
                     gist = lambda st: st and (round(st.get("fuel_main") or 0, 1), st.get("flags"), st.get("flags2"),
                                               st.get("body"), json.dumps(st.get("destination")), st.get("live"),
                                               st.get("selected_weapon"))
-                    if gist(self.journals.status_json) != gist(before):
+                    moved = self.chatter_watch()   # every read: the one that changes the flags most of all
+                    if gist(self.journals.status_json) != gist(before) or moved:
                         self.bump()
                     sm = self.sampling_summary()
                     skey = sm and (sm.get("clear"), (sm.get("to_go") or 0) // 10, sm.get("samples"), bool(sm.get("elsewhere")))
@@ -17692,7 +18147,12 @@ class State:
                         self.bump()
             if self.journals.offsets:   # a first journal read at last (S43): its banner goes
                 self.notices.clear("no_journal_files")
-            if self.journals.settle_carrier(time.time()):
+            settled = self.journals.settle_carrier(time.time())
+            if self.carrier_trip_follow() or settled:   # #19: the trip follows the carrier (both always run)
+                self.bump()
+            if self.pin_watch():   # #16: the active pin's distance and turn, said at its bands and on arrival
+                self.bump()
+            if self.chatter_watch():   # #15: every tick, not only on a Status.json read: a Shutdown silences it (2026-10-17)
                 self.bump()
             self.uploads_hub.idle()   # EDDN: a companion file written after its line, signals after a quiet spell
             self.rail_device()
@@ -17721,7 +18181,8 @@ class State:
                     self.follow_up_failed(name, e)
             # a new moment (approach, left body, FSD supercharged...) is a call-out: the long poll answers now,
             # not at the next unrelated bump
-            if self.tail_error != last_error or self.journals.moment_seq != seq_before:
+            # #17: so is another player's message (sweep 2026-10-17: a chat-only tick waited for an unrelated bump)
+            if self.tail_error != last_error or self.journals.moment_seq != seq_before or self.journals.chat_seq != chat_before:
                 self.bump()
         except Exception as e:
             # Never let one bad line, a locked database or a malformed NavRoute stop the
@@ -17739,6 +18200,7 @@ class State:
                 self.journals.new_sales = sales
             if not committed:   # the lines are read again: their moments and codex counts must not double
                 self.journals.restore(cp)
+                self._pin_seen, self._pin_key = pins_before   # #16: the retry says what was lost with them
                 route_mtimes.clear()
                 route_mtimes.update(mtimes_before)
             self.tail_error = f"{type(e).__name__}: {e}"
@@ -19163,6 +19625,27 @@ def make_app(state, hosts=None):
         state.riches_clear()
         return web.json_response({"ok": True})
 
+    async def pins_view(request):
+        """#16: GET every surface pin (Bookmarks), POST a change (pins_post)."""
+        if request.method == "GET":
+            return web.json_response(state.pins_list())
+        body = await json_object(request)
+        if body is None:
+            return web.json_response({"error": "expected a JSON object"}, status=400)
+        out, status = state.pins_post(body)
+        return web.json_response(out, status=status)
+
+    async def carrier_trip_view(request):
+        """#19: plot a carrier trip with Spansh's carrier router (in the background), or {clear: true} to forget it."""
+        body = await json_object(request)
+        if body is None:
+            return web.json_response({"error": "expected a JSON object"}, status=400)
+        if body.get("clear") is True:
+            state.carrier_trip_clear()
+            return web.json_response({"ok": True})
+        out, status = state.carrier_trip_plot(body)
+        return web.json_response(out, status=status)
+
     async def highway_autotarget_view(request):
         """The Highway tab's auto-target toggle and delay: {enabled?: bool, delay?: seconds 0-60}."""
         body = await json_object(request)
@@ -19266,7 +19749,7 @@ def make_app(state, hosts=None):
             return None
         return n if n is not None and n >= 0 else None
 
-    async def synth(sp, text, speed, voice, speaker=None, role=None):
+    async def synth(sp, text, speed, voice, speaker=None, role=None, private=False):
         """A line as WAV from Piper, or None (the page then uses browser speech for it). `speed` and `voice` as
         the page sent them: a personality's own voice only if installed, so a name from the page never downloads.
         `speaker`: one of that voice's people (the voice lab's try, a personality's, S40); None: the one picked for it.
@@ -19295,11 +19778,14 @@ def make_app(state, hosts=None):
                 if why:
                     state.crew_note(role, v, why)
                     v = who = None
-            return sp.say(text, speed, v) if who is None else sp.say(text, speed, v, who)
+            # private (#17, another player's chat): never in the voice's cache, never in the log
+            kw = {"keep": False} if private else {}
+            return sp.say(text, speed, v, **kw) if who is None else sp.say(text, speed, v, who, **kw)
         try:
             return await asyncio.get_running_loop().run_in_executor(None, make)
         except Exception as e:  # noqa: BLE001 -- a line Piper cannot speak: the page uses browser speech for it
-            print(f"spoken alerts: could not speak {text[:60]!r}: {type(e).__name__}: {e}", file=sys.stderr)
+            print(f"spoken alerts: could not speak {'a chat message' if private else repr(text[:60])}: {type(e).__name__}"
+                  + ("" if private else f": {e}"), file=sys.stderr)
             return None
 
     async def say_view(request):
@@ -19309,7 +19795,7 @@ def make_app(state, hosts=None):
         if not sp or not sp.ready or not text.strip():
             return web.json_response({"error": "no Piper voice ready" if text.strip() else "no text"}, status=503)
         audio = await synth(sp, text, request.query.get("speed"), request.query.get("voice"), request.query.get("speaker"),
-                            request.query.get("role"))
+                            request.query.get("role"), private=request.query.get("private") == "1")
         if not audio:
             return web.json_response({"error": "no Piper voice ready"}, status=503)
         return web.Response(body=audio, content_type="audio/wav", headers={"Cache-Control": "no-store"})
@@ -19320,7 +19806,8 @@ def make_app(state, hosts=None):
         """Synthesise the next queued line ({text, voice, speed}) into Speaker's cache while the current one plays, so
         it starts at once (review S11). Called only once the current line's audio exists: a warm-up that took the
         voice's lock first would make the line being said wait for it. Fire and forget: a failure costs nothing."""
-        if not isinstance(d, dict) or not isinstance(d.get("text"), str) or not d["text"].strip() or not sp or not sp.ready:
+        if not isinstance(d, dict) or not isinstance(d.get("text"), str) or not d["text"].strip() or not sp or not sp.ready \
+                or d.get("private"):   # #17: another player's chat is never made ahead into the cache
             return None
         t = asyncio.get_running_loop().create_task(synth(sp, outrider.tts.clip_text(d["text"]), d.get("speed"), d.get("voice"),
                                                          d.get("speaker"), d.get("role")))
@@ -19383,7 +19870,8 @@ def make_app(state, hosts=None):
         if line is None:
             return web.json_response({"error": "another line is playing"}, status=409)
         try:
-            audio = await synth(sp, text, body.get("speed"), body.get("voice"), body.get("speaker"), body.get("role"))
+            audio = await synth(sp, text, body.get("speed"), body.get("voice"), body.get("speaker"), body.get("role"),
+                                private=body.get("private") is True)
             if not audio:
                 return web.json_response({"error": "no Piper voice ready"}, status=503)
             prefetch(sp, body.get("next"))   # the page's next line, made while this one plays
@@ -19611,7 +20099,8 @@ def make_app(state, hosts=None):
         words = body.get("words")
         if body["action"] == "replay" and not (isinstance(words, str) and words.strip()):
             return web.json_response({"error": "replay needs the words"}, status=400)
-        state.copilot_action(body["action"], outrider.tts.clip_text(words) if body["action"] == "replay" else None)
+        state.copilot_action(body["action"], outrider.tts.clip_text(words) if body["action"] == "replay" else None,
+                             private=body.get("private") is True)
         return web.json_response({"ok": True, "seq": state.copilot["seq"]})
 
     async def autohonk_test_view(_):
@@ -19799,6 +20288,15 @@ def make_app(state, hosts=None):
         if body.get("voice") is not None and (not state.speaker or not state.speaker.available):
             return web.json_response({"error": "Piper is not installed"}, status=503)
         out, status = state.set_crew(body)
+        return web.json_response(out, status=status)
+
+    async def voice_chatter_view(request):
+        """POST /api/voice/chatter (#15): one change to space chatter for every browser and the tablet ({on}, {level} or
+        {role, takes_part}: State.set_chatter). Behind request_guard and the sign-in like POST /api/voice/crew."""
+        body = await json_object(request)
+        if body is None:
+            return web.json_response({"error": "expected a JSON object"}, status=400)
+        out, status = state.set_chatter(body)
         return web.json_response(out, status=status)
 
     async def speaker_audio_view(request):
@@ -20167,6 +20665,9 @@ def make_app(state, hosts=None):
     app.router.add_get("/api/riches", riches_view)
     app.router.add_post("/api/riches/plot", riches_plot_view)
     app.router.add_post("/api/riches/clear", riches_clear_view)
+    app.router.add_post("/api/carrier/trip", carrier_trip_view)
+    app.router.add_get("/api/pins", pins_view)
+    app.router.add_post("/api/pins", pins_view)
     app.router.add_post("/api/highway/clear", highway_clear_view)
     app.router.add_post("/api/highway/autotarget", pc_only(highway_autotarget_view))
     app.router.add_post("/api/highway/autotarget/test", pc_only(highway_autotarget_test_view))
@@ -20179,6 +20680,7 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/voice", voice_view)
     app.router.add_post("/api/voice/style", voice_style_view)
     app.router.add_post("/api/voice/crew", voice_crew_view)
+    app.router.add_post("/api/voice/chatter", voice_chatter_view)
     app.router.add_get("/api/voices/catalogue", voice_catalogue_view)
     app.router.add_get("/api/voices/speakers", voice_speakers_view)
     app.router.add_post("/api/voices/download", voice_download_view)
@@ -20848,7 +21350,9 @@ async def run(args, st):
                               "holding Journal.*.log, usually '<Saved Games>/Frontier Developments/Elite Dangerous'), or "
                               "pass --journals PATH or set ED_JOURNALS.", action=None if docker else "open:server:journals")
     else:
-        print("journals: " + ", ".join(LIVE_DIRS) + (f"  (legacy: {', '.join(LEGACY_DIRS)})" if LEGACY_DIRS else ""))
+        print("journals: " + ", ".join(LIVE_DIRS))
+        if LEGACY_DIRS:
+            print("older journals: " + ", ".join(LEGACY_DIRS) + " (imported once)")
         for i, line in enumerate(nfs_cache_warnings(LIVE_DIRS)):
             outrider.notices.warn(f"nfs{i}", line)
     problem = listen_problem(args.host, args.port)
@@ -20887,7 +21391,7 @@ async def run(args, st):
     starting = Starting(st["password"], resolve_game_pc(st["game_pc"])[0], outrider.serverlog.ACTIVE, stop)
     starting_runner = await serve_starting(starting, hosts, args.host, args.port)
     shown = "127.0.0.1" if args.host in WILDCARD_HOSTS else _host_name(args.host)
-    print(f"starting: http://{shown}:{args.port}/ shows the progress until the page is ready")
+    print(f"starting: open http://{shown}:{args.port}/ to watch the start-up")
 
     async def stopped_starting(what):
         """A stop before the page was served: what is read is committed; the rest is read at the next start."""
@@ -20936,7 +21440,7 @@ async def run(args, st):
                     journals.last_event_ts = tail.rsplit(b'"timestamp":"', 1)[-1][:20].decode("ascii", "replace")
                     meta_set(db, "last_event_ts", journals.last_event_ts)
     n = db.execute("SELECT count(*) FROM visits").fetchone()[0]
-    print(f"journals up to date in {time.time() - t:.1f}s: {n} systems visited")
+    print(f"journals: up to date in {time.time() - t:.1f} s, {n:,} systems visited")
     if journals.pos:
         print(f"current system: {journals.pos['name']}")
     elif LIVE_DIRS:
@@ -20991,7 +21495,7 @@ async def run(args, st):
               "playing on this PC are off")
     state.player = outrider.tts.LinePlayer(st["server_player"])
     state.sounds.own_dir = st["sound_dir"] or None
-    print("playing on this PC (the page's tick): " + (state.player.name or (
+    print("spoken alerts: played on this PC with " + (state.player.name or (
         "off ([speech] server_player)" if state.player.choice == "off" else
         f"{st['server_player']} not found" if state.player.choice != "auto" else
         "no player found (pw-play, paplay, aplay or ffplay)")))
@@ -21018,7 +21522,7 @@ async def run(args, st):
     if state.autohonk["enabled"]:
         state.honker.open()
     print("auto honk: " + (state.honker.status if state.autohonk["enabled"] else "off")
-          + (" (the D-Scanner must be on primary fire)" if state.honker.ready else ""))
+          + ("; the D-Scanner must be on primary fire" if state.honker.ready else ""))
     button_task = None
     if st["copilot"]["enabled"]:   # read-only: never grabs the device, never presses anything
         cp = st["copilot"]
@@ -21047,14 +21551,14 @@ async def run(args, st):
         state.highway_cfg["autotarget"] = False
     if state.highway_cfg["autotarget"] and state.honker.available and not state.highway_cfg["autotarget_dry_run"]:
         state.honker.open("target")
-    print("highway clipboard: " + (f"{state.clipboard.tool} (the next system is copied on arriving at a route system)"
+    print("highway clipboard: " + (f"{state.clipboard.tool} (copies the next system when you arrive at a route system)"
                                    if state.clipboard.tool and state.clipboard.enabled else
                                    "off ([highway] clipboard)" if not state.clipboard.enabled else
                                    "neither wl-copy nor xclip found"))
     print("highway auto-target: " + ("off" if not state.highway_cfg["autotarget"] else state.autotarget_info()["status"]))
     if state.game_window is not None and state.targeter.available:
         fw = state.game_window.why_not()
-        print("auto-target: " + ("brings the game to the front itself before its keys" if fw is None
+        print("auto-target: " + ("brings the game window to the front before pressing keys" if fw is None
                                  else f"cannot bring the game to the front ({fw}): click into the game during the countdown"))
     bg = state.highway_background()
     if bg["name"]:
@@ -21062,7 +21566,7 @@ async def run(args, st):
               (f" cannot be shown: {bg['why']}" if bg["why"] else ""))
     state.speech =outrider.speech.SpeechLines(st["speech_file"])
     sp = state.speech.info()
-    print(f"spoken alerts: wording from {sp['file']}" if sp["version"] else f"spoken alerts: {sp['error']}")
+    print(f"spoken alerts: lines from {sp['file']}" if sp["version"] else f"spoken alerts: {sp['error']}")
     if not sp["version"]:
         notices.set("speech", f"Spoken alerts: {sp['error']}", action="open:log")
     for msg in sp["problems"]:
@@ -21112,17 +21616,17 @@ async def run(args, st):
             outrider.notices.warn("overlay_bind", f"cannot listen on 127.0.0.1:{args.port} for the in-game overlay window: "
                                   f"{e.strerror or e}")
     # a wildcard address is not a place a browser can go (and not a name the Host check answers): loopback is (shown)
-    print(f"serving on http://{shown}:{args.port}/  (Ctrl-C to stop)")
+    print(f"serving on http://{shown}:{args.port}/ (Ctrl-C to stop)")
     # the automatic backup that covers crashes (no Shutdown event, so no quit backup): at start, when due
     if backup_due(meta_get(db, "last_backup"), BACKUP_EVERY_DAYS):
         print(f"backup: the last one is older than {BACKUP_EVERY_DAYS:g} day{'' if BACKUP_EVERY_DAYS == 1 else 's'}, "
               f"backing up to {BACKUP_DIR}")
         state.start_backup(auto=True)
     if args.host not in ("127.0.0.1", "localhost", "::1"):
-        print("note: the page is reachable from other machines on your network" + (
-            " (they sign in with [server] password)" if state.password else " (no password set: see below)"))
-        print("  it answers to any IP address, and by name only to these (add others to [server] allowed_hosts): "
-              + ", ".join(sorted(h for h in hosts if h.endswith(f":{args.port}"))))
+        print("network: other machines on your network can open the page" + (
+            " (they sign in with [server] password)" if state.password else " (no password set: see the warning below)"))
+        print("network: it answers to any IP address, and by name to " + ", ".join(sorted(h for h in hosts if h.endswith(f":{args.port}")))
+              + " (add others to [server] allowed_hosts)")
     for i, line in enumerate(exposure_warnings(args.host, state.password, st["allowed_hosts"])):
         outrider.notices.warn(f"network{i}", line, action="open:server")
     # stop as on Ctrl-C when asked to (SIGTERM: docker stop, systemd, verify.sh; set up above): the same cleanup below,
@@ -21254,8 +21758,10 @@ def main(argv=None):
     serving = not (args.write_config or args.list_backups or args.restore is not None or args.install_service
                    or args.uninstall_service)
     # Outrider's own log (S5b): the server's lines from here on, for Show log and <db dir>/outrider.log (opened in
-    # run()); put back when main() ends, so a test calling it leaves nothing behind
-    restore_streams = outrider.serverlog.install() if serving else None
+    # run()); put back when main() ends, so a test calling it leaves nothing behind. The terminal's lines start with
+    # the time, their subjects lined up (outrider.serverlog.Console; no times under systemd, whose journal has its own)
+    console = outrider.serverlog.Console(times=not os.environ.get("JOURNAL_STREAM"))
+    restore_streams = outrider.serverlog.install(console=console) if serving else None
     restart = None
     try:
         restart = main_with(args, serving)

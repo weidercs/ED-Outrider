@@ -580,6 +580,18 @@ class SampleSpacing(unittest.TestCase):
         self.organic("2026-01-01T00:13:00Z", "Analyse")
         self.assertEqual([t["genus"] for t in self.state.bio_tags_here(h)], ["Bacterium"])
 
+    def test_the_tags_sent_keep_every_species(self):
+        """The payload's tags (tags_shown): past the cap, each species' nearest usable tag still goes, so the map keeps it
+        at the rim (Kurbo26's fix, which only the nearest 40 defeated: sweep 2026-10-16); the rest nearest first."""
+        tag = lambda sp, d, usable=True: {"species": sp, "dist": d, "usable": usable}
+        tags = sorted([tag("Tussock Pennata", 10 + i) for i in range(45)] + [tag("Bacterium Acies", 900, False),
+                      tag("Bacterium Acies", 2500), tag("Stratum Tectonicas", 4000)], key=lambda t: t["dist"])
+        sent = ed_outrider.tags_shown(tags)
+        self.assertEqual(len(sent), ed_outrider.BIO_TAGS_SHOWN)
+        self.assertEqual([(t["species"], t["dist"]) for t in sent[-2:]], [("Bacterium Acies", 2500), ("Stratum Tectonicas", 4000)])
+        self.assertEqual(sent, sorted(sent, key=lambda t: t["dist"]))
+        self.assertEqual(ed_outrider.tags_shown(tags[:5]), tags[:5])   # under the cap: all of them
+
     def test_variantless_species_and_the_logs_own_entry(self):
         """Review of plugin gaps: Brain Trees, Anemones, Tubers... have no number or variant in their codex code, so they
         were never tagged (found by name in the rules now); and the codex entry a first Log writes (the same second)

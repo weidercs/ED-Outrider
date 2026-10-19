@@ -114,6 +114,8 @@ class OverlayRunner:
         try:
             for raw in iter(stream.readline, b""):
                 line = raw.decode("utf-8", "replace").rstrip()
+                if line.startswith("overlay: "):   # its own name, for when it runs by itself: said once here
+                    line = line[len("overlay: "):]
                 if line:
                     self.log(f"overlay window: {line}")
         except (OSError, ValueError):   # the pipe closed under us

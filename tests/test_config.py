@@ -1134,8 +1134,9 @@ class ToolingSafety(unittest.TestCase):
 
             async def no_server(args, st):
                 print("server would start")
+            # JOURNAL_STREAM (as under systemd): the terminal's lines as printed, no date line or times before them
             with unittest.mock.patch.object(ed_outrider, "run", no_server), contextlib.redirect_stdout(out), \
-                    contextlib.redirect_stderr(out):
+                    contextlib.redirect_stderr(out), unittest.mock.patch.dict(os.environ, {"JOURNAL_STREAM": "1"}):
                 ed_outrider.main(argv[:-1])
             out.flush()
             lines = out.buffer.getvalue().decode("utf-8").splitlines()

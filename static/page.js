@@ -3,7 +3,8 @@
 // the config file's [defaults] (data.defaults) where the page asks for one. Only SETTINGS_KEYS are shared:
 // per-device ones (the view, layouts, the search form, which screen speaks) never are. ed_outrider.py has the
 // same list (BROWSER_SETTINGS).
-const SETTINGS_KEYS = ["alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechNames", "speechSpeed",
+const SETTINGS_KEYS = ["alerts", "alertSound", "alertSpeak", "speech", "speechStyles", "speechMix", "speechNames", "chatterNames",
+  "chatRead", "chatChannels", "chatHeader", "chatMuted", "speechSpeed",
   "speechProfanity", "speechProfanityPct", "speechDangerBusiness", "speechShift", "sayBio", "sayGeo", "sayHazard",
   "sayMapped", "honkAnnounce", "sound", "unsoldCfg", "highlightCfg", "bioMinCfg", "maxBonus", "codexNewCounts",
   "highG", "streakCfg", "skipFloor", "sort", "sorts", "showVisited", "showExplored", "oneJump", "map",
@@ -15,7 +16,8 @@ const serverSettings = () => { const s = typeof window !== "undefined" && window
 // the personalities would otherwise throw in every spoken alert. A value of the wrong type reads as unset.
 const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
 const SETTING_SHAPES = {alerts: isObj, alertSound: isObj, alertSpeak: isObj, speechStyles: Array.isArray, unsoldCfg: isObj,
-  highlightCfg: isObj, streakCfg: isObj, sorts: isObj, map: isObj, log: isObj, bioSort: isObj, surfaceCfg: isObj, highway: isObj};
+  highlightCfg: isObj, streakCfg: isObj, sorts: isObj, map: isObj, log: isObj, bioSort: isObj, surfaceCfg: isObj, highway: isObj,
+  chatChannels: Array.isArray, chatMuted: Array.isArray};
 // null is a fine value for a plain setting (a reset stores it: "follow the default"), but a key with a shape is
 // read as an object or list at start-up, so a null there reads as unset too (else `lSaved.days` stops the script)
 const settingOk = (k, v) => !SETTING_SHAPES[k] || SETTING_SHAPES[k](v);
@@ -420,12 +422,12 @@ const CARRIER_BURN_TITLE = "the game's fuel formula, checked against real carrie
 const carrierBurnTitle = f => CARRIER_BURN_TITLE + (!f ? "; your carrier's own jumps check it once 3 are measured (your journals hold none yet)" :
   `; checked against your carrier's last ${f.n} jumps: ${f.k === 1 ? "no correction needed" : `scaled ×${f.k}`}${f.raw !== f.k ? ` (they measured ×${f.raw}, held to 0.8–1.2)` : ""}` +
   " (tritium other players donate is not in your journal: such a jump reads low)");
+// short on the tile (the author, 2026-10-18: the line was too long for it): ", ≈21 t" and "· 632 t short", the rest in hovers
 const carrierTripHtml = (t, f) => !t ? "" :
-  ` · <span title="equal jumps of up to 500 ly in a straight line (the real trip is never shorter), each lighter than the last; ${esc(carrierBurnTitle(f))}">≈ <b>${t.burn.toLocaleString()} t</b> tritium</span>` +
-  (t.short ? ` · <span class="${t.covered ? "warnc" : "noscoop"}" title="${!t.covered ? "the depot and the confirmed tritium in its hold (a sell order) do not cover the trip"
+  `, <span title="the tritium for its trip to you: equal jumps of up to 500 ly in a straight line (the real trip is never shorter), each lighter than the last; ${esc(carrierBurnTitle(f))}">≈${t.burn.toLocaleString()} t</span>` +
+  (t.short ? ` · <span class="${t.covered ? "warnc" : "noscoop"}" title="the depot holds ${t.depot.toLocaleString()} t: ${!t.covered ? "it and the confirmed tritium in its hold (a sell order) do not cover the trip"
     : t.top_up === "on_the_way" ? `the ${t.hold.toLocaleString()} t of tritium on a sell order in its hold covers it, but the depot holds 1,000 t: fill it before the jumps and top it up again on the way`
-    : `the ${t.hold.toLocaleString()} t of tritium on a sell order in its hold covers it: move it into the depot before the jumps`}">depot ${t.depot.toLocaleString()} t: ${t.short.toLocaleString()} t short${
-    !t.covered ? "" : t.top_up === "on_the_way" ? ", enough if topped up on the way" : ", enough after topping up"}</span>` : "");
+    : `the ${t.hold.toLocaleString()} t of tritium on a sell order in its hold covers it: move it into the depot before the jumps`}">${t.short.toLocaleString()} t short</span>` : "");
 // a booked jump's burn and the depot after it (S13 A)
 const carrierPlanBurn = (pl, f) => pl.burn == null ? "" : ` ≈ <span title="${esc(carrierBurnTitle(f))}">${pl.burn} t</span>; ` +
   (pl.depot_after < 0 ? `<span class="noscoop">depot ${-pl.depot_after} t short</span>` : `depot after ≈ ${pl.depot_after.toLocaleString()} t`);
@@ -435,8 +437,8 @@ function carrierServicesHtml(c) {
   const sus = c.suspended || [], title = "suspended in the carrier's management: it costs less upkeep, but serves no one";
   const off = label => `${esc(label)} <span class="noscoop" title="${title}">✗</span>`;
   const one = (on, label) => on ? `${label} ✓` : sus.includes(label) ? off(label) : `no ${label}`;
-  const others = sus.filter(x => x !== "UC" && x !== "Vista");
-  return `${one(c.has_uc, "UC")} · ${one(c.has_vista, "Vista")}` + others.map(x => ` · ${off(x)}`).join("");
+  // only UC and Vista: on-board selling is all that matters here (the author, 2026-10-17: the redemption office... dropped)
+  return `${one(c.has_uc, "UC")} · ${one(c.has_vista, "Vista")}`;
 }
 // the carrier's balance and the weeks of upkeep it pays (S61): amber under UPKEEP_WARN_WEEKS (outrider.cargo); the
 // rates are the published ones until checked against the game's Finance screen, and the title says so
@@ -447,7 +449,7 @@ function carrierFinanceHtml(fi) {
   // the line says only "~N wks upkeep" (the author, 2026-10-14); how old the stats are goes in the title
   const title = `balance ${crSign(fi.balance)} cr · reserve ${crSign(fi.reserve)} cr · available ${crSign(fi.available)} cr, from the carrier's last stats (${(fi.ts || "").slice(0, 10)}${old ? `: as of ${shortDay(fi.ts)}` : ""}: opening its management writes them).` +
     (fi.upkeep ? ` Upkeep ≈ ${credits(fi.upkeep)} cr a week at the published rates (the core and each service, a suspended one at its lower rate), not yet checked against the game's carrier Finance screen: the journal has no upkeep figure. Upkeep is drawn from the balance each week.` : "");
-  return `<span id="carrierFin" class="${fi.warn ? "warnc" : ""}" title="${esc(title)}">balance <b>${crSign(fi.balance)}</b>` +
+  return `<span id="carrierFin" class="${fi.warn ? "warnc" : ""}" title="${esc(title)}">Balance <b>${crSign(fi.balance)}</b>` +
     (w != null ? ` · ~<b>${w < 10 ? w.toFixed(1) : Math.floor(w).toLocaleString()}</b> wks upkeep` : "") + `</span>`;
 }
 function renderCarrier() {
@@ -478,12 +480,13 @@ function renderCarrier() {
     const jr = effRange(), f = data.fuel;
     const mine = jr ? jumpsFor(c.distance) : null, theirs = c.trip ? c.trip.jumps : Math.ceil(c.distance / (c.jump_range || 500));
     const tank = f && f.jumps_max != null ? f.jumps_max : null;
-    meet = (mine != null ? `you → it ≈ <b>${mine}</b> jump${mine === 1 ? "" : "s"}` +
-             (tank != null ? ` <span class="${tank < mine ? "warnc" : "unk"}" title="jumps at max range your tank covers now">(tank ${tank})</span>` : "") : "") +
-           ` · it → you ≈ <b>${theirs}</b> carrier jump${theirs === 1 ? "" : "s"}` + carrierTripHtml(c.trip, c.burn_factor);
+    // "To it 1 jump · to you 1, ≈21 t" (the author, 2026-10-18): your jumps to it (amber when the tank covers fewer),
+    // its carrier jumps to you and their tritium; the counts are straight-line lower bounds
+    meet = (mine != null ? `<span class="${tank != null && tank < mine ? "warnc" : ""}" title="about ${mine} jump${mine === 1 ? "" : "s"} for you to reach it${tank != null ? `; your tank covers ${tank} at max range now` : ""}">To it <b>${mine}</b> jump${mine === 1 ? "" : "s"}</span> · ` : "") +
+           `<span title="about ${theirs} carrier jump${theirs === 1 ? "" : "s"} for it to reach you">to you <b>${theirs}</b></span>` + carrierTripHtml(c.trip, c.burn_factor);
   }
   let plan = "";
-  const pl = c.planned;
+  const pl = c.planned, trip = carrierTripNow();
   if (pl && pl.departure) {
     const left = (Date.parse(pl.departure) - Date.now()) / 1000;
     const mmss = t => t >= 3600 ? `${Math.floor(t / 3600)} h ${Math.floor(t % 3600 / 60)} min` : `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
@@ -504,15 +507,114 @@ function renderCarrier() {
   const tr = c.tritium;
   const dcLine = dc ? `<span class="noscoop" title="cancel it in the carrier's management until then">Decommissioning: scrapped ${esc(shortDay(dc.scrap_ts || ""))}` +
     `${dc.refund ? ` · ${credits(dc.refund)} cr back` : ""}</span>` : "";
-  cl.innerHTML = val(mk("fleet-carrier") + esc(c.name), esc(c.callsign || "")) + ln(dcLine) + ln(where) + ln(meet) + ln(plan) +
-    ln(carrierServicesHtml(c) +
-       (tr ? ` · Tritium in Depot: <b>${tr.depot.toLocaleString()} t</b>` : c.fuel != null ? ` · ${c.fuel} t tritium` : "")) +
-    ln(carrierFinanceHtml(c.finance)) +
-    (tr ? `<div class="ln" id="carrierTrit" title="Total 500 ly Jumps Available: the jumps all your tritium gives at 500 ly, if the depot is topped up from the hold as it runs low">` +
-          `Total Tritium: <b>${tr.total.toLocaleString()} t</b>${tr.jumps != null ? ` (<b>${tr.jumps.toLocaleString()}</b> jumps)` : ""}</div>` : "");
+  // the tile, tightened (the author, 2026-10-17): the name, where, one movement line (a carrier trip, else a booked jump,
+  // else the meeting line), "UC ✓ · Vista ✓ · Tritium: depot/total", the balance and upkeep
+  const move = trip ? carrierTripLineHtml(trip, pl, c) : plan || meet;
+  const depot = tr ? tr.depot : c.fuel;
+  const nextFuel = trip && trip.next && !trip.off ? trip.next.fuel : null, low = nextFuel != null && depot != null && depot < nextFuel;
+  const tritTitle = (tr && tr.jumps != null ? `${tr.jumps.toLocaleString()} jumps of 500 ly with all of it, the depot topped up from the hold as it runs low` : "the depot (the carrier's tank)") +
+    (trip && trip.totals ? `; the trip needs ${trip.totals.need.toLocaleString()} t` + (trip.totals.short ? `, ${trip.totals.short.toLocaleString()} t more than you have: buy it before you set out` : "") : "") +
+    (low ? `; the depot will not pay for the next leg (${nextFuel} t): move tritium from the hold into the depot first (carrier management)` : "");
+  const trit = depot == null ? "" : ` · <span id="carrierTrit" title="${esc(tritTitle)}">Tritium: <b>${depot.toLocaleString()}t</b>${tr ? `/${tr.total.toLocaleString()}t` : ""}${low ? ` <span class="warnc">⚠</span>` : ""}</span>`;
+  drawFcTrip();
+  if (typeof hForm !== "undefined" && hwyPlotter() === "carrier") { fillFcForm(); drawHwyStatus(); }
+  cl.innerHTML = val(mk("fleet-carrier") + esc(c.name), esc(c.callsign || "")) + ln(dcLine) + ln(where) + ln(move) +
+    ln(carrierServicesHtml(c) + trit) + ln(carrierFinanceHtml(c.finance));
 }
+// ---- carrier trips (#19, the author 2026-10-17): planned in Plot Route (the Carrier plotter: Spansh's carrier router),
+// followed here, one line: "Leg 2/6 → system 📋 · departs 12:30 ✕". The leg moves on as the carrier does (the server's
+// carrier_trip_follow); after an arrival, its cooldown (CARRIER_COOLDOWN_S on the server: ready_at), then "ready" (or
+// "ready?" when only the booked jump says it moved: away from it, the journal cannot confirm). The Quartermaster says it
+// once ("the carriertrip row"). 📋 copies the next leg's system on a click only (never by itself: the author).
+function carrierTripNow() { const t = data && data.carrier_trip && data.carrier_trip.trip; return t && !t.done ? t : null; }
+function carrierTripLineHtml(t, pl, c) {
+  const x = `<button type="button" class="mini" data-fctrip="clear" title="end this carrier trip">✕</button>`;
+  if (t.off) return `<span class="warnc" title="the carrier jumped somewhere the trip does not go">off the trip at ${esc(t.off.system || "?")}</span> ` +
+    `<button type="button" class="mini" data-fctrip="replot" title="plot the trip again from where the carrier is now">re-plot from here</button> ${x}`;
+  const nx = t.next;
+  if (!nx) return "";
+  const mmss = s => s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.floor(s % 3600 / 60)} min` : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  let when = "";
+  if (pl && pl.departure) {
+    const left = (Date.parse(pl.departure) - Date.now()) / 1000;
+    when = left > 0 ? ` · departs <b>${mmss(left)}</b>` : " · jumping";
+  } else if (t.ready_at) {
+    const left = t.ready_at - Date.now() / 1000;
+    when = left > 0 ? ` · <span title="the cooldown after a jump (busy systems can take longer)">cooldown ${mmss(left)}</span>`
+      : t.sure ? " · <b>ready</b>" : ` · <span title="should be ready to jump: only the booked jump says it moved (busy systems can delay it)">ready?</span>`;
+  }
+  const leg = `Leg ${t.at + 1}/${t.n} → <span class="copy" data-name="${esc(nx.system)}" title="click to copy, then paste it in the carrier's galaxy map">${esc(nx.system)} 📋</span>`;
+  return leg + when + ` ${x}`;
+}
+// Plot Route's trip list (#19): folded, its summary the trip in one line; the legs with the tritium each burns and
+// what to do first (move tritium from the hold into the depot, buy it here), the current one marked
+let fcTripDrawn = "";
+function drawFcTrip() {
+  const box = document.getElementById("fcTrip"); if (!box) return;
+  const t = data && data.carrier_trip && data.carrier_trip.trip;
+  const key = JSON.stringify(t ? [t.id, t.at, t.off, t.done, t.n] : null);
+  if (key === fcTripDrawn) return;
+  fcTripDrawn = key;
+  box.hidden = !t;
+  if (!t) return;
+  const tot = t.totals || {}, dest = t.legs[t.legs.length - 1].system;
+  document.getElementById("fcTripHead").innerHTML = `🚢 Carrier trip to <b>${esc(dest)}</b>: ` +
+    (t.done ? "<span class=\"ok\">complete</span>" : t.off ? `<span class="warnc">off the trip at ${esc(t.off.system || "?")}</span>` : `leg ${t.at + 1} of ${t.n}`) +
+    ` · ${t.n} legs, about ${t.hours} h <span class="unk">(longer in busy systems)</span> · ${(tot.need || 0).toLocaleString()} t tritium of ${(tot.have || 0).toLocaleString()} t` +
+    (tot.short ? ` · <span class="noscoop">${tot.short.toLocaleString()} t short: buy it before you set out</span>` : "");
+  const note = x => [x.top_up ? `move ${x.top_up.toLocaleString()} t from the hold into the depot first` : "", x.buy ? `buy ${x.buy.toLocaleString()} t here` : "",
+                     x.short ? `<span class="noscoop">the depot cannot pay for it</span>` : ""].filter(Boolean).join(" · ");
+  document.getElementById("fcTripBody").innerHTML =
+    `<div class="srow"><button type="button" data-fctrip="clear">✕ End the trip</button>${t.off ? ` <button type="button" data-fctrip="replot">Re-plot from where it is</button>` : ""}</div>` +
+    `<table class="hwytable"><thead><tr><th>#</th><th>System</th><th class="num">ly</th><th class="num">Tritium</th><th></th></tr></thead><tbody>` +
+    t.legs.map((x, i) => `<tr class="${i <= t.at ? "unk" : ""}${i === t.at + 1 && !t.done ? " cur" : ""}"><td>${i || "start"}</td>` +
+      `<td><span class="copy" data-name="${esc(x.system)}" title="click to copy">${esc(x.system)}</span></td><td class="num">${i ? x.ly.toLocaleString() : ""}</td>` +
+      `<td class="num">${i ? x.fuel.toLocaleString() + " t" : ""}</td><td>${note(x)}</td></tr>`).join("") + `</tbody></table>`;
+}
+document.getElementById("fcTrip").addEventListener("click", e => {
+  const b = e.target.closest("[data-fctrip]"); if (!b) return;
+  const t = data && data.carrier_trip && data.carrier_trip.trip;
+  if (b.dataset.fctrip === "clear") carrierTripPost({clear: true});
+  else if (b.dataset.fctrip === "replot" && t && t.request) carrierTripPost(Object.assign({}, t.request, {from: null}));
+});
+// the cooldown is over: said once per leg (and only near the moment: a page opened later says nothing)
+let carrierReadySaid = null;
+function carrierTripTick(now = Date.now()) {
+  const t = carrierTripNow(), c = data && data.carrier;
+  if (!t || t.off || !t.next || !t.ready_at || !c || (c.planned && c.planned.departure)) return false;
+  const key = `${t.id}:${t.at}`, late = now / 1000 - t.ready_at;
+  if (late < 0 || late > 120 || carrierReadySaid === key) return false;
+  carrierReadySaid = key;
+  alertOut("carriertrip", t.sure ? "Carrier ready to jump" : "Carrier should be ready to jump", `next leg: ${t.next.system} (${t.at + 1} of ${t.n})`,
+           {say: `${t.sure ? "Carrier ready to jump" : "Your carrier should be ready to jump"}. Next leg: ${t.next.system}.`});
+  return true;
+}
+// what the arrival line adds on a trip: "Leg 3 of 6, 3 to go", the end, or off the plan
+function carrierTripArrivalWords() {
+  const t = data && data.carrier_trip && data.carrier_trip.trip;
+  if (!t) return "";
+  if (t.done) return " Carrier trip complete.";
+  if (t.off) return " That is off the planned trip.";
+  return t.at ? ` Leg ${t.at} of ${t.n}, ${t.n - t.at} to go.` : "";
+}
+async function carrierTripPost(body) {
+  let r;
+  try { r = await apiJson("api/carrier/trip", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+  catch (err) { r = {error: err.message}; }
+  if (r && r.error) toast(`Carrier trip: ${r.error}`);
+  return r || {};
+}
+document.getElementById("carrierLine").addEventListener("click", e => {
+  const b = e.target.closest("[data-fctrip]"); if (!b) return;
+  const t = carrierTripNow();
+  if (b.dataset.fctrip === "clear") carrierTripPost({clear: true});
+  else if (b.dataset.fctrip === "replot" && t && t.request) carrierTripPost(Object.assign({}, t.request, {from: null}));
+});
 // the countdown ticks without new data
-setInterval(() => { if (data && data.carrier && data.carrier.planned) { renderCarrier(); if (tilesFolded) renderTilesLine(); } }, 1000);
+setInterval(() => {
+  if (data && data.carrier && (data.carrier.planned || carrierTripNow())) { renderCarrier(); if (tilesFolded) renderTilesLine(); }
+  try { carrierTripTick(); } catch (err) { console.warn("carrier trip:", err); }
+}, 1000);
 document.addEventListener("click", async e => {
   if (!e.target.closest || !e.target.closest("#backupBtn, #srvBackupBtn")) return;
   let r;
@@ -1030,6 +1132,9 @@ function runPays(value, factor) {
   return factor > 1 ? `${credits(value)} (×${factor}: ${credits(value * factor)})` : credits(value);
 }
 function samplingHtml() {
+  return pinLineHtml() + samplingOnlyHtml();
+}
+function samplingOnlyHtml() {
   const sm = data.sampling;
   if (sm && sm.elsewhere) { const t = elsewhereText(sm.elsewhere); return t ? `<div class="spacing elsewhere">${esc(t)}</div>` : ""; }
   if (!sm || !sm.samples || sm.samples >= 3) return "";
@@ -1064,7 +1169,7 @@ function targetCounts(t) {
 }
 function renderOnBody() {
   const el = document.getElementById("onbody"), ob = obNow();
-  if (!ob) { el.innerHTML = ""; return; }
+  if (!ob) { el.innerHTML = pinLineHtml(); return; }
   const b = obData && !obData.error && obData.bodies.find(x => x.name === ob.body);
   if (!b) { el.innerHTML = samplingHtml() + `${onOrOver(ob)} <b>${esc(ob.body)}</b> (${esc(howOnBody(ob))})`; return; }
   const bits = [], f = bioFactor(b);
@@ -1196,6 +1301,7 @@ function renderNow() {
   if (risk) lines.push(`<div class="now-line now-risk ${risk.cls}">${risk.html}</div>`);
   // landed: what is left on this body (and the sample spacing); otherwise what is left in the system
   if (obNow()) lines.push(`<div class="now-line now-body">${document.getElementById("onbody").innerHTML}</div>`);
+  else if (pinLineHtml()) lines.push(`<div class="now-line now-body">${pinLineHtml()}</div>`);   // #16: from orbit
   else {
     const here = data.systems.find(s => sysId(s) === sysId(p));
     // the all-clear only once Here's data is for this system and the honk has found every body: before that
@@ -1247,7 +1353,7 @@ function renderNow() {
   if (lastAlert && Date.now() - lastAlert.at < 15000)
     lines.push(`<div class="now-card alert">${esc(lastAlert.title)}${lastAlert.body ? ` <span class="unk">${esc(lastAlert.body)}</span>` : ""}</div>`);
   if (captions.length) lines.push(`<div class="now-caps">${captions.slice().reverse().map(c =>
-    `<div class="now-cap" data-words="${esc(c.words)}" title="say it again (through the window that is speaking)">▶ ${esc(c.words)} <span class="unk">${agoText(c.at)}</span></div>`).join("")}</div>`);
+    `<div class="now-cap" data-words="${esc(c.words)}"${c.priv ? ` data-priv="1"` : ""} title="say it again (through the window that is speaking)">▶ ${esc(c.shown || c.words)} <span class="unk">${agoText(c.at)}</span></div>`).join("")}</div>`);
   if (nowHintUntil && Date.now() < nowHintUntil && !window.OutriderApp)   // the Android app keeps the screen on itself
     lines.push(`<div class="now-line now-small now-hint">screen may sleep: set the tablet's screen timeout, or open over localhost/HTTPS</div>`);
   el.innerHTML = lines.join("");
@@ -1338,7 +1444,9 @@ function surfLocal(s, lat, lon) {
 // Everything the map and legend draw, sized for a square canvas of side S (px): pure, so the tests can check it.
 function surfaceLayout(s, cfg, S) {
   const hd = s.heading == null ? 0 : s.heading, rad = hd * Math.PI / 180, ch = Math.cos(rad), sh = Math.sin(rad);
-  const items = [], add = (it, lat, lon) => { if (lat == null || lon == null) return; items.push(Object.assign(it, surfLocal(s, lat, lon))); };
+  const items = [], add = (it, lat, lon) => { if (lat == null || lon == null) return; items.push(Object.assign(it, {lat, lon}, surfLocal(s, lat, lon))); };
+  // #16: this body's pins: the active one kept (at the rim when off the map), the others when near; reached ones faint
+  for (const p of s.pins || []) add({kind: "pin", tag: p.name, id: p.id, active: !!p.active, faint: !!p.reached && !p.active, keep: !!p.active}, p.lat, p.lon);
   if (s.ship) add({kind: "ship", tag: "ship", keep: true}, s.ship.lat, s.ship.lon);
   for (const r of s.rigs || []) { const t = surfTons(r);
     add({kind: "rig", tag: String(r.n), n: r.n, id: r.id, mineral: t.mineral, tons: t.tons, full: !!r.full, hollow: !r.full, keep: true,
@@ -1349,9 +1457,14 @@ function surfaceLayout(s, cfg, S) {
   for (const l of s.locations || []) add({kind: "loc", tag: `L${l.n}`, n: l.n}, l.lat, l.lon);
   const colours = speciesColours([...(s.bio || []), ...(s.tags || [])]);
   // plants tagged with the composition scanner (BioScan's waypoints): a hollow ring in the species' colour, faint
-  // where a sample would not count (inside the colony of one taken already)
+  // where a sample would not count (inside the colony of one taken already). Kept on the map however far, at the rim
+  // when off it: the usable ones of the run in progress, and each species' nearest usable one (Kurbo26, 2026-10-16:
+  // a tag walked away from vanished, legend and all, until you sampled that species by hand). The server sends them
+  // nearest first.
+  const nearestTag = new Set(), tagSeen = new Set();
+  for (const t of s.tags || []) if (t.usable && !tagSeen.has(t.species)) { tagSeen.add(t.species); nearestTag.add(t); }
   for (const t of s.tags || []) add({kind: "tag", tag: "", species: t.species, colour: colours.get(t.species), faint: !t.usable,
-                                      keep: !!(t.current && t.usable)}, t.lat, t.lon);
+                                      keep: !!(t.usable && (t.current || nearestTag.has(t)))}, t.lat, t.lon);
   for (const b of s.bio || []) {
     const colour = colours.get(b.species);
     for (const p of b.points || []) add({kind: "bio", tag: "", species: b.species, colour, faint: !b.current, keep: !!b.current,
@@ -1406,6 +1519,9 @@ function drawSurface(canvas, L, small) {
     if (it.off) continue;
     const x = it.sx, y = it.sy;
     if (it.kind === "bio") { g.fillStyle = it.colour; g.globalAlpha = it.faint ? 0.45 : 1; g.beginPath(); g.arc(x, y, mr * 0.55, 0, 2 * Math.PI); g.fill(); g.globalAlpha = 1; }
+    else if (it.kind === "pin") { const r = it.active ? mr + 2 : mr; g.fillStyle = it.active ? C.accent : C.muted; g.globalAlpha = it.faint ? 0.4 : 1;
+      g.beginPath(); g.moveTo(x, y - r); g.lineTo(x + r * 0.75, y); g.lineTo(x, y + r); g.lineTo(x - r * 0.75, y); g.closePath(); g.fill(); g.globalAlpha = 1;
+      if (!small && (it.active || !it.faint)) { g.font = `${font}px system-ui, sans-serif`; g.textAlign = "left"; g.fillText(it.tag, x + r, y - r * 0.8); g.textAlign = "center"; } }
     else if (it.kind === "tag") { g.strokeStyle = it.colour || C.muted; g.lineWidth = 2; g.globalAlpha = it.faint ? 0.35 : 1;
       g.beginPath(); g.arc(x, y, mr * 0.75, 0, 2 * Math.PI); g.stroke(); g.globalAlpha = 1; }
     else if (it.kind === "rig") {
@@ -1435,7 +1551,7 @@ function drawSurface(canvas, L, small) {
   g.textAlign = "center"; g.textBaseline = "middle";
   // off the map: a chevron on the rim pointing out, with the tag
   for (const it of L.items) if (it.off) {
-    const col = it.kind === "rig" ? (it.far ? C.bad : C.accent) : it.kind === "ship" ? C.info : it.kind === "bio" || it.kind === "tag" ? it.colour || C.muted : it.kind === "loc" ? C.warn : C.muted;
+    const col = it.kind === "rig" ? (it.far ? C.bad : C.accent) : it.kind === "pin" ? C.accent : it.kind === "ship" ? C.info : it.kind === "bio" || it.kind === "tag" ? it.colour || C.muted : it.kind === "loc" ? C.warn : C.muted;
     g.save(); g.translate(it.sx, it.sy); g.rotate(it.ang);
     g.fillStyle = col; g.beginPath(); g.moveTo(0, -7); g.lineTo(6, 2); g.lineTo(0, -1); g.lineTo(-6, 2); g.closePath(); g.fill();
     g.restore();
@@ -1491,15 +1607,22 @@ function surfaceLegend(s, L, cfg) {
         `<span class="rm">${r.mineral ? esc(r.mineral) : `<span class="unk">placed</span>`}${r.tons ? ` <b>${r.tons} t</b>` : ""}</span>` +
         `<span class="rw">${surfWhere(r)}${r.far ? ` <b class="bad">far: lost at 5 km</b>` : ""}${r.full ? ` <span class="ok">probably full</span>` : ""}` +
         ` <a href="#" class="rx" data-rigremove="${r.id}" data-rign="${r.n}" title="picked up without a tap? The game writes nothing when a rig is picked up: mark it picked up here">✕</a></span></div>`; }).join("") + `</div>`);
+  // #16: pins, in their order (the server's): tap one to fly to it
+  const pins = (s.pins || []).map(p => L.items.find(it => it.kind === "pin" && it.id === p.id) || Object.assign({}, p, {kind: "pin", active: p.active, faint: p.reached}));
+  if (pins.length) rows.push(`<div class="lg-h">Pins <span class="unk">(tap one to go there)</span></div>` + pins.map(it =>
+    `<div class="lg-row lg-pin${it.active ? " cur" : it.faint ? " faint" : ""}" data-pinact="${it.id}" title="${it.active ? "the pin you are guided to" : "go there: guided to it from now on"}">` +
+    `<span class="tg pin">◆</span> <b>${esc(it.tag || it.name)}</b> ${it.brg != null ? surfWhere(it) : `<span class="unk">${surfDist(it.dist)}</span>`}` +
+    `${it.active ? ` <span class="ok">● target</span>` : it.faint ? ` <span class="unk">reached</span>` : ""}</div>`).join(""));
+  const goto = (it, name) => ` <button type="button" class="mini" data-pingo="${it.lat},${it.lon}" data-pinname="${esc(name)}" title="pin it and go there">📍</button>`;
   const sites = by("site");
   if (sites.length) rows.push(`<div class="lg-h">Sites</div>` + sites.map(it =>
     `<div class="lg-row" data-tag="${it.tag}"><span class="tg">${it.tag}</span> ${it.mineral ? esc(it.mineral) : `<span class="unk">?</span>`} <b>${it.tons} t</b>` +
-    ` <span class="unk">${it.site === "rig" ? (it.lost ? "rig lost" : "rig picked up") : "unmarked"}${it.location ? ` · L${it.location}` : ""} · ${surfDist(it.dist)}</span></div>`).join(""));
+    ` <span class="unk">${it.site === "rig" ? (it.lost ? "rig lost" : "rig picked up") : "unmarked"}${it.location ? ` · L${it.location}` : ""} · ${surfDist(it.dist)}</span>${goto(it, `Site ${it.tag}`)}</div>`).join(""));
   const locs = by("loc");
   if (locs.length) rows.push(`<div class="lg-h">Mining locations</div>` + locs.map(it =>
-    `<div class="lg-row" data-tag="${it.tag}"><span class="tg loc">${it.tag}</span> ${surfWhere(it)}</div>`).join(""));
+    `<div class="lg-row" data-tag="${it.tag}"><span class="tg loc">${it.tag}</span> ${surfWhere(it)}${goto(it, `Location ${it.n}`)}</div>`).join(""));
   const ship = by("ship")[0];
-  if (ship) rows.push(`<div class="lg-row lg-ship"><span class="tg ship">H</span> Ship ${surfWhere(ship)}</div>`);
+  if (ship) rows.push(`<div class="lg-row lg-ship"><span class="tg ship">H</span> Ship ${surfWhere(ship)}${goto(ship, "Ship")}</div>`);
   return rows.join("") || `<div class="unk">nothing marked on this body yet</div>`;
 }
 // the strip's one line: rigs, sites and the ship, short
@@ -1513,11 +1636,14 @@ function surfaceLine(L) {
 // Now's map (beside its legend, below on a narrow screen) and the strip's small copy
 // a legend's title and rows, written only when they change (a rewrite would drop a hover or a half-done click)
 function setSurfLegend(el, s, L, cfg) {
-  const html = `<div class="lg-title">${esc(s.body || "")}${s.alt != null && !s.down ? ` <span class="unk">${Math.round(s.alt)} m up</span>` : ""}</div>` + surfaceLegend(s, L, cfg);
+  const html = `<div class="lg-title">${esc(s.body || "")}${s.alt != null && !s.down ? ` <span class="unk">${Math.round(s.alt)} m up</span>` : ""}` +
+    ` <button type="button" class="mini" data-pinhere title="pin where you are now, with a name">📍 Pin here</button>` +
+    `<button type="button" class="mini" data-pincopy title="copy where you are: latitude, longitude">📋</button></div>` + surfaceLegend(s, L, cfg);
   if (html !== el._surfKey) { el._surfKey = html; el.innerHTML = html; }
 }
 // a rig picked up without a tap (the game writes nothing when one is): marked picked up from its slot's ✕
 for (const id of ["nowMapLegend", "ovMapLegend"]) document.getElementById(id).addEventListener("click", async e => {
+  if (pinLegendClick(e)) return;
   const x = e.target.closest("[data-rigremove]"); if (!x) return;
   e.preventDefault();
   if (!confirm(`Mark rig ${x.dataset.rign} as picked up? What it collected stays as a saved site.`)) return;
@@ -1526,6 +1652,142 @@ for (const id of ["nowMapLegend", "ovMapLegend"]) document.getElementById(id).ad
   catch (err) { r = {error: err.message}; }
   if (r.error) toast(`could not mark the rig: ${r.error}`);
 });
+// ---- surface pins (#16, the author 2026-10-17): named points on a body kept until deleted (body bookmarks: the
+// Anaconda wreck, Guardian ruins, a good spot), one active at a time, guided from orbit down (the payload's pins: the
+// strip's line, the map, the overlay's radar) and said by the Navigator. Set in a body's panel (typed or pasted
+// coordinates, also before you reach the body), 📍 Pin here, 📍 on a site or location; Bookmarks lists them all ----
+// typed or pasted coordinates: decimal degrees in any common layout ("-12.34, 45.67", "Lat -12.34 Lon 45.67",
+// "12.34 S, 45.67 E", a degree sign, text around them); the first number is the latitude unless the letters say
+// otherwise; S and W are negative. {lat, lon} or {error}
+function parsePinCoords(text) {
+  const re = /([-+−]?\d+(?:\.\d+|,\d+)?)\s*°?\s*([NSEW](?![a-z]))?/gi, nums = [];
+  let m;
+  while (nums.length < 2 && (m = re.exec(String(text || "")))) {
+    let v = Number(m[1].replace(",", ".").replace("−", "-"));
+    const h = (m[2] || "").toUpperCase();
+    if (h === "S" || h === "W") v = -Math.abs(v);
+    nums.push({v, h});
+  }
+  if (nums.length < 2) return {error: "give two numbers: the latitude, then the longitude"};
+  let [a, b] = nums;
+  if ((a.h === "E" || a.h === "W") && (b.h === "N" || b.h === "S")) [a, b] = [b, a];
+  if (!Number.isFinite(a.v) || Math.abs(a.v) > 90) return {error: `the latitude must be from -90 to 90 (not ${a.v})`};
+  if (!Number.isFinite(b.v) || Math.abs(b.v) > 180) return {error: `the longitude must be from -180 to 180 (not ${b.v})`};
+  return {lat: a.v, lon: b.v};
+}
+const pinCoordText = c => `${Math.abs(c.lat).toFixed(4)}° ${c.lat < 0 ? "S" : "N"}, ${Math.abs(c.lon).toFixed(4)}° ${c.lon < 0 ? "W" : "E"}`;
+const pinTurnWords = p => p.turn == null ? (p.way || "") : Math.abs(p.turn) < 10 ? "ahead" : `turn ${Math.abs(p.turn)}° ${p.turn > 0 ? "right" : "left"}`;
+const pinSpokenDist = m => m < 1000 ? `${Math.max(10, Math.round(m / 10) * 10)} metres` : m < 10000 ? `${(m / 1000).toFixed(1)} kilometres` : `${Math.round(m / 1000).toLocaleString()} kilometres`;
+const pinSpokenTurn = p => p.turn == null ? (p.way || "") : Math.abs(p.turn) < 10 ? "dead ahead" : `turn ${Math.abs(p.turn)} degrees ${p.turn > 0 ? "right" : "left"}`;
+function pinSpoken(m) {
+  if (m.what === "arrived") return `Arrived at ${m.name}.` + (m.next ? ` Next: ${m.next.name}, ${pinSpokenDist(m.next.dist)}, ${pinSpokenTurn(m.next)}.` : "");
+  if (m.what === "set") return `${m.name} set. ${pinSpokenDist(m.dist)}, bearing ${m.bearing}.`;
+  return `${m.name}: ${pinSpokenDist(m.dist)}, ${pinSpokenTurn(m)}.`;
+}
+const pinActive = () => data && data.pins && data.pins.here && data.pins.here.active || null;
+const pinSpokenNow = () => { const a = pinActive(); return a ? `${a.name}, ${pinSpokenDist(a.dist)}, ${pinSpokenTurn(a)}` : ""; };
+function pinLineHtml() {
+  const a = pinActive();
+  return a ? `<div class="spacing pinline" title="the pin you fly to (tap another in the map's legend)">📍 <b>${esc(a.name)}</b>: ${esc(surfDist(a.dist))}, ${esc(pinTurnWords(a))}</div>` : "";
+}
+// the counts are the system you are in: another system shown in Here gets none (sweep 2026-10-17: its "A 1" is not yours)
+const pinMarkFor = (sys, short) => sys != null && String(sys) === String(posId()) ? pinMark(short) : "";
+const pinMark = short => { const n = data && data.pins && data.pins.counts && data.pins.counts[short];
+  return n ? ` <span class="pinmark" title="${n} pin${n === 1 ? "" : "s"} on this body">📍</span>` : ""; };
+const PINS = {list: null, sig: null};
+async function loadPins() {
+  try { const r = await apiJson("api/pins"); if (!r.error) PINS.list = r.pins || []; } catch {}
+  refreshPinsUi();
+}
+function refreshPinsUi() {
+  for (const id of ["bodyPanel", "sBodyPanel"]) { const sec = document.querySelector(`#${id} [data-sec="pins"] .secbody`);
+    if (sec && sec.dataset.sys) sec.innerHTML = pinsListHtml(sec.dataset.sys, sec.dataset.body); }
+  drawBmPins();
+}
+async function pinsPost(body) {
+  let r;
+  try { r = await apiJson("api/pins", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+  catch (err) { r = {error: err.message}; }
+  if (r && r.error) toast(`Pin: ${r.error}`);
+  else await loadPins();
+  return r || {};
+}
+// a body's panel: its pins and the field to add one
+function pinsListHtml(sys, body) {
+  const mine = (PINS.list || []).filter(p => p.system === String(sys) && p.body === body);
+  return (mine.length ? `<div class="pinlist">` + mine.map((p, i) =>
+    `<div class="pinrow${p.reached ? " unk" : ""}"><a href="#" data-pinact="${p.id}" title="go there: guided to it when you are on this body">◆ <b>${esc(p.name)}</b></a>` +
+    ` <span class="unk">${esc(pinCoordText(p))}</span>${p.reached ? ` reached <button type="button" class="mini" data-pinreset="${p.id}" title="not reached after all">↺</button>` : ""}` +
+    `${i ? ` <button type="button" class="mini" data-pinmove="${p.id}" data-dir="-1" title="earlier">▲</button>` : ""}` +
+    `${i < mine.length - 1 ? ` <button type="button" class="mini" data-pinmove="${p.id}" data-dir="1" title="later">▼</button>` : ""}` +
+    ` <button type="button" class="mini" data-pinrm="${p.id}" title="delete this pin">✕</button></div>`).join("") + `</div>` : "") +
+    `<div class="srow pinadd"><input type="text" data-pinin placeholder="paste coordinates: -12.34, 45.67" aria-label="coordinates" size="22">` +
+    `<input type="text" data-pinname placeholder="name (optional)" aria-label="pin name" size="12" maxlength="40">` +
+    `<button type="button" class="mini" data-pinadd>Add pin</button> <span data-pinsee class="unk"></span></div>`;
+}
+async function pinPanelClick(e) {
+  const sec = e.target.closest('[data-sec="pins"]'); if (!sec) return false;
+  const b = sec.querySelector(".secbody"), info = b && b.dataset;
+  const act = e.target.closest("[data-pinact]"), rm = e.target.closest("[data-pinrm]"), mv = e.target.closest("[data-pinmove]"),
+        rs = e.target.closest("[data-pinreset]"), add = e.target.closest("[data-pinadd]");
+  if (act) { e.preventDefault(); pinsPost({action: "activate", id: Number(act.dataset.pinact)}); return true; }
+  if (rm) { if (confirm("Delete this pin?")) pinsPost({action: "delete", id: Number(rm.dataset.pinrm)}); return true; }
+  if (mv) { pinsPost({action: "move", id: Number(mv.dataset.pinmove), dir: Number(mv.dataset.dir)}); return true; }
+  if (rs) { pinsPost({action: "reset", id: Number(rs.dataset.pinreset)}); return true; }
+  if (add) {
+    const c = parsePinCoords(b.querySelector("[data-pinin]").value), see = b.querySelector("[data-pinsee]");
+    if (c.error) { see.textContent = c.error; see.className = "warnc"; return true; }
+    pinsPost({action: "add", system: info.sys, sysname: info.sysname, body: info.body, name: b.querySelector("[data-pinname]").value, lat: c.lat, lon: c.lon});
+    return true;
+  }
+  return false;
+}
+for (const id of ["bodyPanel", "sBodyPanel"]) {
+  const el = document.getElementById(id);
+  el.addEventListener("click", e => { pinPanelClick(e); });
+  // what the typed coordinates are read as, before saving
+  el.addEventListener("input", e => {
+    if (!e.target.matches("[data-pinin]")) return;
+    const c = parsePinCoords(e.target.value), see = e.target.closest(".pinadd").querySelector("[data-pinsee]");
+    see.textContent = !e.target.value.trim() ? "" : c.error ? c.error : `reads as ${pinCoordText(c)}`;
+    see.className = c.error && e.target.value.trim() ? "warnc" : "unk";
+  });
+}
+// the map's legend: tap a pin to fly to it; 📍 on a site or location pins it and goes there; Pin here; copy where you are
+function pinLegendClick(e) {
+  const act = e.target.closest("[data-pinact]"), go = e.target.closest("[data-pingo]");
+  if (act) { e.preventDefault(); pinsPost({action: "activate", id: Number(act.dataset.pinact)}); return true; }
+  if (go) {
+    const [lat, lon] = go.dataset.pingo.split(",").map(Number), pos = data && data.position, body = data && data.pins && data.pins.here && data.pins.here.body;
+    if (!pos || !body) { toast("Pin: no body here"); return true; }
+    pinsPost({action: "add", system: String(pos.id64), sysname: pos.name, body, name: go.dataset.pinname, lat, lon, active: true});
+    return true;
+  }
+  if (e.target.closest("[data-pinhere]")) { const n = prompt("Name this pin (where you are now):", ""); if (n !== null) pinsPost({action: "here", name: n}); return true; }
+  if (e.target.closest("[data-pincopy]")) { const sf = data && data.surface;
+    if (sf && sf.lat != null) copyText(`${sf.lat.toFixed(4)}, ${sf.lon.toFixed(4)}`); return true; }
+  return false;
+}
+// Bookmarks: every pin, by system and body, with Plot route to the system and ✕
+function drawBmPins() {
+  const el = document.getElementById("bmPins"); if (!el) return;
+  const list = PINS.list || [];
+  el.hidden = !list.length;
+  if (!list.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<h4 class="vmhead">📍 Pins</h4><table class="pintable"><thead><tr><th>System</th><th>Body</th><th>Pin</th><th></th></tr></thead><tbody>` +
+    list.map(p => `<tr${p.reached ? ` class="unk"` : ""}><td class="name" data-name="${esc(p.sysname || "")}" title="click to copy">${esc(p.sysname || "?")}${p.sysname ? plotBtn(p.sysname) : ""}</td>` +
+      `<td>${esc(p.short || p.body)}</td><td><b>${esc(p.name)}</b> <span class="unk">${esc(pinCoordText(p))}</span></td>` +
+      `<td><button type="button" class="mini" data-pinrm="${p.id}" title="delete this pin">✕</button></td></tr>`).join("") + `</tbody></table>`;
+}
+document.getElementById("bmPins").addEventListener("click", e => {
+  const rm = e.target.closest("[data-pinrm]"); if (rm && confirm("Delete this pin?")) pinsPost({action: "delete", id: Number(rm.dataset.pinrm)});
+});
+// the payload's counts changed (a pin added or deleted, in this window or another): the list is asked for again
+function pinsTick() {
+  const sig = JSON.stringify(data && data.pins && data.pins.counts) + "|" + ((data && data.pins && data.pins.here && data.pins.here.pins) || []).map(p => `${p.id}${p.reached ? "r" : ""}`).join();
+  if (sig !== PINS.sig) { PINS.sig = sig; loadPins(); }
+}
+
 // How Now fits its map on the screen (pure, so the tests can check it). vw, vh: the window; width: Now's content width;
 // top: where the map's canvas starts on the page (in the chosen arrangement); gap: the space between columns.
 // A wide landscape screen puts the map in a column right of the lines (the legend in a third, beside it), sized to
@@ -1635,9 +1897,11 @@ const captions = [];
 // shown as written ("Smojooe ZC-D c12-2"), not in the voice's spelling ("Smojooe Z C D, c 12 2"; found on the tablet):
 // only markup and symbols go. `said` is the spoken form, to match the line last said for its voice and pace.
 const captionText = t => String(t).replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-function addCaption(words) {
+// `who`: space chatter's speaker ("Engineer (Mira)"), shown before the words when chatterNames is on (#15)
+// priv (#17): another player's chat: a replay of it stays private too (sweep 2026-10-17)
+function addCaption(words, who = null, priv = false) {
   const w = captionText(words || ""); if (!w) return;
-  captions.push({words: w, said: spokenText(w), at: Date.now()});
+  captions.push({words: w, shown: who && chatterNames() ? `${who}: ${w}` : w, said: spokenText(w), at: Date.now(), priv: !!priv});
   if (captions.length > 3) captions.shift();
   if (view === "now" && data) renderNow();
   drawLastSaid();
@@ -1650,12 +1914,13 @@ function drawLastSaid() {
   el.hidden = !c;
   if (!c) return;
   const t = document.getElementById("lastSaidText");
-  t.textContent = c.words; t.title = `${c.words} (${agoText(c.at)})`;
+  t.textContent = c.shown || c.words; t.title = `${c.shown || c.words} (${agoText(c.at)})`;
 }
 document.getElementById("lastSaidBtn").onclick = () => {
   const c = captions[captions.length - 1];
   const same = c && lastSaid && lastSaid.words === c.said;
-  if (c) speak(same ? lastSaid.words : c.words, {kind: "manual", voice: same ? lastSaid.voice : null, speaker: same ? lastSaid.speaker : null, pace: same ? lastSaid.pace || 1 : 1});
+  if (c) speak(same ? lastSaid.words : c.words, {kind: "manual", voice: same ? lastSaid.voice : null, speaker: same ? lastSaid.speaker : null, pace: same ? lastSaid.pace || 1 : 1,
+                private: same ? !!lastSaid.priv : !!c.priv});
 };
 const agoText = at => { const s = Math.max(0, Math.round((Date.now() - at) / 1000));
   return s < 10 ? "just now" : s < 90 ? `${s} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; };
@@ -1723,7 +1988,7 @@ document.getElementById("nowBack").onclick = ev => { ev.stopPropagation(); leave
 document.getElementById("nowView").addEventListener("dblclick", ev => { if (!ev.target.closest("#nowBar, .now-cap")) leaveNow(); });
 document.getElementById("nowView").addEventListener("click", ev => {
   const cap = ev.target.closest(".now-cap");
-  if (cap) { ev.stopPropagation(); postCopilot({action: "replay", words: cap.dataset.words}, "replay the line"); }
+  if (cap) { ev.stopPropagation(); postCopilot(Object.assign({action: "replay", words: cap.dataset.words}, cap.dataset.priv === "1" ? {private: true} : {}), "replay the line"); }
 });
 document.getElementById("nowSpeech").onclick = ev => { ev.stopPropagation(); speechBtn.onclick(); drawNowBar(); };
 document.getElementById("nowHush").onclick = async ev => {
@@ -1985,7 +2250,7 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["scoopstop", "fuel scooping stopped early (not above 90%, nor when you jump)", null],
   ["supercharge", "the frame shift drive supercharged in a neutron star or white dwarf cone", null],
   ["exo", "Expressway to Exomastery (a route plotted in Plot Route): on arriving at a route system, the species still to sample there and the best of them, and once they are sampled the next stop, and route complete", null],
-  ["riches", "Road to Riches and the Earth-like and ammonia world routes (plotted in Plot Route), and a sweep (plotted from ticks in Left behind, My firsts or Bookmarks): on arriving at a route system, the bodies still worth scanning or mapping there (a sweep: none) and the next stop, and route complete", null],
+  ["riches", "Road to Riches and the Earth-like, ammonia and terraformable world routes (plotted in Plot Route), and a sweep (plotted from ticks in Left behind, My firsts or Bookmarks): on arriving at a route system, the bodies still worth scanning or mapping there (a sweep: none) and the next stop, and route complete", null],
   ["trade", "a trade route (plotted in Plot Route): on arriving at a stop, what to sell and buy there; once that is done, the hop's profit and the next stop; and route complete", null],
   ["highway", "the Neutron Highway (a route plotted in Plot Route): the next stop on arriving at a route system (with the boost and refuel stops), off route, back on the highway, and highway complete", null],
   ["refuelshort", "a Highway route plotted with the exact plotter: the fuel aboard won't reach the next refuel stop (once per system; at a refuel stop itself the route's line only shows how much to scoop)", "alert"],
@@ -1997,6 +2262,9 @@ const ALERTS = [["discovery", "targeting a system: the fanfare if nobody has rep
   ["sampling", "leaving a body with exobiology unfinished (untouched genera only if you landed there); a species completed; within 100 m of a plant you tagged where the next sample would count", "alert"],
   ["approach", "approaching a landable body at or over your high-gravity level with unsold data over the amber level or rebuy multiple", "alert"],
   ["bodybrief", "approaching a body with biological signals: what they could be (the FSS already said so, so off by default)", null],
+  ["pins", "surface pins: the pin you fly to, said when it is set, at 10 km, 1 km and 100 m, and on arrival (then the next one)", null],
+  ["carriertrip", "carrier trips (Plot Route → Carrier): the carrier ready for its next leg, said once its cooldown should be over (the leg itself is said with its arrival)", null],
+  ["chat", "chat: other players' messages read aloud by Comms (Settings → Voice → Chat: off by default; squadron, wing and direct ticked), never an NPC's", null],
   ["docking", "docking: the pad the station gave you (said every time, shown big on Now and in the overlay's Surface radar place), and why one refused when it is not obvious (no pad free, ship too big, access restricted, hostile, your offences, a fighter out)", null],
   ["sell", "docked where you can sell, and what you banked", "cash"],
   ["saleleft", "a sale left data aboard: Universal Cartographics sells 50 systems a page, so a sale that stops after one page leaves the rest unsold (said once the pages stop and the estimate has caught up); likewise completed samples still unsold after a Vista Genomics sale", "alert"],
@@ -2023,7 +2291,7 @@ const UNSPOKEN = new Set(Object.keys(UNSPOKEN_WHY));
 const alertCfgBase = () => Object.assign({enabled: false}, Object.fromEntries(ALERTS.map(([k]) => [k, true])),
   // a notification on every jump (or scoop, or FSS) would be noise: these are spoken by default, not notified
   {jump: false, honk: false, brief: false, fss: false, mapped: false, scoop: false, scoopstop: false, supercharge: false, highway: false, autotarget: false, wrongtarget: false,
-   docking: false, sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false});
+   docking: false, sampling: false, approach: false, bodybrief: false, jumponium: false, rigs: false, rigsout: false, chat: false, pins: false});
 const alertCfg = Object.assign(alertCfgBase(), store.get("alerts", {}));
 // off until you tick them (the whole row): the jumponium call-out
 const OFF_KINDS = {jumponium: false};
@@ -2201,11 +2469,14 @@ function overlayAlert(kind, title, body, tag) {
     body: JSON.stringify({kind, title: String(title || "").slice(0, 200), body: String(body || "").slice(0, 300), danger})}).catch(() => {});
   return true;
 }
-function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still = null, quiet = false} = {}) {
-  lastAlert = {kind, title, body, at: Date.now()};
+// caption: the caption strip's words when they differ from the spoken ones (chat: always "Kurbo: ..."); priv: never
+// cached or logged on the PC (#17); chatFrom: the chat's sender, for Spoken lines' 🔇. Chat (#17) is no alert: it does
+// not reset the quiet chatter waits for
+function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still = null, quiet = false, caption = null, priv = false, chatFrom = null} = {}) {
+  if (kind !== "chat") lastAlert = {kind, title, body, at: Date.now()};
   overlayAlert(kind, title, body, tag);
   if (TABLET) tabBanner(kind, title, body, tag);   // the tablet shows it; the PC says it (and the tablet too with Play alerts here)
-  const entry = logSpeech({kind, tag, words: title});
+  const entry = logSpeech({kind, tag, words: title, chatFrom});
   const snd = sound === undefined ? (ALERTS.find(a => a[0] === kind) || [])[2] : sound;
   const loud = speakerHere(), hush = hushed() && speechPrio(kind, tag) > 1;   // hushed: danger (and a rig press's answer) still speaks
   const plays = !!(loud && snd && soundOn && alertSound[kind] && !hush);   // no sound, no wait before the words
@@ -2219,15 +2490,15 @@ function alertOut(kind, title, body, {sound, say, delay = 0, tag = null, still =
     entry.style = lineStyle; entry.key = lineKey; entry.template = lineTemplate;
     // who says it (the crew, when on): the member line() picked the words for, else the row's by the line's tag
     const crew = lineCrew !== undefined ? lineCrew : crewMember(kind, tag || lineKey);
-    speak(words, {delay: plays ? delay + soundLead(snd) : delay, kind, tag, still, log: entry, ...crewVoice(crew, lineStyle)});
-    addCaption(words);
+    speak(words, {delay: plays ? delay + soundLead(snd) : delay, kind, tag, still, log: entry, private: priv, ...crewVoice(crew, lineStyle)});
+    addCaption(caption || words, null, priv);
     return true;
   }
   // another window speaks it: Now's captions get its plain wording (a personality line picked here would not be
   // the one said there)
   if (!loud && alertSpeak[kind] && !UNSPOKEN.has(kind) && !quiet && !hush) {
     linePlain = true;
-    try { addCaption((typeof say === "function" ? say() : say) || title); } catch { addCaption(title); } finally { linePlain = false; }
+    try { addCaption(caption || (typeof say === "function" ? say() : say) || title, null, priv); } catch { addCaption(title, null, priv); } finally { linePlain = false; }
   }
   setFate(entry, !loud ? `silent: ${hushReason()}` : !speechOn ? "silent: speech off" : UNSPOKEN.has(kind) ? `not spoken (${UNSPOKEN_WHY[kind]})`
     : quiet ? (typeof quiet === "string" ? quiet : "merged into another line (quiet)")
@@ -2247,10 +2518,11 @@ const JUMP_LINE_WAIT = 8000;   // ms: the jump line's latest start after the cha
 // ms after Status.json says "in the tunnel" (it says so about 2 s before the countdown ends): the line then starts
 // with the tunnel itself (the author's timing, in game 2026-10-03)
 const JUMP_TUNNEL_DELAY = 2500;
-const SPEECH_SYS_BOUND = new Set(["find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "curious", "highway", "refuelshort", "lastscoop", "riches", "exo", "trade", "autotarget", "wrongtarget", "docking"]);
+const SPEECH_SYS_BOUND = new Set(["chatter", "find", "signals", "jump", "honk", "brief", "fss", "mapped", "approach", "bodybrief", "jumponium", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "curious", "highway", "refuelshort", "lastscoop", "riches", "exo", "trade", "autotarget", "wrongtarget", "docking"]);
 // a rig confirmation answers your own press, like a line asked for; so does the docking pad (#3: your request's answer,
 // wanted at once)
 const speechPrio = (kind, tag) => DANGER.has(tag) || kind === "hull" || kind === "fuel" ? 0 : kind === "manual" || kind === "rigs" || kind === "docking" ? 1
+  : kind === "chatter" || kind === "chat" ? 4   // space chatter (#15) and other players' chat (#17): after everything else
   : ["find", "signals", "codex", "phenomena", "ggg", "rare_star", "surface_site", "signal_poi", "bodybrief", "supercharge", "jumponium"].includes(kind) ? 3 : 2;
 // the queue without what went stale by `now` with the ship at `pos`
 const speechExpire = (items, now, pos) => items.filter(it => now - it.notBefore <= SPEECH_MAX_AGE
@@ -2290,7 +2562,7 @@ async function runningAudio() {
 // `log` is the transcript entry alertOut made for it (a line spoken some other way gets its own). `piperOnly`: said in
 // Piper or not at all, never the browser's own voice (the co-pilot channel's lines: the author's choice).
 function speak(text, {delay = 0, kind = "manual", tag = null, still = null, voice = null, speaker = null, pace = 1, log = null, piperOnly = false,
-                      role = null, crew = null} = {}) {
+                      role = null, crew = null, private: priv = false} = {}) {
   const words = spokenText(text);
   const entry = log || logSpeech({kind, tag});
   if (words) entry.words = words;
@@ -2301,7 +2573,8 @@ function speak(text, {delay = 0, kind = "manual", tag = null, still = null, voic
   if (tag && !speechCooled(speechLast, tag, now)) return setFate(entry, `refused: said under ${SPEECH_COOLDOWN[tag] / 1000} s ago`);
   const prevLast = tag ? speechLast[tag] : undefined;
   if (tag) speechLast[tag] = now;
-  const item = {words, kind, tag, still, voice, speaker, pace, piperOnly, role: voice ? role : null, prio: speechPrio(kind, tag), at: now, notBefore: now + delay, prevLast,
+  // priv (#17): another player's chat: never in the voice's cache or the log on the PC (api/say ...&private=1)
+  const item = {words, kind, tag, still, voice, speaker, pace, piperOnly, priv, role: voice ? role : null, prio: speechPrio(kind, tag), at: now, notBefore: now + delay, prevLast,
                 sys: SPEECH_SYS_BOUND.has(kind) && data && data.position ? posId() : null, log: entry};
   const before = speechItems;
   speechItems = speechAdd(speechItems, item);
@@ -2376,7 +2649,7 @@ async function speechWorker() {
         e.took = Date.now() - t0; e.engine = item.engine || null;
         setFate(e, item.unsaid ? `not said: ${item.unsaid}` : item.timedOut ? "timed out (the browser voice hung)"
           : item.capped ? "cut short: the PC's player ran past the line's length" : "said");
-        if (e.fate === "said") lastSaid = {words: item.words, voice: item.voice, speaker: item.speaker ?? null, pace: item.pace};   // "say again"
+        if (e.fate === "said") lastSaid = {words: item.words, voice: item.voice, speaker: item.speaker ?? null, pace: item.pace, priv: !!item.priv};   // "say again"
       }
       if (item.unsaid || item.timedOut) uncool(item);
     }
@@ -2395,7 +2668,7 @@ addEventListener("pagehide", () => {
 const lineSpeed = it => Math.min(2, Math.max(0.5, speechSpeed() * (it.pace || 1)));
 function nextLine() {
   const i = speechPick(speechItems), it = i < 0 ? null : speechItems[i];
-  return it ? {text: it.words, voice: it.voice || null, speaker: it.speaker ?? null, speed: lineSpeed(it), role: it.role || null} : null;
+  return it ? {text: it.words, voice: it.voice || null, speaker: it.speaker ?? null, speed: lineSpeed(it), role: it.role || null, private: !!it.priv} : null;
 }
 async function sayNow(item) {
   const cur = speechNow = {prio: item.prio, kind: item.kind, stopped: false, halt: null, stop() { this.stopped = true; if (this.halt) this.halt(); }};
@@ -2408,7 +2681,7 @@ async function sayNow(item) {
       try {
         const speed = Math.min(2, Math.max(0.5, speechSpeed() * (item.pace || 1)));
         const r = await fetch("api/say/play", {method: "POST", headers: {"Content-Type": "application/json"},
-                                               body: JSON.stringify({text: item.words, voice: item.voice || null, speaker: item.speaker ?? null, role: item.role || null, speed, id, next: nextLine(),
+                                               body: JSON.stringify({text: item.words, voice: item.voice || null, speaker: item.speaker ?? null, role: item.role || null, speed, id, next: nextLine(), private: !!item.priv,
                                                                      volume: outVolume()})});
         if (r.ok) {
           item.engine = "Piper on the PC";
@@ -2438,7 +2711,7 @@ async function sayNow(item) {
       try {
         const speed = Math.min(2, Math.max(0.5, speechSpeed() * (item.pace || 1)));
         const r = await fetch(`api/say?text=${encodeURIComponent(item.words)}&speed=${speed}${item.voice ? `&voice=${encodeURIComponent(item.voice)}` : ""}`
-                              + (item.speaker != null ? `&speaker=${item.speaker}` : "") + (item.role ? `&role=${encodeURIComponent(item.role)}` : ""));
+                              + (item.speaker != null ? `&speaker=${item.speaker}` : "") + (item.role ? `&role=${encodeURIComponent(item.role)}` : "") + (item.priv ? "&private=1" : ""));
         if (r.ok) {
           const buf = await ctx.decodeAudioData(await r.arrayBuffer());
           if (cur.stopped) return;
@@ -2567,6 +2840,9 @@ const speechDangerBusiness = () => !!(store.get("speechDangerBusiness", null) ??
 // until the next one, so a character (and its own voice) holds through a system. In memory only: a reload draws
 // afresh on its first line. Danger lines still come from business when that box is ticked.
 const speechShift = () => !!store.get("speechShift", false);
+// Main personality's "A mix…" (the author, 2026-10-16): the ticked personalities shown and used together; never set,
+// it follows what is ticked (exactly one: that one alone), so a browser set up before the dropdown keeps its mix
+const speechMix = () => store.get("speechMix", null) ?? (speechStyles().length !== 1);
 let shiftStyle = null;
 function pickShift() {
   const lines = Object.values(speechLib.lines || {});
@@ -2583,7 +2859,7 @@ function line(key, vars = {}, plain = "") {
   // the crew (when on): the row's crew member speaks in its own personality, when it has lines for this alert (else
   // as the XO: the ticked ones); "as the XO" is the ticked ones too, the shift included. A line naming a crew member
   // ({engineer}) only while the crew is on, and never by the member it names (crewLineOk)
-  const crew = lineCrew = crewMember(lineRow, key), mine = crew && crew.personality;
+  const crew = lineCrew = lineCrewForce !== undefined ? lineCrewForce : crewMember(lineRow, key), mine = crew && crew.personality;
   const listOf = name => !entry || typeof entry !== "object" || !Array.isArray(entry[name]) ? []
     : entry[name].filter(x => typeof x === "string" && x.trim() && crewLineOk(x, crew));
   // a danger line: business alone (a custom speech.json without business lines falls back to the ticked ones)
@@ -2604,6 +2880,7 @@ function line(key, vars = {}, plain = "") {
   if (!pool.length) return plain;
   const all = lineVars(vars), whole = pool.filter(x => allFilled(x[1], all));
   if (whole.length) pool = whole;   // a line that needs a value this alert lacks only as a last resort
+  else if (lineStrict) return plain;   // (never, for chatter: a half-filled line says nothing worth hearing)
   // Drawn from the lines not heard yet. With none left in this pool (the pool changes with the profanity roll, the
   // shift, danger-business, ticks and bans, so it is what is left of it that counts), only this pool's lines start
   // again, and the newest few of them stay held back so the reset cannot repeat the line just said.
@@ -2639,7 +2916,11 @@ let lineKey = null, lineTemplate = null;   // and its alert and speech.json word
 // lines (DANGER) are Tactical's while the Danger switch is on. The voice lab never goes through it.
 let lineRow = null;   // the alert row whose line line() is picking (alertOut sets it): its crew member chooses
 let lineCrew = null;  // the crew member line() picked the last line for (crewMember), null with the crew off
+// space chatter (#15) picks its speaker itself: line() takes this member (null: the main voice) instead of the row's,
+// and with lineStrict says nothing rather than a line missing a value
+let lineCrewForce = undefined, lineStrict = false;
 let crewUi = false;   // Settings' crew table and memory note are set up (drawCrew may run: crew batch 2, further down)
+let chatUi = false;   // Settings' Chat line is set up (drawChatRead may run: #17, further down)
 const crewRoles = () => Array.isArray(speechLib.crew_roles) ? speechLib.crew_roles : [];
 const crewTitle = id => (crewRoles().find(r => r.id === id) || {}).short || id;
 // The crew's placeholders (crew batch 3): one per role, {engineer} and the like (a role's id), naming another crew
@@ -2704,6 +2985,8 @@ const spokenStar = c => !c ? "star" : /^D/.test(c) ? "white dwarf" : c === "N" ?
   : /^[OBAFGKM]_\w+$/.test(c) ? `${c[0]} ${c.slice(2).replace(/SuperGiant/g, "Supergiant").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}`
   : `${c} star`;
 // sample values for the ▶ try button
+// a key's sample values: LINE_SAMPLES, else space chatter's, which come with the lines (speechLib.chatter.samples, #15)
+const lineSample = key => LINE_SAMPLES[key] || (speechLib.chatter && speechLib.chatter.samples && speechLib.chatter.samples[key]) || {};
 const LINE_SAMPLES = {
   docking_granted: {pad: 34, station: "Jameson Memorial"}, docking_denied: {reason: "no pad free for your ship: try again shortly", station: "Jameson Memorial"},
   speech_on: {}, game_start: {}, game_exit: {}, heat: {},
@@ -2975,10 +3258,10 @@ function hwySpoken(s) {
 // finished one (nothing to do there: Status.json keeps the target after you leave a body) gets only a short clause
 // after the fuel.
 function statusReportText() {
-  const sm = data && data.sampling;
+  const sm = data && data.sampling, pin = pinSpokenNow();   // #16: the pin you fly to, first
   if (data && data.on_body && sm && sm.species)
-    return `${sm.species}, sample ${sm.samples} of 3` + (sm.clear ? ", clear to take the next." : sm.to_go ? `, ${sm.to_go} metres still to go.` : ".");
-  const parts = [], f = data && data.fuel;
+    return (pin ? pin + ". " : "") + `${sm.species}, sample ${sm.samples} of 3` + (sm.clear ? ", clear to take the next." : sm.to_go ? `, ${sm.to_go} metres still to go.` : ".");
+  const parts = pin ? [pin] : [], f = data && data.fuel;
   const hd = hereData && !hereData.error && hereData.id64 === posId() ? hereData : null;
   const plan = hd && hd.leaving ? planItems(hd.leaving) : [];
   const dest = hd && data.destination ? hd.bodies.find(b => b.body_id === data.destination.body_id) : null;
@@ -3751,6 +4034,7 @@ function renderBookmarks(bms) {
     `<tr><td colspan="5" class="unk">No bookmarks yet. Click ☆ beside any system to add one.</td></tr>`;
   refocus("bmRows", fk);
   drawSweep();
+  drawBmPins();
 }
 
 // ---- Bookmark dialog ----
@@ -4050,7 +4334,7 @@ function renderHere() {
     const firsts = [b.first_discovered && `<span class="fl" title="first discovered">🏁</span>`, b.first_mapped && `<span class="fl" title="first mapped">🗺</span>`,
                     !b.first_mapped && b.mapped && `<span class="fl unk" title="mapped (not first)">🗺</span>`,
                     b.first_footfall && `<span class="fl" title="first footfall">👣</span>`, !b.scanned && `<span class="unk" title="known to Spansh, not scanned by you">—</span>`].filter(Boolean).join("");
-    return `<tr class="${b.main ? "main" : ""}${selectedBody === b.name ? " sel" : ""}${destBody === b ? " dest" : ""}${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}"><td class="name" data-name="${esc(b.name)}">${ind}${esc(b.name)}${codexTypeMark(b.codex_type, h.region)}${codexGeoMark(b.codex_geo, h.region)}${b.ggg ? " " + gggIcon(!!b.ggg.confirmed, gggTitle(b.ggg)) : ""}${(b.curiosities || []).length ? ` <span class="cur" title="${b.curiosities.map(c => esc(c.tag + ": " + c.why)).join("&#10;")}">🔭</span>` : ""}${b.notable ? ` <span class="nb ${b.notable}">${b.notable}</span>` : ""}${b.terraformable ? ` <span class="nb T">T</span>` : ""}${firsts ? `<div class="sf2 sub2">${firsts}</div>` : ""}</td>
+    return `<tr class="${b.main ? "main" : ""}${selectedBody === b.name ? " sel" : ""}${destBody === b ? " dest" : ""}${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}"><td class="name" data-name="${esc(b.name)}">${ind}${esc(b.name)}${pinMarkFor(h.id64, b.name)}${codexTypeMark(b.codex_type, h.region)}${codexGeoMark(b.codex_geo, h.region)}${b.ggg ? " " + gggIcon(!!b.ggg.confirmed, gggTitle(b.ggg)) : ""}${(b.curiosities || []).length ? ` <span class="cur" title="${b.curiosities.map(c => esc(c.tag + ": " + c.why)).join("&#10;")}">🔭</span>` : ""}${b.notable ? ` <span class="nb ${b.notable}">${b.notable}</span>` : ""}${b.terraformable ? ` <span class="nb T">T</span>` : ""}${firsts ? `<div class="sf2 sub2">${firsts}</div>` : ""}</td>
       <td>${sfText(b.type === "Star" ? "star" : "planet", b.subtype || "")}${b.type === "Star" ? (b.scoopable ? ` <span class="scoop">⛽</span>` : "") : ""}${b.rings ? `<span class="sf2"> ${icon("ring", "i-ring", b.rings, ringsText(b))}</span>` : ""}${b.dist_ls != null ? `<div class="sf2 sub2 unk">${Math.round(b.dist_ls).toLocaleString()} ls</div>` : ""}</td>
       <td class="num c2hide">${b.dist_ls != null ? Math.round(b.dist_ls).toLocaleString() : ""}</td>
       <td class="num${b.gravity >= highGravity() ? " noscoop" : ""}">${b.gravity != null && b.type === "Planet" ? b.gravity.toFixed(2) : ""}${atm ? `<div class="sf2 atm2" title="${esc(atm)}">${esc(shortForm("atmosphere", atm))}</div>` : ""}</td>
@@ -4293,7 +4577,7 @@ function discHtml(b, depth) {
   const belts = (b.belts || []).length ? `<span class="belt" title="${b.belts.length} belt${b.belts.length === 1 ? "" : "s"}">⋯</span>` : "";
   return `<div class="sbody${hotClasses(b)}" data-body="${esc(b.name)}" data-bodypop="${esc(b.name)}">` +
     `<div class="discwrap" style="width:${size + 14}px;height:${size + 14}px">${ring}<span class="${cls}" style="width:${size}px;height:${size}px;--c:${col}"></span>${stopsHtml(b)}</div>` +
-    `<div class="sname" title="${esc(b.name)}">${esc(b.name)}${belts}</div><div class="badges">${badges}</div>` +
+    `<div class="sname" title="${esc(b.name)}">${esc(b.name)}${pinMark(b.name)}${belts}</div><div class="badges">${badges}</div>` +
     `<div class="sval${maxOf(b) ? "" : " unk"}">${maxOf(b) ? credits(maxOf(b)) : "—"}</div>` +
     (b.type === "Planet" && b.dist_ls != null ? `<div class="sdist">${Math.round(b.dist_ls).toLocaleString()} ls</div>` : "") + `</div>`;
 }
@@ -4599,7 +4883,11 @@ function renderBodyInto(panel, d, bodyName, closeJs) {
   const curSec = (row.curiosities || []).length ? sec("curiosities", "🔭 Curiosities", row.curiosities.map(c => `<div><b>${esc(c.tag)}</b> · ${esc(c.why)}</div>`).join("")) : "";
   const mineSec = row.mining || (row.mined || []).length ? sec("mining", row.mining ? `⛏ ${mineCount(row.mining)}` : "⛏ Mining",
     (row.mining ? row.mining_odds ? mineOddsHtml(row.mining_odds) : `<span class="unk">no survey odds for this ground</span>` : "") + minedHtml(row)) : "";
-  h += curSec + bioSec + mineSec + ringSec + compSec + `<div class="two">${physSec}${orbitSec}</div>`;
+  // #16: the body's pins and the field to add one; folded until you open it while the body has none
+  const npins = (PINS.list || []).filter(p => p.system === String(d.id64) && p.body === d.full_name).length;
+  const pinSec = isStar ? "" : `<div class="sec${(bodySecs.pins ?? !npins) ? " closed" : ""}" data-sec="pins"><div class="lbl">📍 Pins${npins ? ` · ${npins}` : ""}</div>` +
+    `<div class="secbody" data-sys="${esc(d.id64)}" data-body="${esc(d.full_name)}" data-sysname="${esc(d.system || "")}">${pinsListHtml(d.id64, d.full_name)}</div></div>`;
+  h += pinSec + curSec + bioSec + mineSec + ringSec + compSec + `<div class="two">${physSec}${orbitSec}</div>`;
   h += sec("value", "Value and discovery", kv([
     ["Pays now", has(row.value_now) ? credits(row.value_now) + " cr" : null], ["Could pay", has(row.value_max) ? credits(row.value_max) + " cr" + (has(row.value_max_base) && row.value_max_base !== row.value_max ? ` (${credits(row.value_max_base)} without bonuses)` : "") : null],
     ["Of which", row.value_parts ? `${credits(row.value_parts.carto_now)} + ${credits(row.value_parts.bio_now)} bio held · ${credits(row.value_parts.carto_left)} + ${credits(row.value_parts.bio_left)} bio still there (bio ×${row.value_parts.bio_factor})` : null],
@@ -7012,6 +7300,8 @@ const SURVEY = {
         form: ["radius", "max_results", "max_distance", "avoid_thargoids", "loop"]},
   aw: {glyph: "🧪", name: "Ammonia worlds", what: "ammonia route", a: "an ammonia world route", work: "bodies", left: ["body", "bodies", "to do here"],
        form: ["radius", "max_results", "max_distance", "avoid_thargoids", "loop"]},
+  tf: {glyph: "🪨", name: "Terraformable worlds", what: "terraformable route", a: "a terraformable world route", work: "bodies", left: ["body", "bodies", "to do here"],
+      form: ["radius", "max_results", "max_distance", "avoid_thargoids", "loop"]},
   sweep: {glyph: "🧹", name: "Sweep", what: "sweep", a: "a sweep", work: null, left: ["stop", "stops", "here"], form: null},
   trade: {glyph: "💱", name: "Trade route", what: "trade route", a: "a trade route", work: "trade", left: ["trade", "trades", "to make here"], form: null},
 };
@@ -7211,19 +7501,24 @@ function hwyFormShow() {
   hForm.querySelector(".hwy-xopt").hidden = p !== "exact";
   const unscanned = p === "unscanned";   // this fork's: unscanned systems likely to hold life, a jump range apart
   hForm.querySelector(".hwy-uopt").hidden = !unscanned;
-  const k = SURVEY[p], trade = p === "trade", survey = !!(k && k.form), slot = !!k;
+  const k = SURVEY[p], trade = p === "trade", survey = !!(k && k.form), slot = !!k, fc = p === "carrier";
   hForm.querySelectorAll(".hwy-ropt").forEach(e => { e.hidden = !survey; });
+  // #19: your carrier's trip: its own form (the depot, the hold, the cargo in use, the type), no ship, no range
+  hForm.querySelectorAll(".fc-opt, .fc-only").forEach(e => { e.hidden = !fc; });
+  hEl("hwyNearest").hidden = fc;
+  if (fc) fillFcForm();
   hForm.querySelectorAll(".hwy-ropt [data-field]").forEach(e => { e.hidden = !survey || !k.form.includes(e.dataset.field); });
   // a trade route starts at a station with your capital and hold: no destination, ship, cargo or range
   hForm.querySelectorAll(".trade-opt").forEach(e => { e.hidden = !trade; });
   hForm.querySelector(".hwyto").hidden = trade;
-  hForm.querySelector(".hwy-shiprow").hidden = trade;
-  if (trade) hForm.querySelector(".hwy-nopt").hidden = true;
-  hForm.querySelector(".hwy-cons").hidden = slot || unscanned;   // Spansh's survey and trade routes take the range as it is
+  hForm.querySelector(".hwy-shiprow").hidden = trade || fc;
+  if (trade || fc) hForm.querySelector(".hwy-nopt").hidden = true;
+  if (fc) hForm.querySelector(".hwy-xopt").hidden = true;
+  hForm.querySelector(".hwy-cons").hidden = slot || unscanned || fc;   // Spansh's survey and trade routes take the range as it is
   hEl("hwyTo").placeholder = survey ? "optional: where to end" : unscanned ? "optional: a system to head towards" : "destination system";
   // one slot: a survey or a trade plot replaces the route there is
   const rr = R.data && R.data.route;
-  hEl("hwyGo").textContent = slot && rr ? `Plot (replaces your ${surveyOf(rr.kind).what})` : "Plot";
+  hEl("hwyGo").textContent = fc ? "Plot the carrier's trip" : slot && rr ? `Plot (replaces your ${surveyOf(rr.kind).what})` : "Plot";
   // the neutron plotter can do without a ship (type the range); the exact one needs a Loadout
   const none = hEl("hwyShip").querySelector('option[value=""]');
   if (none) { none.disabled = p === "exact"; none.hidden = p === "exact"; }
@@ -7328,7 +7623,12 @@ function setHwyStatus(text, cls = "") { H.status = {text, cls}; drawHwyStatus();
 function drawHwyStatus() {
   const el = hEl("hwyStatus"), p = H.data && H.data.plotting, rp = R.data && R.data.plotting;
   let text = "", cls = "";
-  if (rp && rp.state === "running") {
+  const fp = data && data.carrier_trip && data.carrier_trip.plotting;
+  if (fp && fp.state === "running") {
+    const secs = fp.started ? Math.max(0, Math.round((Date.now() - new Date(fp.started)) / 1000)) : null;
+    text = `Asking Spansh's carrier router: ${fp.from} → ${fp.to}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
+  } else if (fp && fp.state === "failed" && hwyPlotter() === "carrier") { text = `Could not plot the carrier's trip: ${fp.error}.`; cls = "err"; }
+  else if (rp && rp.state === "running") {
     const secs = rp.started ? Math.max(0, Math.round((Date.now() - new Date(rp.started)) / 1000)) : null;
     text = `Asking Spansh for ${surveyOf(rp.kind).a} from ${rp.from}…${secs != null ? ` ${secs} s` : ""}`; cls = "busy";
   } else if (p && p.state === "running") {
@@ -7341,8 +7641,32 @@ function drawHwyStatus() {
   else if (H.error) { text = `Could not load the highway: ${hwyErr(H.error)}.`; cls = "err"; }
   el.textContent = text.replace(/\.\.$/, "."); el.className = cls;
 }
+// #19: the carrier form's figures from the journal (the payload's carrier_trip.defaults), where nothing is typed
+function fillFcForm() {
+  const d = (data && data.carrier_trip && data.carrier_trip.defaults) || {};
+  for (const [id, v] of [["fcFuel", d.fuel], ["fcHold", d.hold], ["fcUsed", d.used]])
+    if (document.activeElement !== hEl(id) && hEl(id).value === "" && v != null) hEl(id).value = v;
+  if (d.type && !hEl("fcType").dataset.touched) hEl("fcType").value = d.type;
+  if (hwyPlotter() === "carrier") hEl("hwyFrom").placeholder = d.from ? `the carrier: ${d.from}` : "the carrier's system";
+}
+async function carrierSubmit() {
+  const num = id => hEl(id).value === "" ? null : Number(hEl(id).value);
+  const b = {to: hEl("hwyTo").value.trim(), fuel: num("fcFuel"), hold: num("fcHold"), used: num("fcUsed"), type: hEl("fcType").value};
+  const from = hEl("hwyFrom").value.trim(), via = hEl("fcVia").value.trim();
+  if (from) b.from = from;
+  if (via && !hEl("fcViaWrap").hidden) b.via = via;
+  if (!b.to) return setHwyStatus("Type the carrier's destination (or To me).", "err");
+  setHwyStatus("Asking Spansh's carrier router…", "busy");
+  const r = await carrierTripPost(b);
+  if (r.error) return setHwyStatus(`Could not plot the carrier's trip: ${hwyErr(r.error)}.`, "err");
+  H.status = null; drawHwyStatus();
+}
+hEl("fcToMe").onclick = () => { const n = data && data.position && data.position.name; if (n) hEl("hwyTo").value = n; };
+hEl("fcViaBtn").onclick = () => { const w = hEl("fcViaWrap"); w.hidden = !w.hidden; hEl("fcViaBtn").textContent = w.hidden ? "+ via" : "− via"; if (!w.hidden) hEl("fcVia").focus(); };
+hEl("fcType").onchange = e => { e.target.dataset.touched = "1"; };
 hForm.addEventListener("submit", async e => {
   e.preventDefault();
+  if (hwyPlotter() === "carrier") return carrierSubmit();
   if (SURVEY[hwyPlotter()]) return richSubmit(hwyPlotter());
   const b = hwyBody();
   if (!b.to && b.plotter !== "unscanned") return setHwyStatus("Type the destination system.", "err");
@@ -8882,8 +9206,9 @@ function copilotDo(cp) {
     speak(text, {kind: "manual", piperOnly: true}); addCaption(text);
   } else if (cp.action === "again") {
     const text = lastSaid ? lastSaid.words : "Nothing said yet.";
-    speak(text, {kind: "manual", voice: lastSaid && lastSaid.voice, speaker: lastSaid ? lastSaid.speaker : null, pace: lastSaid ? lastSaid.pace || 1 : 1, piperOnly: true}); addCaption(text);
-  } else if (cp.action === "replay" && cp.words) { speak(cp.words, {kind: "manual", piperOnly: true}); addCaption(cp.words); }
+    speak(text, {kind: "manual", voice: lastSaid && lastSaid.voice, speaker: lastSaid ? lastSaid.speaker : null, pace: lastSaid ? lastSaid.pace || 1 : 1, piperOnly: true,
+                 private: !!(lastSaid && lastSaid.priv)}); addCaption(text, null, !!(lastSaid && lastSaid.priv));
+  } else if (cp.action === "replay" && cp.words) { speak(cp.words, {kind: "manual", piperOnly: true, private: !!cp.private}); addCaption(cp.words, null, !!cp.private); }
   // an answer to a question by voice (POST api/ask): said here, as a line you asked for (a hush's answer too, onHush
   // leaving it the news); "caption": shown only (unhush's: the end of the hush is announced)
   else if (cp.action === "say" && cp.words) { speak(cp.words, {kind: "manual", piperOnly: true}); addCaption(cp.words); }
@@ -8903,7 +9228,8 @@ function onData() {
   { const cn = bioColoursNote(); if (cn !== bioColoursDrawn) { bioColoursDrawn = cn; drawHereLegend(); } }   // S7's note in Here's legend
   // first payload, the server was restarted, or this window slept (see poll): no sounds for old state
   const firstNews = data.run_id !== runId || woke;
-  onHush(firstNews); takeCopilot(data.copilot, firstNews); nowStakesTick();
+  onHush(firstNews); takeCopilot(data.copilot, firstNews); takeChatter(data.chatter); takeChat(firstNews); nowStakesTick();
+  pinsTick();   // #16
   if (data.ask_seq !== AL.seq) loadAskLog();   // S35: a new question while Questions asked is open
   const cpl = document.getElementById("copilotLine"), btn = data.copilot && data.copilot.button;
   cpl.hidden = !btn; cpl.textContent = btn ? `Co-pilot button: ${btn}` : "";
@@ -9212,6 +9538,9 @@ function onData() {
         alertOut("docking", `🛬 Pad ${m.pad}`, [m.station, m.where].filter(Boolean).join(" · "), {tag: "docking",
                  say: () => line("docking_granted", {pad: m.pad, station: m.station || "the station"}, `Pad ${m.pad}.`) +
                    (m.say_where ? " " + m.say_where : "")});
+      else if (m.kind === "pin" && m.name)   // #16: the active pin: set, passing 10 km / 1 km / 100 m, arrived (the Navigator's)
+        alertOut("pins", m.what === "arrived" ? `📍 Arrived at ${m.name}` : `📍 ${m.name}: ${surfDist(m.dist)}`,
+                 m.what === "arrived" ? (m.next ? `next: ${m.next.name}, ${surfDist(m.next.dist)}` : "") : pinTurnWords(m), {tag: "pins", say: pinSpoken(m)});
       else if (m.kind === "docking" && m.what === "denied" && m.words)   // #3: only the reasons that are not obvious
         alertOut("docking", "🛬 Docking denied", `${m.station ? m.station + ": " : ""}${m.words}`, {tag: "docking",
                  say: () => line("docking_denied", {reason: m.words, station: m.station || "the station"}, `Docking denied: ${m.words}.`)});
@@ -9361,7 +9690,7 @@ function onData() {
   if (c && c.moved_ts !== lastCarrierMoved) {
     if (lastCarrierMoved) { alertOut("carrier", `${c.name} ${c.assumed ? "should now be" : "is"} at ${c.system}`,
                                      (c.distance != null ? `${c.distance} ly from you` : "") + (c.assumed ? (c.distance != null ? " · " : "") + "the booked jump (not yet confirmed)" : ""),
-                                     {say: () => line("carrier_arrived", {carrier: c.name, system: c.system})}); toast(`🚢 ${c.name} arrived at ${c.system}`); }
+                                     {say: () => line("carrier_arrived", {carrier: c.name, system: c.system}) + carrierTripArrivalWords()}); toast(`🚢 ${c.name} arrived at ${c.system}`); }
     lastCarrierMoved = c.moved_ts;
   }
   const k = (data.codex_recent || [])[0];
@@ -9411,7 +9740,9 @@ function drawSpeechLog() {
   drawSpeechBans();
   document.getElementById("speechTally").innerHTML = speechTallyHtml();
   // 👎 on a line picked from the lines file: never that wording again (not on plain wording, which has no versions)
-  const ban = e => !e.template || !e.key ? "" : e.banned ? ` <span class="unk">· banned</span>`
+  const ban = e => e.chatFrom ? (chatMuted().some(x => x.toLowerCase() === e.chatFrom.toLowerCase()) ? ` <span class="unk">· ${esc(e.chatFrom)} muted</span>`
+      : ` <button type="button" class="try" data-chatmute="${esc(e.chatFrom)}" title="never read ${esc(e.chatFrom)}'s chat aloud (undo in Settings → Voice → Chat)">🔇</button>`)
+    : !e.template || !e.key ? "" : e.banned ? ` <span class="unk">· banned</span>`
     : ` <button type="button" class="try ban" data-ban="${e.id}" title="never say this line again (every browser)">👎</button>`;
   document.getElementById("speechLog").innerHTML = speechLog.length ? [...speechLog].reverse().map(e =>
     `<div class="slog ${fateGroup(e.fate)}"><span class="unk">${hms(e.t)}</span> <b>${esc(e.fate || "waiting")}</b> <span class="unk">· ${esc(speechLogFacts(e).join(" · "))}</span>${ban(e)}<br>“${esc(e.words)}”</div>`).join("")
@@ -9449,6 +9780,8 @@ async function banLine(alert, template, ban) {
   return true;
 }
 document.getElementById("speechLog").addEventListener("click", ev => {
+  const cm = ev.target.closest("[data-chatmute]");
+  if (cm) { chatMute(cm.dataset.chatmute, true); return; }
   const b = ev.target.closest("[data-ban]"); if (!b) return;
   const e = speechLog.find(x => x.id === Number(b.dataset.ban));
   if (e && e.key && e.template) banLine(e.key, e.template, true);
@@ -9637,9 +9970,24 @@ function drawSpeechStyles() {
   const pct = document.getElementById("speechProfanityPct");
   if (document.activeElement !== pct) pct.value = speechProfanePct();
   pct.disabled = !swear.length || !speechProfane();
-  document.getElementById("speechProfanityWho").textContent = swear.length ? `(${swear.join(", ")})` : "";
+  // by name, and the shorter way round (the author, 2026-10-16): "(all but Down to business, Vulcan)"
+  const label = k => { const v = (speechLib.styles || {})[k]; return typeof v === "string" ? v : (v && v.label) || k; };
+  const clean = styles.map(([k]) => k).filter(k => !swear.includes(k));
+  document.getElementById("speechProfanityWho").textContent = !swear.length ? "" : !clean.length ? "(all)"
+    : swear.length >= clean.length ? `(all but ${clean.map(label).join(", ")})` : `(${swear.map(label).join(", ")})`;
   document.getElementById("speechDangerBusiness").checked = speechDangerBusiness();
   document.getElementById("speechShift").checked = speechShift();
+  if (chatUi) drawChatRead();   // (#17: imported or changed in another window)
+  // Main personality: one of them, or "A mix…" (the boxes above and One personality per system)
+  const main = document.getElementById("speechMain"), names = Object.fromEntries(styles);
+  const single = !speechMix() && on.length === 1 && on[0] in names;
+  const optHtml = styles.map(([k, v]) => { const sv = styleVoice(k), own = sv.voice || sv.speaker != null;
+    return `<option value="${esc(k)}">${esc(typeof v === "string" ? v : (v && v.label) || k)}${own ? ` (${esc(voiceWords(sv))})` : ""}</option>`; }).join("")
+    + `<option value="__mix">A mix…</option>`;
+  if (main.dataset.drawn !== optHtml) { main.innerHTML = optHtml; main.dataset.drawn = optHtml; }
+  if (document.activeElement !== main) main.value = single ? on[0] : "__mix";
+  document.getElementById("speechMixBox").hidden = single;
+  drawMainHint();
   drawStyleVoices();
   if (crewUi) drawCrew();   // the XO's personality is the ones ticked
   const err = speechLib.error || (speechLib.problems || []).slice(0, 3).join("; ");
@@ -9669,6 +10017,21 @@ namesBox.onchange = () => { store.set("speechNames", namesBox.value.trim() ? nam
 drawSpeechStyles();
 document.getElementById("speechDangerBusiness").onchange = e => store.set("speechDangerBusiness", e.target.checked);
 document.getElementById("speechShift").onchange = e => { store.set("speechShift", e.target.checked); shiftStyle = null; drawSpeechStyles(); };
+document.getElementById("speechMain").onchange = e => {
+  const v = e.target.value;
+  if (v === "__mix") store.set("speechMix", true);
+  else { store.set("speechStyles", [v]); store.set("speechMix", false); }
+  shiftStyle = null; e.target.blur(); drawSpeechStyles();
+};
+// under Main voice and Main personality: what they are for, with the crew on (the XO's) and off (every alert)
+function drawMainHint() {
+  document.getElementById("mainHint").textContent = data && data.crew && data.crew.on   // (crewOn: defined further down)
+    ? "The XO's voice and personality: voice answers, status reports, the co-pilot and the hush, every crew member left " +
+      "\"as the XO\", and the stand-in for any crew member whose voice cannot speak. With the crew off (Split the alerts " +
+      "among a crew, below), this voice and personality say every alert."
+    : "This voice and personality say every alert, as well as voice answers, status reports and the co-pilot. To give " +
+      "alerts to other voices, tick Split the alerts among a crew below: these then become the XO's.";
+}
 document.getElementById("speakMode").onchange = e => { store.set("speakMode", e.target.value); drawSpeaker(); };
 document.getElementById("serverPlay").onchange = e => { store.set("speakOnServer", e.target.checked); drawServerPlay(); drawSoundBtn(); };
 document.getElementById("speakerClaim").onclick = () => claimSpeaker(true);
@@ -9779,7 +10142,8 @@ let mvVoices = null;   // More voices: Piper's catalogue once fetched (see loadM
 function drawTts() {
   const t = data && data.tts, sel = document.getElementById("ttsVoice");
   document.getElementById("ttsEngine").textContent = t && t.engine === "piper" ? "· Piper" : "· browser speech";
-  document.getElementById("ttsStatus").textContent = t && t.available ? t.status : "";
+  // only when it says something: loading, downloading, a failure (the author, 2026-10-16: "ready" told nothing)
+  document.getElementById("ttsStatus").textContent = t && t.available && t.status !== "ready" ? t.status : "";
   document.getElementById("ttsHint").textContent = !t || !t.available
     ? "Piper is not installed, so the browser's own voice is used (robotic on Linux). For a natural voice: python3 -m venv --system-site-packages .venv && .venv/bin/pip install piper-tts, then restart Outrider."
     : "Voices live in data/piper-voices/ where Outrider runs; More voices below downloads any of Piper's there.";
@@ -9800,6 +10164,7 @@ function drawTts() {
     + ((sf.problems || []).length ? ` Not used: ${sf.problems.join("; ")}.` : "");
   drawServerPlay();
   drawPadDelay();
+  drawChatter();
   drawStyleVoices();
   if (crewUi) { drawCrew(); drawVoiceMemory(); }
   drawSpeechBtn();
@@ -9990,13 +10355,269 @@ document.getElementById("padDelay").onchange = async e => {
 document.getElementById("vmKeep").onchange = e => { if (e.target.value) vmPost("voices_loaded", e.target.value); else drawVmKeep(); };
 document.getElementById("vmPreload").onchange = e => vmPost("voices_preload", e.target.checked);
 
+// ---- space chatter (#15, outrider/chatter.py): idle talk in quiet supercruise, or while you are on foot or in the SRV on
+// a planet. Off by default (Settings -> Voice -> Space chatter: the server's meta chatter, every browser's). Two clocks: no
+// alert for N minutes (alertOut's lastAlert) and N to 2N since the last chatter (a dialogue counts once), N by the
+// chattiness; a grace after entering supercruise or stepping out on a planet; "rare" at most a few an hour. The speaking
+// window only, never over anything queued, and last in the queue; a dialogue's later lines go if an alert came in
+// between. With the crew on, a station that takes part says a monologue, or now and then asks another about one of
+// its topics and gets an answer (sometimes a last word back); two stations of the same personality ("as the XO" is the
+// XO's), or of the same voice and person, never talk to each other. With the crew off, the main voice alone.
+const chatterNames = () => store.get("chatterNames", true) !== false;   // captions say who talks (per browser)
+const CHAT = {lastAt: Date.now(), gap: null, level: null, said: []};   // level: the chattiness the gap was drawn for
+const chatInfo = () => (speechLib && speechLib.chatter) || null;
+// the server's chatter (a payload's, or a settings answer's) with since_local: since on this page's clock, from its age
+// (since_ago), as the hush does, so a tablet whose clock is off the PC's keeps the grace and {minutes} right
+function takeChatter(c) {
+  if (c && typeof c === "object") c.since_local = Number.isFinite(c.since_ago) ? Date.now() - c.since_ago * 1000 : null;
+  return c;
+}
+// a station as chatter's speaker ({role, personality, voice, speaker}), or null when it cannot speak itself (for an
+// alert the XO stands in; chatter leaves it out)
+function chatMember(role) {
+  const c = data && data.crew;
+  if (!c || !c.on) return null;
+  if (role === "xo") return {role: "xo", personality: null, voice: null, speaker: null, fill: null, for: null};
+  const m = (c.members && c.members[role]) || {};
+  if (m.fill || (m.personality && !(m.personality in (speechLib.styles || {})))) return null;
+  return {role, personality: m.personality || null, voice: m.voice || null, speaker: spkNum(m.speaker), fill: null, for: null};
+}
+// the stations that may chatter now: the crew's, ticked to take part and able to speak; none with the crew off
+function chatSpeakers() {
+  const off = new Set((data && data.chatter && data.chatter.off) || []);
+  return crewOn() ? crewRoles().map(r => r.id).filter(id => !off.has(id)).map(chatMember).filter(Boolean) : [];
+}
+// the XO (and a member "as the XO") speaks as the one personality ticked, in its own voice, when only one is (the Main
+// personality dropdown): compared as that (sweep 2026-10-17: it could talk to a station of that same personality)
+const chatXoStyle = () => { const st = speechStyles(); return st.length === 1 && st[0] in (speechLib.styles || {}) ? st[0] : null; };
+const chatPersona = m => m.personality || chatXoStyle() || "xo";
+// the voice and person a station is really heard in, so two that sound alike never talk: a voice not installed is the
+// main voice (as heardVoice), the main voice named is the main voice, a person left unset on it is the main voice's
+// own; on another voice an unset person is the one picked for that voice, which the page does not know ("picked")
+const chatVoiceKey = m => {
+  const t = data && data.tts, main = (t && t.voice) || null, v = crewVoice(m, m.personality || chatXoStyle());
+  const own = v.voice && v.voice !== main && ((t && t.voices) || []).includes(v.voice) ? v.voice : null;
+  const missing = v.voice && v.voice !== main && !own;   // heard in the main voice, without that voice's person
+  const speaker = own ? v.speaker ?? "picked" : (missing ? null : v.speaker) ?? (t && t.speaker) ?? 0;
+  return `${own || main || "main"}#${speaker}`;
+};
+const chatMayTalk = (a, b) => a.role !== b.role && chatPersona(a) !== chatPersona(b) && chatVoiceKey(a) !== chatVoiceKey(b);
+// how a station is addressed: its name, else its station ("Engineer"); in captions "Engineer (Mira)"
+const chatTo = m => crewName(m.role) || crewTitle(m.role);
+const chatWho = m => crewName(m.role) ? `${crewTitle(m.role)} (${crewName(m.role)})` : crewTitle(m.role);
+// a dialogue [asker, answerer, topic id] among `members`, or null: a personal topic about info.personal of the time
+function chatDialogue(members, info, rnd = Math.random) {
+  const topics = (info && info.topics) || [];
+  const kinds = rnd() < (info.personal ?? 0.25) ? ["personal", "station"] : ["station", "personal"];
+  for (const kind of kinds) {
+    const options = [];
+    for (const t of topics.filter(t => t.kind === kind))
+      for (const a of members) for (const b of members)
+        if (t.ask.includes(a.role) && t.answer.includes(b.role) && chatMayTalk(a, b)) options.push([a, b, t.id]);
+    if (options.length) return options[Math.floor(rnd() * options.length)];
+  }
+  return null;
+}
+// the values a chatter line may fill (a line needing one that is not known is not said: lineStrict)
+function chatVars(c, extra = {}) {
+  const ts = data && data.this_session, s = data && data.surface;
+  return Object.assign({system: data && data.position && data.position.name,
+    minutes: c && c.where === "space" && c.since_local ? Math.max(1, Math.round((Date.now() - c.since_local) / 60000)) : null,
+    jumps: (ts && ts.jumps) || null, firsts: (ts && ts.firsts) || null,
+    body: (s && s.body) || null, ship_dist: s && s.ship && s.ship.dist != null ? surfDist(s.ship.dist) : null}, extra);
+}
+// a chatter line's words by `m` (null: the main voice), picked but not said yet: {key, words, style, template, m} or null
+function chatPick(key, m, vars) {
+  lineStyle = lineKey = lineTemplate = null; lineCrewForce = m; lineStrict = true;
+  let words;
+  try { words = line(key, vars, ""); } finally { lineCrewForce = undefined; lineStrict = false; }
+  return words ? {key, words, style: lineStyle, template: lineTemplate, m} : null;
+}
+// `kind` "manual" for ▶ Try chatter: heard in any window and through a hush, as the other ▶ buttons
+function chatSpeak(p, still, kind = "chatter") {
+  const entry = logSpeech({kind, tag: p.key, words: p.words});
+  entry.style = p.style; entry.key = p.key; entry.template = p.template;
+  speak(p.words, {kind, tag: p.key, still, log: entry, ...crewVoice(p.m, p.style)});
+  addCaption(p.words, p.m ? chatWho(p.m) : null);
+}
+// say something now: a dialogue (with two stations that may talk, info.dialogue of the time; `force`: half) or a
+// monologue. true, or why nothing was said.
+function chatterNow({force = false} = {}) {
+  const c = data && data.chatter, info = chatInfo();
+  if (!c || !info) return "Outrider has not sent its chatter settings yet";
+  const where = c.where || (force ? "space" : null);
+  if (!where) return "nothing to chat about here";
+  const started = Date.now(), alive = () => !(lastAlert && lastAlert.at > started);   // an alert since: the rest goes
+  const kind = force ? "manual" : "chatter";
+  const speakers = chatSpeakers();
+  if (speakers.length >= 2 && Math.random() < (force ? 0.5 : info.dialogue)) {
+    const d = chatDialogue(speakers, info);
+    if (d) {
+      const [a, b, topic] = d;
+      const ask = chatPick(`chat_${topic}_ask`, a, chatVars(c, {to: chatTo(b)}));
+      const answer = ask && chatPick(`chat_${topic}_answer`, b, chatVars(c, {to: chatTo(a)}));
+      if (ask && answer) {
+        chatSpeak(ask, alive, kind); chatSpeak(answer, alive, kind);
+        const react = Math.random() < info.third && chatPick("chatter_react", a, chatVars(c, {to: chatTo(b)}));
+        if (react) chatSpeak(react, alive, kind);
+        return true;
+      }
+    }
+  }
+  const m = speakers.length ? speakers[Math.floor(Math.random() * speakers.length)] : null, s = data && data.surface;
+  const key = where === "planet" ? (s && s.ship ? "chatter_planet_landed" : "chatter_planet_orbit") : "chatter_space";
+  const p = chatPick(key, m, chatVars(c));
+  if (!p) return info.written ? "nothing to say right now" : "no chatter lines yet: they come in a later update";
+  chatSpeak(p, alive, kind);
+  return true;
+}
+// every few seconds in the speaking window: whether both clocks have run out, and then say something
+function chatterTick(now = Date.now()) {
+  const c = data && data.chatter, info = chatInfo();
+  if (!c || !c.on || !info || !c.where || c.why_not || !speakerHere() || !speechOn || hushed()) return false;
+  const N = (info.levels[c.level] || 7) * 60000;
+  if (CHAT.gap == null || CHAT.level !== c.level) { CHAT.gap = N * (1 + Math.random()); CHAT.level = c.level; }   // a new chattiness: at once
+  if (!c.since_local || now - c.since_local < info.grace * 1000) return false;
+  if (lastAlert && now - lastAlert.at < N) return false;
+  if (now - CHAT.lastAt < CHAT.gap) return false;
+  CHAT.said = CHAT.said.filter(t => now - t < 3600000);
+  if (c.level === "rare" && CHAT.said.length >= info.rare_per_hour) return false;
+  if (speechBusy || speechItems.length) return false;   // never over something said or waiting
+  CHAT.lastAt = now; CHAT.gap = N * (1 + Math.random()); CHAT.said.push(now);
+  chatterNow();
+  return true;
+}
+setInterval(() => { try { chatterTick(); } catch (err) { console.warn("chatter:", err); } }, 5000);
+// Settings -> Voice -> Space chatter
+function drawChatter() {
+  const box = document.getElementById("chatBox");
+  if (!box) return;
+  const c = (data && data.chatter) || {on: false, level: "normal", off: []};
+  const on = document.getElementById("chatOn"), lv = document.getElementById("chatLevel");
+  on.checked = !!c.on;
+  if (document.activeElement !== lv) lv.value = c.level || "normal";
+  document.getElementById("chatNames").checked = chatterNames();
+  if (crewUi) drawCrew();   // the Crew table's Chatter column (who takes part)
+}
+async function chatPost(body) {
+  const m = document.getElementById("chatMsg");
+  let r;
+  try { r = await apiJson("api/voice/chatter", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+  catch { r = {error: "Outrider not reachable"}; }
+  r = r || {error: "?"};
+  if (!r.error && data && r.chatter) data.chatter = takeChatter(r.chatter);
+  m.textContent = r.error ? `Not saved: ${r.error}` : ""; m.className = r.error ? "hint warnc" : "hint";
+  drawChatter();
+}
+document.getElementById("chatOn").onchange = e => chatPost({on: e.target.checked});
+document.getElementById("chatLevel").onchange = e => { e.target.blur(); chatPost({level: e.target.value}); };
+document.getElementById("chatNames").onchange = e => { store.set("chatterNames", e.target.checked); };
+document.getElementById("chatTry").onclick = () => {
+  const r = chatterNow({force: true}), m = document.getElementById("chatMsg");
+  m.textContent = r === true ? "" : r; m.className = "hint";
+};
+
+// ---- chat read aloud by Comms (#17, the author 2026-10-17): other players' messages (the payload's chat: live only,
+// never an NPC's or your own; in memory only), off by default, per browser and shared as the other settings. A tick per
+// channel (squadron, wing, direct ticked), the header ("Kurbo: ..." by default), mutes from Spoken lines' 🔇. Said last
+// in the queue, never while hushed (the "chat" alert row, Comms' by default), and never cached or logged on the PC. The
+// pace: one sender's messages in a row are one line; one line every CHAT_GAP at most, a mention of you at once; past
+// CHAT_SUMMARY waiting, "and 4 more on Squadron"; anything waiting over CHAT_STALE is shown, not said.
+const CHAT_TICKS = [["squadron", "Squadron"], ["wing", "Wing"], ["player", "Direct"], ["local", "Local"], ["voicechat", "Voice chat"]];
+const chatTickOf = ch => ch === "friend" ? "player" : ch === "starsystem" ? "local" : ch;
+const CHAT_WHERE = {squadron: "on Squadron", wing: "on Wing", player: "to you", friend: "to you", local: "on Local", starsystem: "on Local", voicechat: "on Voice chat"};
+const CHAT_WORD = {squadron: "Squadron", wing: "Wing", player: "direct", friend: "direct", local: "Local", starsystem: "Local", voicechat: "Voice chat"};
+const CHAT_GAP = 15000, CHAT_STALE = 60000, CHAT_SUMMARY = 3;
+const chatRead = () => store.get("chatRead", false) === true;
+const chatChannels = () => { const v = store.get("chatChannels", null); return Array.isArray(v) ? v.filter(x => typeof x === "string") : ["squadron", "wing", "player"]; };
+const chatHeader = () => { const v = store.get("chatHeader", "name"); return ["name", "full", "none"].includes(v) ? v : "name"; };
+const chatMuted = () => { const v = store.get("chatMuted", []); return Array.isArray(v) ? v.filter(x => typeof x === "string") : []; };
+const CHATQ = {last: null, spokenAt: 0, queue: []};
+// a message as words to say: a link is "a link", emoji go
+const chatClean = (t, more) => String(t || "").replace(/\b(?:https?:\/\/|www\.)\S+/gi, "a link")
+  .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}]/gu, "").replace(/\s+/g, " ").trim() + (more ? ", and more" : "");
+const chatEnd = t => /[.!?]$/.test(t) ? t : t + ".";
+// one sender's messages in a row, with the header asked for
+function chatWords(group, extra = "") {
+  const m = group[0], h = chatHeader();
+  const body = group.map(x => chatClean(x.text, x.more)).filter(Boolean).map(chatEnd).join(" ");
+  return (h === "full" ? `Commander ${m.sender} ${CHAT_WHERE[m.channel] || ""}: ` : h === "name" ? `${m.sender}: ` : "") + body + extra;
+}
+// the payload's chat: the messages past the last seen; none from the first payload (a page opening never reads a backlog)
+function takeChat(first) {
+  const list = data && Array.isArray(data.chat) ? data.chat : [];
+  const top = list.reduce((a, m) => Math.max(a, Number(m.seq) || 0), 0);
+  if (first || CHATQ.last == null || top < CHATQ.last) { CHATQ.last = top; return; }   // (top lower: Outrider restarted)
+  const fresh = list.filter(m => m.seq > CHATQ.last && m.sender && m.text);
+  CHATQ.last = top;
+  if (!chatRead() || !fresh.length) return;
+  const ticked = new Set(chatChannels()), muted = new Set(chatMuted().map(x => x.toLowerCase()));
+  for (const m of fresh)
+    if (!muted.has(m.sender.toLowerCase()) && (ticked.has(chatTickOf(m.channel)) || m.mention)) CHATQ.queue.push({m, at: Date.now()});
+  chatPump();
+}
+function chatSay(group, extra = "") {
+  const m = group[0], text = group.map(x => chatClean(x.text, x.more)).join(" ");
+  alertOut("chat", `${m.sender} · ${CHAT_WORD[m.channel] || m.channel}`, text, {say: chatWords(group, extra),
+    caption: `${m.sender}: ${text}`, priv: true, chatFrom: m.sender});
+}
+// every second: what may be said now
+function chatPump(now = Date.now()) {
+  const q = CHATQ.queue;
+  while (q.length && now - q[0].at > CHAT_STALE) { const x = q.shift(); addCaption(`${x.m.sender}: ${chatClean(x.m.text, x.m.more)}`, null, true); }
+  if (!q.length) return false;
+  const mi = q.findIndex(x => x.m.mention), due = now - CHATQ.spokenAt >= CHAT_GAP;
+  if (mi < 0 && !due) return false;
+  let i = mi >= 0 && !due ? mi : 0;
+  const head = q[i].m, group = [];
+  while (i < q.length && q[i].m.sender === head.sender && q[i].m.channel === head.channel) group.push(q.splice(i, 1)[0].m);
+  // too many waiting: the rest summed up by channel, shown in the captions
+  let extra = "";
+  if (q.length >= CHAT_SUMMARY) {
+    const by = {};
+    for (const x of q.splice(0)) { by[CHAT_WORD[x.m.channel] || x.m.channel] = (by[CHAT_WORD[x.m.channel] || x.m.channel] || 0) + 1; addCaption(`${x.m.sender}: ${chatClean(x.m.text, x.m.more)}`, null, true); }
+    extra = " And " + Object.entries(by).map(([w, n]) => `${n} more ${w === "direct" ? "directly" : "on " + w}`).join(", ") + ".";
+  }
+  CHATQ.spokenAt = now;
+  chatSay(group, extra);
+  return true;
+}
+setInterval(() => { try { chatPump(); } catch (err) { console.warn("chat:", err); } }, 1000);
+// Settings -> Voice -> Chat
+function drawChatRead() {
+  const on = document.getElementById("chatRead"); if (!on) return;
+  on.checked = chatRead();
+  const ch = new Set(chatChannels()), box = document.getElementById("chatChans");
+  const html = CHAT_TICKS.map(([k, w]) => `<label><input type="checkbox" data-chatch="${k}"${ch.has(k) ? " checked" : ""}> ${w}</label>`).join(" ");
+  if (box.dataset.drawn !== html) { box.innerHTML = html; box.dataset.drawn = html; }
+  const hd = document.getElementById("chatHeader"); if (document.activeElement !== hd) hd.value = chatHeader();
+  const mu = chatMuted(), ml = document.getElementById("chatMutedList");
+  ml.innerHTML = mu.length ? "muted: " + mu.map((n, i) => `${esc(n)} <a href="#" data-chatunmute="${i}" title="read ${esc(n)}'s chat again">✕</a>`).join(", ") : "";
+}
+function chatMute(name, mute) {
+  const list = chatMuted().filter(x => x.toLowerCase() !== String(name).toLowerCase());
+  store.set("chatMuted", mute ? [...list, name] : list);
+  if (mute) CHATQ.queue = CHATQ.queue.filter(x => x.m.sender.toLowerCase() !== String(name).toLowerCase());
+  toast(mute ? `${name}'s chat will not be read aloud` : `${name}'s chat is read aloud again`);
+  drawChatRead(); drawSpeechLog();
+}
+document.getElementById("chatRead").onchange = e => { store.set("chatRead", e.target.checked); if (!e.target.checked) CHATQ.queue = []; drawChatRead(); };
+document.getElementById("chatChans").onchange = e => { const k = e.target.dataset.chatch; if (!k) return;
+  const ch = new Set(chatChannels()); if (e.target.checked) ch.add(k); else ch.delete(k);
+  store.set("chatChannels", CHAT_TICKS.map(([x]) => x).filter(x => ch.has(x))); drawChatRead(); };
+document.getElementById("chatHeader").onchange = e => { store.set("chatHeader", e.target.value); e.target.blur(); };
+document.getElementById("chatMutedList").onclick = e => { const a = e.target.closest("[data-chatunmute]"); if (!a) return;
+  e.preventDefault(); const n = chatMuted()[Number(a.dataset.chatunmute)]; if (n) chatMute(n, false); };
+chatUi = true;
+drawChatRead();
+
 // ---- the crew in Settings (crew batch 2): its switches, the table (Role · Name · Personality · Voice · Speaker · Speaks
 // for · ▶ · ↺, the XO first), the XO note, Settings > Alerts' Crew column and the voice lab's Assign and "by crew"
 // audition. Each change is one POST to api/voice/crew (data.crew comes back), checked by the server against the lines
 // file and the voices installed. The XO row is the main voice (its voice select switches it) and the main personality.
 // an alert row in a few words, for a crew member's "Speaks for" and the messages (test_crew keeps it in step with ALERTS;
 // the Spoken lines tally has its own capitalised names, ALERT_SHORT)
-const ROW_WORDS = {discovery: "target verdicts", arrival: "arrivals", game: "start and exit", jump: "jumps", honk: "the honk",
+const ROW_WORDS = {pins: "surface pins", carriertrip: "carrier trips", chat: "other players' chat", discovery: "target verdicts", arrival: "arrivals", game: "start and exit", jump: "jumps", honk: "the honk",
   brief: "arrival briefings", fss: "the FSS", mapped: "mapped planets", leaving: "leaving with work left", fuel: "fuel",
   scoop: "tank full", scoopstop: "scooping stopped", supercharge: "supercharges", exo: "Exomastery routes", riches: "survey routes",
   trade: "trade routes", highway: "the Highway", refuelshort: "fuel short of a refuel", lastscoop: "last scoop", autotarget: "auto-target",
@@ -10048,13 +10669,15 @@ function drawCrew(force = false) {
   document.getElementById("crewBox").hidden = !c || !roles.length;
   document.getElementById("crewOn").checked = crewOn();
   document.getElementById("crewDanger").checked = crewDangerOn();
-  for (const id of ["crewDangerWrap", "crewAudition", "crewLinesAudition", "crewTable", "crewXoNote", "ttsXo", "ttsXoHint", "styleVoicesCrew"])
+  for (const id of ["crewDangerWrap", "crewAudition", "crewLinesAudition", "crewTable", "crewXoNote", "ttsXo", "ttsXoP", "styleVoicesCrew"])
     document.getElementById(id).hidden = !on;
+  drawMainHint();
   drawAlertCrew(force);
   if (!on) { crewDrawn = ""; return; }
   const t = (data && data.tts) || {}, voices = t.voices || [], styles = Object.keys(speechLib.styles || {});
   const tb = document.querySelector("#crewTable tbody");
-  const key = JSON.stringify([c, roles, voices, t.voice, t.speaker, t.speakers, styles, speechStyles()]);
+  const ch = (data && data.chatter) || {on: false, off: []};
+  const key = JSON.stringify([c, roles, voices, t.voice, t.speaker, t.speakers, styles, speechStyles(), ch.on, ch.off]);
   const busy = tb.contains(document.activeElement) && /^(SELECT|INPUT)$/.test(document.activeElement.tagName);
   if (!force && (key === crewDrawn || busy)) return;
   crewDrawn = key;
@@ -10075,6 +10698,8 @@ function drawCrew(force = false) {
       `<td><input type="text" data-cname maxlength="40" placeholder="no name" aria-label="${nm}: name" value="${esc(m.name || "")}"></td>` +
       `<td>${pers}</td><td>${voice}</td>` +
       `<td><select data-cspk data-sfone aria-label="${nm}: speaker" hidden></select><span data-cnospk class="unk">—</span></td>` +
+      `<td class="cchat${ch.on ? "" : " quiet"}"><label title="${nm} takes part in space chatter${ch.on ? "" : " (Space chatter is off, above)"}">` +
+      `<input type="checkbox" data-cchat aria-label="${nm}: takes part in space chatter"${(ch.off || []).includes(r.id) ? "" : " checked"}> talks</label></td>` +
       `<td class="cfor">${crewSpeaksFor(r.id)}</td>` +
       `<td><button type="button" class="try" data-cplay title="one of ${nm}'s lines, in its voice and personality (here, in this browser)">▶</button></td>` +
       `<td>${xo ? "" : `<button type="button" class="try" data-creset title='back to "as the XO" (its name kept)'${m.personality || m.voice ? "" : " disabled"}>↺</button>`}</td></tr>`;
@@ -10199,6 +10824,7 @@ crewUi = true;
     if (e.target.matches("[data-cname]")) crewPost({role, name: e.target.value});
     else if (e.target.matches("[data-cpers]")) crewPost({role, personality: e.target.value || null});
     else if (e.target.matches("[data-cvoice]")) crewPost({role, voice: e.target.value || null});
+    else if (e.target.matches("[data-cchat]")) chatPost({role, takes_part: e.target.checked});
     else if (e.target.matches("[data-cspk]")) {
       const spk = Number(e.target.value);
       if (!xo) speakerPicked[m.voice] = spk;
@@ -10350,7 +10976,7 @@ function labLine(key, style, opts = {}) {
   const pool = styles.flatMap(st => (Array.isArray(e[st]) ? e[st] : []).filter(x => typeof x === "string" && x.trim() && keep(x)).map(x => [st, x]));
   if (!pool.length) return null;
   const [st, template] = pool[Math.floor(Math.random() * pool.length)];
-  return {key, style: st, template, text: fillLine(template, nameFor(lineVars({...(opts.names || {}), ...(LINE_SAMPLES[key] || {})}), st))};
+  return {key, style: st, template, text: fillLine(template, nameFor(lineVars({...(opts.names || {}), ...lineSample(key)}), st))};
 }
 // play a line: as its personality is heard (S40) when it has a voice or speaker of its own (picked in Personality voices,
 // else speech.json's; an uninstalled voice is the main voice, as in the alerts), else in the voice part's voice and
@@ -13114,7 +13740,7 @@ function tabDrawCaption() {
   const text = disconnected ? "Reconnecting: old alerts will not replay"
     : audioIsBlocked ? "🔇 Tap anywhere to let Outrider speak here"
     : data && data.speaker_audio_blocked ? "🔇 Outrider's voice is waiting: click the Outrider page on the PC to allow audio"
-    : c ? c.words : "";
+    : c ? c.shown || c.words : "";
   if (el.textContent !== text) el.textContent = text;
 }
 // an alert: a banner over the page for a while (danger longer, and red), tap to dismiss

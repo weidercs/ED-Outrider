@@ -2,6 +2,276 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-18 · Version 2026.10.26, The Release with Personality
+- The eight new personalities and over 70,000 lines, the crew as characters, space chatter, chat read aloud, surface
+  pins, carrier trips, the terraformable worlds route, the fixes since 2026.10.25. What's new has its section. No
+  journal re-read. The mining work (branch `mining`) waits for the next release.
+
+## 2026-10-18 · Chat's header choices name no real commander
+- Settings → Voice → Chat's "as" list showed a real commander's name as its example ("Kurbo: …"). It now shows
+  `<CommanderName>: …` and `Commander <CommanderName> on <Channel>: …` (the author), and the guide likewise.
+
+## 2026-10-18 · A species scanned twice is one bio line
+- The game logs a CodexEntry for each composition scan of a species, not only the first one. Two scans of Tussock
+  Cultro on one body (the author) showed it twice in the body's bio list: once with its value, once as a bare 📖
+  line.
+- A body's codex list now has one line per entry. It keeps the "new" flag and the voucher from whichever scan had
+  them.
+
+## 2026-10-18 · The Carrier tile's meeting line, short
+- "you → it ≈ 1 jump (tank 22) · it → you ≈ 1 carrier jump · ≈ 21 t tritium" was too long for the tile (the author).
+  It now reads "To it 1 jump · to you 1, ≈21 t", and "· 632 t short" when the depot cannot cover it.
+- The tank's count, the fuel formula and how the hold covers a shortfall moved into the hovers. "To it" turns amber
+  when your tank covers fewer jumps than you need.
+
+## 2026-10-17 · The game closed means quiet; the Fable sweep's nine fixes
+- **Chatter with the game closed** (the author): the game quit in supercruise wrote its Shutdown but no "empty"
+  Status.json after it, so the last reading stayed live and chatter went on talking (and pin guidance would have
+  too).
+  - A Shutdown now makes the reading stale at once.
+  - A Status.json from before the last Shutdown is never live, after a restart too (meta commander shutdown_ts).
+  - Chatter's place is checked every tick, not only when Status.json changes.
+- **The Fable sweep of everything since 4710250** (4 areas, each finding verified): 9 confirmed, all fixed.
+  - **Pins:**
+    - 📍 on a site in the legend works on a body with no pins yet (the payload names the body you are on, pins or
+      not);
+    - after arriving, the next pin's way is said once, not again a tick later;
+    - Here's 📍 shows only for the system you are in;
+    - a failed tick rolls the pins' spoken state back with its moments.
+  - **Carrier trips:**
+    - a finished trip says "complete" once, then is gone at the carrier's next move;
+    - reaching the trip's own start (a typed From) or coming back to the current leg after a detour is not "off
+      the trip": every leg is checked.
+  - **Chat:**
+    - a replayed chat line stays private: ▶ last said, a Now caption tapped (through the co-pilot's replay, which now
+      carries `private`) and the co-pilot's "say again";
+    - a tick that reads only a chat message wakes the page.
+  - **Chatter:** the XO, which speaks as the one personality picked, is compared as that personality and its voice,
+    so it never chatters with a station of the same personality.
+
+## 2026-10-17 · Surface pins: body bookmarks with fly-to guidance (NEXT-VERSION #16)
+- **Pins:** named points on a body (table `surface_pins`, live-only; GET/POST `/api/pins`).
+  - **Added:** in a body panel's folded 📍 Pins section (typed or pasted coordinates in any common layout,
+    `parsePinCoords`, shown as read before adding; also before you reach the body), with 📍 Pin here and 📋 copy by the
+    legend title, or with 📍 on a site, mining location or the ship.
+  - **One active:** the one tapped, else the first not reached, in order (▲ ▼).
+- **Guided from orbital cruise down:**
+  - the strip and Now, "📍 Wreck: 12.4 km, turn 30° right";
+  - the map (on the rim when off it) and the legend's Pins (tap to go there);
+  - the overlay's radar (a diamond and a line).
+- **Said by the Navigator** (the new "pins" row, `State.pin_watch`): set, at 10 km, 1 km and 100 m, and arrived (50 m
+  on foot or in the SRV, 250 m in the ship), then the next pin's way. The status report starts with it.
+- **Found again:** 📍 on a body with pins in Here and Overview, and Bookmarks' Pins list.
+- **The follow-up** (the author asked to remember it): Canonn's known sites per body, with "pin it".
+- **Tests:** `tests/test_pins.py`, and the smoke test's "surface pins".
+
+## 2026-10-17 · Carrier trips (NEXT-VERSION #19) and a tighter Carrier tile
+- **Plot Route → Carrier:** your carrier's trip, from Spansh's carrier router (`SPANSH_FC`, POST /api/carrier/trip,
+  probed 2026-10-17: names accepted; the cargo in use must include the hold's tritium).
+  - The form: depot, hold, cargo in use and type, from the journal; To me; + via.
+  - The plan: the legs with their tritium and what to do first (`outrider.cargo.carrier_route_legs` follows the real
+    depot), the time, and the tritium needed against what you have.
+  - Planning only, in its own slot (meta `carrier_trip`, kept through a re-read): it never replaces your ship's route.
+- **Followed on the tile:** one line, "Leg 2/6 → system 📋 · departs / cooldown / ready / ready? ✕", from the
+  carrier's position (`State.carrier_trip_follow`: the next leg, a later one skipped to, off the trip with re-plot from
+  here, the end).
+- **The Quartermaster:** "Carrier ready to jump. Next leg: …" once, and "should be" when away (the new "carriertrip"
+  row). The arrival line adds "Leg 3 of 6, 3 to go", "Carrier trip complete." or "off the planned trip".
+- **The Carrier tile tightened** (the author): the name; where it is; one movement line (a trip, else a booked jump,
+  else the meeting line); "UC ✓ · Vista ✓ · Tritium: 668t/14,199t" (with ⚠ when the depot cannot pay for the next leg);
+  "Balance … · ~N wks upkeep". At most five lines from eight. Other suspended services left off the tile.
+- **Tests:** `tests/test_carrier_trip.py` (with the probed answer as a fixture) and the smoke test's "carrier trips";
+  the tile's checks follow the new wording.
+
+## 2026-10-17 · Chat read aloud by Comms (NEXT-VERSION #17)
+- **Settings → Voice → Chat** (off by default): Read aloud, a tick per channel (Squadron, Wing and Direct ticked;
+  Local and Voice chat not; NPCs never), and how a message starts ("Kurbo: …", "Commander Kurbo on Squadron: …", the
+  message alone). Browser settings chatRead, chatChannels, chatHeader and chatMuted, shared like the others.
+- **The server** keeps live ReceiveText, never an NPC's or your own, in memory only (`Journals.chat`, the payload's
+  `chat`; `chat_sender` tidies "$cmdr_decorate" and "CMDR"), marking a mention of your commander name.
+- **The page** reads it in Comms' voice (the new "chat" alert row; Comms' by default), last in the queue, never while
+  hushed:
+  - one sender's run of messages as one line;
+  - one line per 15 s at most, a mention at once;
+  - past 3 waiting, "And 3 more on Squadron";
+  - over a minute old, shown in the captions only;
+  - a link said "a link", emoji dropped;
+  - 🔇 in Spoken lines mutes a commander (✕ on the Chat line to undo).
+- **Private:** api/say and api/say/play take `private`. The voice neither caches nor prefetches the line, and a
+  failure is logged without its words.
+- **Tests:** `tests/test_chat.py`, and the smoke test's "chat read aloud" block.
+
+## 2026-10-17 · A Terraformable worlds route (🪨, NEXT-VERSION #18)
+- **What:** Plot Route has a seventh plotter, Terraformable, beside Earth-like and Ammonia. It is the Road to Riches
+  router asked for rocky and high metal content worlds, kind `tf` in `outrider.riches.SURVEY_KINDS` and in page.js
+  SURVEY.
+- **The floor:** Spansh's own Rocky/HMC page sends min_value 1, which answers every plain rocky body (2 thousand
+  mapped) and plain HMC (50 thousand) too. Probing showed Spansh tests min_value against the scan value, so a floor of
+  100,000 keeps the terraformables alone (scans of 127 to 186 thousand, maps of 460 thousand or more). At 300,000 it
+  answered nothing.
+- **Tests:** the probed answer is a fixture (`tests/fixtures/spansh_body_types.json` "tf"), with a test for the plot's
+  fields.
+- **Also:** `scripts/route_probe.py` no longer probes when imported.
+
+## 2026-10-17 · A Fable review of every spoken line: 464 lines replaced
+- **What was read:** all 70,258 lines, both alerts and chatter, for all eleven personalities. The review ran as 43
+  chunks, each read by a Fable reviewer against its personality's style sheet, then checked by a second Fable
+  reader that kept only real problems with better replacements.
+- **What came of it:** 551 lines flagged, 464 confirmed.
+  - **226 wrong:** the line said something false for its alert. Examples: "critical" for a hull at just under half,
+    "the codex will confirm" a green gas giant (it has no entry), "mapping complete" for an anomaly found by the FSS,
+    "frame shift complete" inside the tunnel, "leaving the no fire zone" at undock.
+  - **198 quality:** a placeholder that reads badly when filled ("Tank at about 6 jumps"), a bare count, an image
+    that does not parse.
+  - **37 tone:** two Southern Belle lines assumed the player's gender ("worth her salt").
+  - **3 content:** a disability jibe, a crude sexual idiom, an unintended double meaning.
+- **How they went in:** each replacement went in only where the line was unchanged, its placeholders were allowed and
+  a clean list stayed clean. Every personality's own validator and the chatter validator still pass.
+
+## 2026-10-17 · Space chatter: five chattiness steps with their timings, the section on one line
+- **How often:** Rare, Occasional, Normal, Chatty, Non-stop (`outrider.chatter.LEVELS`: 15, 10, 7, 4, 2 minutes).
+  Each option says its timing ("Chatty: every 4 to 8 min"); a test keeps the options in step with LEVELS and
+  LEVEL_WORDS.
+- **Tighter:** the switch, How often, Name the speaker in captions and ▶ Try chatter on one line, with the
+  explanation as one short hint under them.
+
+## 2026-10-17 · Space chatter's lines: all eleven personalities (11,443 lines)
+- **What each personality has** (in `resources/speech.json` for Down to business, Sarcastic and Sweet, and in each
+  file in `resources/personalities/`):
+  - talking alone: about 60 lines in supercruise, 30 on a planet with the ship landed nearby, 30 with it in orbit
+    (the author: double the first plan);
+  - about 20 last words after an answer;
+  - a dozen questions and a dozen answers for each of the 18 topics;
+  - a swearing version of every list for the nine that swear.
+- **How they were written:** a writer per personality and group, from each personality's style sheet, checked by a
+  validator:
+  - the placeholders each key fills, with no `{ship_dist}` in orbit, no `{name}` in crew-to-crew talk, and `{to}` in
+    questions and answers;
+  - the line counts, duplicates across keys, and anything Piper cannot say;
+  - each personality's own rules (Vulcan's style, Klingon spellings, the southern pair's avoided words, the
+    Scoundrel's limits, the swearing rates);
+  - no swearing line a near-copy of a clean one: nine parts were sent back for fresh lines.
+- **Switched on:** `outrider.chatter.LINES_WRITTEN` is True, so the shipped-lines tests require the lines. The crew
+  lines test knows chatter's sizes. Each chatter key in `speech.json` has its "when".
+- **The guide:** what chatter says, instead of "not yet".
+
+## 2026-10-17 · The crew table: narrower Personality and Voice, a Chatter column
+- **Narrower columns:** Personality and Voice are capped (15em and 17em) instead of stretching across the full-width
+  Voice section.
+- **A Chatter column:** each station's "takes part in space chatter" box is on its own crew line, dimmed while Space
+  chatter is off.
+- **A fix:** Space chatter's "Stations that take part" list is gone. It was drawn with the voice status, which could
+  come before the crew's roles arrived, so it showed its heading with no boxes. The crew table redraws when the lines
+  load.
+
+## 2026-10-16 · Settings: Main voice and personality on one line, Voice beside the other wide sections
+- **One line:** Main voice and Main personality share a line (wrapping on a narrow screen), the explanation under
+  them.
+- **The voice's status:** it shows only when it says something (loading, downloading, a failure), not "ready".
+- **Voice moved down**, just above Server settings, so the full-width sections are together. The chips follow.
+- **Uploads' note:** "(off by default)".
+
+## 2026-10-16 · Settings → Voice: Main personality beside Main voice, profanity's "all but", the section full width
+- **Main personality = XO:** a dropdown under Main voice picks one personality. Its last entry, **A mix…**, shows the
+  boxes and One personality per system (moved up from further down).
+  - A new shared setting, `speechMix`, is in both SETTINGS_KEYS and BROWSER_SETTINGS. Never set, it follows what is
+    ticked: exactly one shows the dropdown, several show the mix, so no browser's setup changes.
+- **An explanation under the two:** with the crew on, they are the XO's (answers, reports, the co-pilot, members "as
+  the XO", the stand-in); with it off, they say every alert.
+- **With profanity:** it names the personalities by their names, the short way round: "(all but Down to business,
+  Vulcan)", or the ones that swear when they are fewer.
+- **Voice spans the columns** on a big screen, as Server settings and Spoken lines do.
+
+## 2026-10-16 · Space chatter: two stations that sound alike never talk, by what is heard
+- **The comparison:** two stations are kept apart by the voice and person you really hear (`chatVoiceKey`), not by
+  the settings as written. These now count as the same person:
+  - the main voice named explicitly, and left as the main voice;
+  - a person left unset on the main voice, and the main voice's own person picked;
+  - a personality's voice that is not installed (heard in the main voice), and the main voice.
+- **Unchanged:** one voice's two different people still talk to each other.
+- **A limit:** on a voice other than the main one, an unset person is "the one picked for that voice", which the page
+  does not know, so it counts as different from a number.
+
+## 2026-10-16 · The terminal's lines: times first, subjects lined up, clearer start-up wording
+- **The terminal** (`outrider.serverlog.Console`, on the Tees main() already installs):
+  - each line starts with the time, and a date line comes first and again when the day changes;
+  - a line's subject ("auto honk:") is padded so what follows lines up;
+  - on a real terminal, a long line wraps under its text.
+- **Left as before:** Show log and `outrider.log` keep each line as printed, with their own times. Under systemd
+  (`JOURNAL_STREAM`), whose journal adds its own times, the times are left out.
+- **The start-up lines reworded:**
+  - the older journals on a line of their own ("imported once");
+  - "open … to watch the start-up";
+  - the systems visited with a thousands comma;
+  - "played on this PC with pw-play" under spoken alerts;
+  - the clipboard, auto-target and uploads lines in plainer words;
+  - the network note as two "network:" lines;
+  - the overlay window's own "overlay: " no longer doubled.
+  - "serving on" is unchanged: the install guide points to it.
+
+## 2026-10-16 · Sweep fixes: personalities shown complete, chatter's clocks and ▶, every tagged species on the map
+- A Fable sweep of everything since 99759e4 (four areas, each finding verified; the overlay's came back clean).
+- **Settings → Voice → Personalities:** every shipped personality showed "(60/100 alerts)". The 40 chatter keys
+  counted, though no chatter lines are written yet. Coverage now counts them only once `LINES_WRITTEN` is True
+  (`outrider.speech.spoken_keys`).
+- **The voice lab:** it filled a chatter line with blanks ("Quiet in ."). It now uses chatter's own sample values
+  (`lineSample`).
+- **Chatter's place:** the server skipped its watcher on exactly the Status.json reads where the flags changed, such
+  as leaving supercruise. It now watches every read.
+- **Chatter's grace and {minutes}:** these compared the PC's clock with the browser's, so they were off on a tablet
+  whose clock differs. The server now sends `since_ago` and the page puts it on its own clock.
+- **How often:** changing it now applies at once, not after the next line.
+- **▶ Try chatter:** it now plays like the other ▶ buttons, in any window and through a hush. Before, it was silent
+  in a window that was not the speaking one.
+- **The surface map and the overlay radar:** past 40 tagged plants on a body, a species beyond the nearest 40 lost its
+  ring and legend row again. Each species' nearest usable tag is now always sent (`tags_shown`).
+
+## 2026-10-16 · Space chatter on a planet: the temperature alone never stops it, a planetary port's concourse does
+- The suit's very cold and very hot no longer keep chatter quiet: they are common on the worlds you sample, and once
+  the temperature hurts, low health (still a blocker, with low oxygen) says so.
+- On foot in a hangar or a social space now counts as docked for chatter, as it does for the rest of the server
+  (`ON_FOOT_DOCKED`): a planetary port's concourse also sets on-foot-on-planet, so chatter could have started there,
+  talking about the ship "up there".
+
+## 2026-10-16 · Space chatter, the code (#15; the lines come later)
+- **Settings → Voice → Space chatter** (off by default):
+  - Talk in quiet moments, and how often (rare, normal, chatty).
+  - With the crew on, the stations that take part.
+  - Say who is talking in the captions (per browser).
+  - ▶ Try chatter.
+  - The server keeps the settings in meta `chatter` (POST `/api/voice/chatter`).
+- **`outrider/chatter.py`:**
+  - `where()`: supercruise in your ship, or on foot or in the SRV on a planet; quiet in danger, heat, low fuel, the
+    FSD, suit trouble, or with a map, the FSS, the DSS or the codex open. Never for unsold data.
+  - The timings and the topics: 12 station topics, 6 personal ones, who asks and who answers.
+  - The speech keys: `chatter_space`, `chatter_planet_orbit` / `_landed`, `chatter_react`, and
+    `chat_<topic>_ask` / `_answer`.
+- **The server** follows Status.json for it: where you are, what keeps it quiet, since when.
+- **The page** keeps two clocks in the speaking window:
+  - no alert for N minutes, and N to 2N since the last chatter;
+  - a minute's grace after entering supercruise or stepping out on a planet;
+  - rare stops at 3 an hour.
+- **What it says:**
+  - A monologue, or with the crew on, a dialogue: an ask, an answer, sometimes a last word back.
+  - Two stations of one personality or one voice never talk to each other.
+  - It is last in the queue and never talks over anything; an alert drops the rest of a dialogue.
+  - A line that is missing a value is never said.
+- **No lines yet:** they are written per personality once the author has listened to the personalities.
+  `LINES_WRITTEN` stays False until then, and the shipped-lines test does not ask for them.
+- **Tests:** `tests/test_chatter.py` and the smoke test's "space chatter" block.
+- **Docs:** the guide's Space chatter section and DESIGN_NOTES.
+
+## 2026-10-16 · Two fixes from Kurbo26: a tagged plant walked away from, and the tablet's Map pill
+- **The surface map:** a plant tagged with the composition scanner, of a species you had not sampled yet, vanished
+  from the map (and its legend row) once you were over 3 km from it; it came back at the rim only after you sampled
+  that species by hand. Each species' nearest usable tag now stays, at the rim when off the map (`surfaceLayout`; the
+  overlay's radar always drew them).
+- **The tablet's Map pill on Now:** it swapped the selected page's colours, and in the Elite and Sith themes that
+  colour is see-through, so the text was faint on solid cyan (or steel). Those themes now set `--tb-maptag-bg` /
+  `--tb-maptag-fg`, and so does Dark (blue on white was 3.2:1). A test checks the pill in every theme (solid
+  colours, 4.5:1).
+- Kurbo26 also confirmed the mouse-lock fix on Fedora with KDE on Wayland.
+
 ## 2026-10-16 · Version 2026.10.25, a bug fix release
 - Released from d5c1f9d plus the install guide's Updating section (the personalities on main wait for the next release).
 - Since 2026.10.24:

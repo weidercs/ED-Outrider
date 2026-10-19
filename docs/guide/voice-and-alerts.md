@@ -165,8 +165,13 @@ Sound: Allow; Firefox: Autoplay: Allow Audio and Video).
   Boy** and **Southern Belle** (warm, playful, slow to anger, full of family sayings, the old days and food; buddy and
   partner, or sugar and darlin'), and **Klingon** (loud, honour-bound, exploration as the hunt; it calls you Captain,
   Sir, Commander or My Lord), and **Scoundrel** (a cocky smuggler who cares about credits, calls you buddy and pal,
-  and tells stories about the Hutton twins); tick any mix.
-  **With profanity** uses the swearing versions the share of the time you set (50% by default). **One personality per system** holds one character a system.
+  and tells stories about the Hutton twins).
+- **Main personality** (beside **Main voice**) picks one of them. Its last entry, **A mix…**, shows a box per
+  personality: tick several and the lines come from all of them, and **One personality per system** holds one
+  character a system. With the crew off, the main voice and personality say every alert; with it on, they are the
+  XO's (see The crew below).
+- **With profanity** uses the swearing versions the share of the time you set (50% by default). It names the
+  personalities that never swear ("all but Down to business, Vulcan").
 - **Danger alerts always down to business** (on by default): danger is said plainly, never sworn.
 - **Your names.** Commander names are often unpronounceable, so the voice calls you by the names in
   **Call me** (default "Boss, Hefay, Sir"); a personality with forms of address of its own (a naval one's "Captain")
@@ -209,19 +214,19 @@ the sentence ends:
 | Crew member | Speaks for |
 |---|---|
 | XO / Co-pilot | the main voice: voice answers, the status report, the co-pilot, the hush and speech on |
-| Navigator | jumps and every route line (the Highway, survey and trade routes), fuel short of a refuel, last scoop, auto-target, wrong target, supercharges |
+| Navigator | jumps and every route line (the Highway, survey and trade routes), fuel short of a refuel, last scoop, auto-target, wrong target, supercharges, surface pins |
 | Science Officer | arrivals, briefings, the FSS, mapped planets, leaving with work left, codex, phenomena, rare stars, signals, curiosities |
 | Exobiologist | valuable bodies, sampling, Exomastery routes |
 | Chief Engineer | fuel, tank full, scooping stopped, jumponium, hull and heat |
-| Quartermaster | sales, unsold data, your carrier, losses |
-| Comms Officer | the game's start and exit, someone scanning your firsts, docking pads and refusals |
+| Quartermaster | sales, unsold data, your carrier and its trips, losses |
+| Comms Officer | the game's start and exit, someone scanning your firsts, docking pads and refusals, other players' chat (read aloud, below) |
 | Tactical | every danger line (while Danger lines always in Tactical's voice is on) |
 | Mining Officer | the Rhino's rigs |
 
 - **The table.** A row per crew member: an optional **Name** (shown in Settings and the voice lab, and said when another
   crew member mentions it: see Crew lines below), its
-  **Personality** (whose lines it says) and **Voice** (and **Speaker**, for a voice of many people), what it **speaks
-  for**, **▶** to hear one of its lines and **↺** to put it back to "as the XO". The XO row is the main voice and the
+  **Personality** (whose lines it says) and **Voice** (and **Speaker**, for a voice of many people), **Chatter** (whether it
+  takes part in Space chatter, below), what it **speaks for**, **▶** to hear one of its lines and **↺** to put it back to "as the XO". The XO row is the main voice and the
   personalities you ticked: changing its voice changes the main voice.
 - **The XO stands in.** A new crew starts with everyone "as the XO", so switching it on changes nothing you hear until
   you give a member a voice of its own. A member left "as the personality" speaks in that personality's voice
@@ -315,6 +320,52 @@ the sentence ends:
 - **Lost contact.** If Outrider stops answering for 30 seconds, the speaking window says "Lost contact with
   Outrider. No alerts until it is back." in your Piper voice (made in advance while the link was up; without Piper,
   the alert sound), and "Back in contact" when it returns.
+
+**Space chatter**
+
+Off by default. Tick **Talk in quiet moments** in ⚙ Settings → Voice → Space chatter and, after a while with no alert,
+someone says something: in supercruise, or while you are on foot or in the SRV on a planet.
+
+- **What it says:** every personality has its own. On its own, about 60 lines for supercruise (some knowing the
+  system, how long you have been in supercruise, the session's jumps and first discoveries) and 30 each for a planet
+  with the ship landed nearby or up in orbit. Between stations, a question and an answer on 18 topics, mostly their
+  own work (fuel, the route, the drive, the ship, biology, the stars, the money, mining, threats, traffic, the
+  captain, a quiet watch) and sometimes something personal (family, home, food, the best day, a fortune, life
+  before this ship), about a dozen of each per personality, with swearing versions for the personalities that swear.
+  **▶ Try chatter** says one now.
+- **When:** never while you are docked or on foot in a station, in a taxi or multicrew, in danger, overheating, low on fuel, charging the
+  FSD, low on oxygen or health on foot, or with a map, the FSS, the DSS or the codex open. The data you carry never stops
+  it. It waits a minute after you enter supercruise or step out on a planet. It never talks over anything said or
+  waiting to be said, and an alert always comes first.
+- **How often**, five steps from quietest: Rare, Occasional, Normal, Chatty and Non-stop. Each sets the quiet before
+  it talks: no alert for 15, 10, 7, 4 or 2 minutes, and 15 to 30, 10 to 20, 7 to 14, 4 to 8 or 2 to 4 minutes since
+  the last chatter. Rare also stops at 3 an hour.
+- **With the crew on,** the stations talk among themselves. Now and then one asks another about its work (fuel, the
+  route, the stars, the money, the life you sample...) or, about a quarter of the time, something personal, and
+  gets an answer, sometimes with a last word back. Two stations of the same personality, or with the same voice,
+  never talk to each other. They call each other by name when you gave one, else by station. The Crew table's **Chatter** column leaves any of them out.
+- **Name the speaker in captions** (per browser) puts "Engineer (Mira):" before each line.
+- If an alert comes in mid-conversation, the rest of the conversation is dropped. Chatter lines can be banned in
+  Spoken lines like any other.
+
+**Chat read aloud**
+
+Off by default. Tick **Read aloud** on the **Chat** line in ⚙ Settings → Voice and Comms reads other players'
+messages to you: squadron, wing and direct messages by default, local and voice chat if you tick them, NPCs never.
+
+- **How it starts:** `<CommanderName>: …` (the default), `Commander <CommanderName> on <Channel>: …` (say,
+  "Commander Kurbo on Squadron: …"), or the message alone. The caption strip always shows `<CommanderName>: …`.
+- **The pace:** several messages from one commander in a row are read as one; at most one every 15 seconds; with
+  more waiting, the first is read and the rest summed up ("And 3 more on Squadron"); anything waiting over a minute is
+  shown in the captions but not read. A message that mentions your commander name is read at once, even from a
+  channel you did not tick.
+- **As written:** a link is said "a link", emoji are left out; their words, swearing included, are read as they wrote
+  them (your profanity setting is about Outrider's own lines). Up to about 300 characters, then "and more".
+- **When:** after any alert, never while hushed; only what arrives while the page is open (never a backlog).
+- **🔇 in Spoken lines** beside a chat line mutes that commander; the Chat line lists the muted ones with ✕ to undo.
+- It is the **Chat** row of ⚙ Settings → Alerts (speak only, by default): the overlay's Alerts panel shows it there.
+- **Private:** other players' words are never written to Outrider's log or its database, and never kept in the
+  voice's cache.
 
 **Spoken lines: what was said, and banning lines**
 

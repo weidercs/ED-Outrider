@@ -5,7 +5,7 @@
 ## 🛣 The Neutron Highway
 
 The **Plot Route** tab plots a route with [Spansh](https://spansh.co.uk), using neutron stars as boosts (or a
-Road to Riches, an Exomastery, an Earth-like or ammonia world route, a sweep or a trade route, below), and follows it as
+Road to Riches, an Exomastery, an Earth-like, ammonia or terraformable world route, a sweep or a trade route, below), and follows it as
 you fly. Two routes are kept (following them needs no network): one Highway route (Exact or Neutron) and one survey
 route (any of the others), each until you plot another of its kind or **Clear route**.
 
@@ -104,11 +104,13 @@ value, ✓ once you have sampled them and ✦ when one would be new to your code
 arrival how many species are left on how many bodies and the best of them, and the next stop once they are sampled.
 It is known life, so first footfall (×5) is unlikely: the values shown are the base ones.
 
-**Earth-like and Ammonia.** Two more plotters ask Spansh for a chain of systems with Earth-like worlds (🌍) or ammonia
-worlds (🧪) nobody has mapped yet: Road to Riches limited to that one kind of planet, as Spansh's own Earth-like and
-ammonia pages plot it, with the same options but for the minimum value and the mapping value. These worlds are worth
-mapping, so a body is done once it is scanned and mapped. Followed like Road to Riches; the end is "Earth-like route
-complete." (or "Ammonia route complete.").
+**Earth-like, Ammonia and Terraformable.** Three more plotters ask Spansh for a chain of systems with Earth-like worlds
+(🌍), ammonia worlds (🧪) or terraformable rocky and high metal content worlds (🪨) nobody has mapped yet: Road to Riches
+limited to those kinds of planet, as Spansh's own pages plot them, with the same options but for the minimum value and
+the mapping value. Terraformable asks only for the terraformable ones (worth about 460 thousand or more mapped; Spansh's
+own rocky and HMC page lists every plain rocky body too, worth a couple of thousand). These worlds are worth mapping, so
+a body is done once it is scanned and mapped. Followed like Road to Riches; the end is "Earth-like route complete."
+(or "Ammonia route complete.", "Terraformable route complete.").
 
 **A sweep.** Tick systems in **Left behind**, **My firsts** (with show lost: the systems whose data was lost) or
 **Bookmarks**, then **🧹 Plot a sweep (N)** beside any of the three lists (the ticks are one set across them, kept until
@@ -119,6 +121,21 @@ route's heading name it. A sweep takes up to 100 systems and replaces the survey
 
 **Trade.** The last plotter: Spansh's trade planner, station-to-station hops from where you are docked, in the
 same place as the survey routes (one of them at a time). See [Trading](cargo-and-trading.md#-trading).
+
+**Carrier.** Your fleet carrier's trip, from Spansh's carrier router. It is planning only: the game books one carrier
+jump at a time, so you still set each in the carrier's galaxy map. Its own form: the depot, the tritium in the hold
+and the cargo in use (filled in from your journal, all changeable), the carrier's type, **To me** (your system as the
+destination) and **+ via** for a stop on the way. The plan, folded under the form: each leg with its light years and
+tritium, and what to do first ("move 300 t from the hold into the depot first", "buy 400 t here"); at the top, the
+legs, about how long (20 minutes a leg: the countdown and the cooldown; longer in busy systems) and the tritium
+needed against what you have. It never replaces your ship's route, and 🎯 never targets it.
+
+Following it, on the **Carrier tile**: "Leg 2/6 → the next system 📋 · departs 12:30 ✕". 📋 copies the system to
+paste in the carrier map (only when you click it); after a jump the line counts the cooldown down, then says
+**ready** (or **ready?** when you are away: only the booked jump says the carrier moved, and a busy system can delay
+it). A jump onto a later leg skips ahead; one anywhere else says "off the trip", with **re-plot from here**; ✕ ends the
+trip, and the last leg ends it. The Quartermaster says "Carrier ready to jump. Next leg: …" when the cooldown should be
+over (the **Carrier trips** row in Settings → Alerts) and adds "Leg 3 of 6, 3 to go" to the carrier's arrival line.
 
 **The route line and 🎯.** The line under the tiles (on every tab) shows the next stop of whichever route the tab shows (🛣 the
 Highway, 💰 Road to Riches, 🧬 Exomastery, 🌍 Earth-like worlds, 🧪 ammonia worlds, 🧹 a sweep, 💱 a trade route), its

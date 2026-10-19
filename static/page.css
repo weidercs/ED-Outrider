@@ -972,7 +972,8 @@ body.nowmode header, body.nowmode main { display: none; }
   #alertDialog { width: max(80vw, min(1560px, calc(100vw - 64px))); max-height: calc(100vh - 48px); }
   #alertDialog .setbody { columns: 2 560px; column-gap: 28px; }
   #alertDialog .setsec { break-inside: avoid; }
-  #alertDialog #serverSettings, #alertDialog #speechLogBox { column-span: all; }
+  /* full width: Voice too (the author, 2026-10-16: its crew and voice tables need the room) */
+  #alertDialog #serverSettings, #alertDialog #speechLogBox, #alertDialog #voiceSettings { column-span: all; }
 }
 /* three columns only on a 4K screen (the author, 2026-10-15: two on a 2560 px one) */
 @media (min-width: 3200px) { #alertDialog .setbody { columns: 3 520px; } }
@@ -1057,7 +1058,10 @@ body.nowmode header, body.nowmode main { display: none; }
 .vmpre { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 2px 0; } .vmpre .hint { margin: 0 0 0 4px; }
 /* a member per row as a grid, so the table fits the dialog's column: its selects on the first line, Speaks for under them */
 .crewtable { width: 100%; margin: 6px 0 2px; font-size: 13px; border-collapse: collapse; }
-.crewtable tr { display: grid; grid-template-columns: 8.5em 6.5em minmax(0, 1fr) minmax(0, 1.3fr) 6.5em 2.2em 2.2em;
+/* the personality and voice no wider than their longest names need (the author, 2026-10-16: full width stretched them),
+   and the Chatter column: whether the station takes part in space chatter */
+.crewtable tr { display: grid; grid-template-columns: 8.5em 6.5em minmax(0, 15em) minmax(0, 17em) 6.5em 4.5em 2.2em 2.2em;
+  justify-content: start;
   column-gap: 6px; align-items: center; padding: 3px 4px; border-bottom: 1px solid var(--line); }
 .crewtable th, .crewtable td { padding: 0; text-align: left; font-weight: 400; min-width: 0; white-space: normal; border: 0; }
 .crewtable thead th { color: var(--muted); font-size: 12px; }
@@ -1073,6 +1077,8 @@ body.nowmode header, body.nowmode main { display: none; }
 .crewtable select { width: 100%; max-width: 100%; }
 .crewtable button { padding: 1px 6px; }
 .crewtable .asxo { font-style: italic; color: var(--muted); }
+.crewtable td.cchat label { display: inline-flex; align-items: center; gap: 4px; }
+.crewtable td.cchat.quiet { opacity: .55; }   /* space chatter off: kept, but nobody talks */
 .crewnote { margin: 6px 0 2px; padding: 5px 10px; border-left: 3px solid var(--info); color: var(--info); font-size: 12px;
   background: color-mix(in srgb, var(--info) 6%, transparent); }
 #alertDialog .alerttable td.acrew { text-align: left; width: 1%; }
@@ -1087,6 +1093,10 @@ body.nowmode header, body.nowmode main { display: none; }
 #alertDialog .setsec[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 #alertDialog .setsec[open] { padding-bottom: 10px; }
 #alertDialog .setsec > label.mod:first-of-type { border-top: 0; }
+/* Voice: Main voice and Main personality side by side (the author, 2026-10-16), wrapping on a narrow screen; the first
+   label after them keeps its dashed line */
+#alertDialog .mainrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 28px; margin-top: 8px; font-size: 13px; }
+#alertDialog #voiceSettings > label.mod:first-of-type { border-top: 1px dashed var(--line); }
 /* Server settings: the config file's sections, folding, a row per key */
 .srvset .srvsec { border-top: 1px solid var(--line); }
 .srvset .srvsec > summary { cursor: pointer; padding: 7px 0; font-weight: 600; color: var(--text); }
@@ -1520,3 +1530,14 @@ table.ovlay input[type=number]::-webkit-inner-spin-button, table.ovlay input[typ
 .lctable { border-collapse: collapse; margin-top: 4px; } .lctable td, .lctable th { padding: 3px 12px 3px 0; text-align: left; border-top: 1px solid var(--line); }
 .lctable th { color: var(--muted); font-weight: 600; border-top: 0; } .lctable .num { text-align: right; white-space: nowrap; } .lcact { white-space: nowrap; }
 #locateView .short { color: var(--bad); }
+/* surface pins (#16): the active pin's line, the 📍 on a body with pins, the legend's and the body panel's rows */
+.pinline b { color: var(--accent); }
+.pinmark { font-size: 0.85em; }
+.lg-pin { cursor: pointer; }
+.lg-pin .tg.pin { color: var(--accent); }
+.lg-pin.cur b { color: var(--accent); }
+.pinrow { margin: 2px 0; }
+.pinrow a { text-decoration: none; }
+.pinadd input { margin-right: 4px; }
+.pintable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pintable td, .pintable th { padding: 2px 6px; text-align: left; }

@@ -24,6 +24,7 @@
   --tb-group-bg: transparent; --tb-group-fg: var(--sh-text); --tb-group-open-bg: var(--sh-red); --tb-group-open-fg: #000;
   --tb-group-radius: 0; --tb-page-radius: 0;
   --tb-page-bg: transparent; --tb-page-fg: var(--sh-text); --tb-page-on-bg: rgba(208, 2, 27, .18); --tb-page-on-fg: var(--sh-steel);
+  --tb-maptag-bg: var(--sh-steel); --tb-maptag-fg: #000;   /* the see-through page colour would be faint on steel */
   --tb-fill: transparent;
   --tb-btn-bg: transparent; --tb-btn-fg: var(--sh-text); --tb-btn-on-bg: var(--sh-red); --tb-btn-on-fg: #000; --tb-btn-radius: 0;
   --tb-link-ok: var(--sh-steel); --tb-link-stale: var(--sh-amber); --tb-link-none: #FF5A6A;

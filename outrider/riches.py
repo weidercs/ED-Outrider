@@ -1,5 +1,5 @@
 """The survey slot's routes: Road to Riches (spansh.co.uk/riches), Expressway to Exomastery (spansh.co.uk/exobiology),
-Earth-like and ammonia worlds (spansh.co.uk/earth and /ammonia: the Road to Riches router for one body type), a sweep
+Earth-like, ammonia and terraformable worlds (spansh.co.uk/earth, /ammonia, /rocky: the Road to Riches router for body types), a sweep
 (spansh.co.uk/tourist: ticked systems in the order to fly them) and a trade route (outrider/cargo.py). `SURVEY_KINDS`
 holds what differs by kind; the rest is shared: Spansh's answer as route rows, which row a system is, which of a
 system's bodies (or species) are still to do, and the lines said on arriving. Exomastery's answer is Road to Riches'
@@ -64,6 +64,14 @@ SURVEY_KINDS = {
     "aw": SurveyKind("Ammonia worlds", "🧪", "ammonia route", "an ammonia world route", "SPANSH_RICHES", "riches", "bodies",
                      "riches", "Ammonia route complete.", ("body", "bodies", "to do here"), _WORLD_FIELDS,
                      (("min_value", 1), ("body_types", ("Ammonia world",))), True),
+    # Terraformable rocky and high metal content worlds (NEXT-VERSION #18, the author 2026-10-17; probe 2026-10-17:
+    # tests/fixtures/spansh_body_types.json "tf"): Spansh's Rocky/HMC page asks for both body types with min_value 1,
+    # which answers every rocky body (2 thousand mapped) and plain HMC (50 thousand) too. Spansh tests min_value
+    # against the SCAN value: terraformables scan for 127 to 186 thousand, plain HMC under 20: TF_MIN_VALUE keeps the
+    # terraformables alone (300 thousand answered nothing)
+    "tf": SurveyKind("Terraformable worlds", "🪨", "terraformable route", "a terraformable world route", "SPANSH_RICHES",
+                     "riches", "bodies", "riches", "Terraformable route complete.", ("body", "bodies", "to do here"),
+                     _WORLD_FIELDS, (("min_value", 100_000), ("body_types", ("Rocky body", "High metal content world"))), True),
     # S51: the ticked systems of Left behind, My firsts and Bookmarks in the order Spansh's tourist router flies them
     # (probe P2/U2 2026-10-13: tests/fixtures/spansh_tourist.json); arriving is the whole of a stop
     "sweep": SurveyKind("Sweep", "🧹", "sweep", "a sweep", "SPANSH_TOURIST", "tourist", None, "riches", "Sweep complete.",

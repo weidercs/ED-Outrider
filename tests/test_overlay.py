@@ -547,15 +547,16 @@ class Runner(unittest.TestCase):
         import subprocess
         said = []
         self.run.log = said.append
-        self.run.popen = lambda cmd, cwd=None, **kw: self.popen(cmd, cwd, output="drawing\nTraceback: boom ✗\n".encode(), **kw)
+        self.run.popen = lambda cmd, cwd=None, **kw: self.popen(cmd, cwd, output="drawing\noverlay: connected to x\nTraceback: boom ✗\n".encode(), **kw)
         self.run.tick(True)
         p = self.started[0]
         self.assertEqual((p.kw["stdout"], p.kw["stderr"]), (subprocess.PIPE, subprocess.STDOUT))
         self.assertEqual((p.kw["env"]["PYTHONUNBUFFERED"], p.kw["env"]["PYTHONIOENCODING"]), ("1", "utf-8"))
         p.code = 1
         self.run.tick(True)
+        # its own "overlay: " (for when it runs by itself) is not said twice (2026-10-16)
         self.assertEqual(said, ["overlay window: started (pid 4242)", "overlay window: drawing",
-                                "overlay window: Traceback: boom ✗", "overlay window: it stopped (exit 1)"])
+                                "overlay window: connected to x", "overlay window: Traceback: boom ✗", "overlay window: it stopped (exit 1)"])
         self.assertTrue(p.stdout.closed)
         self.assertIsNone(self.run.drain)
 

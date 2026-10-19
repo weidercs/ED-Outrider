@@ -1292,6 +1292,45 @@ upstream project's choices, not rules of the game.
   `uinput` module, `/dev/uinput` writable, Primary Fire's keyboard binding), with the fix. It never creates the virtual
   keyboard to find out: that is exactly what could press a key. The udev `uaccess` rule is the fix offered first; the
   `input` group works too but lets every program read every keyboard. GET `/api/autohonk/check` is game-PC only.
+- **Space chatter** (#15, `outrider/chatter.py`): the server only says where you are for it (`where()` from
+  Status.json's flags and GuiFocus: "space" in supercruise in your ship, "planet" on foot or in the SRV on a planet)
+  and what keeps it quiet; the speaking window keeps the clocks and picks the lines, so a page that is not speaking
+  never chatters and no chatter crosses to another window. It is not an alert: no alert row, no cooldown, no 🗣 tick;
+  it goes last in the queue (`speechPrio` 4), never over anything queued or playing, and a dialogue's later lines go
+  if an alert came in after it started. Its lines live in the speech files beside the alerts' (keys `chatter_*` and
+  `chat_<topic>_ask/answer`), so personality files, bans and the checks work on them unchanged; a chatter line with
+  a value it cannot fill is never said (`lineStrict`), unlike an alert's last resort. Unsold data is never a blocker
+  (the author always carries a lot), nor is the suit's very cold or very hot, common on the worlds you sample
+  (low health says when the temperature hurts); on foot in a hangar or a social space is docked, as everywhere
+  else, since a planetary port's concourse also sets on-foot-on-planet. Two stations of one personality ("as the XO" counts as the XO's) or of one voice
+  and person never talk to each other, or it would sound like one person talking to themselves. The topics are mostly
+  the stations' own work (`PERSONAL_SHARE` 0.25).
+- **The terminal's times are the terminal's only** (`outrider.serverlog.Console`): Show log and `outrider.log` keep
+  each line as printed (they carry their own times), so a line matched in a test or a guide reads the same there. The
+  subject is padded only for a few lower-case words before the first ": " (never a path or an exception's name). Long
+  lines wrap only on a real terminal: a pipe (Docker's log, a file) keeps whole lines for grep. Under systemd
+  (JOURNAL_STREAM set) the times go, since the journal adds its own.
+- **Chat read aloud stays private and polite** (#17, `Journals.handle_chat`, page.js `takeChat` / `chatPump`): other
+  players' words are kept in memory only (Journals.chat, CHAT_KEEP; in the checkpoint so a retried tick never reads
+  them twice), never in the database, outrider.log or the voice's cache (api/say and api/say/play take `private`:
+  Speaker.say's keep=False, no prefetch, an error printed without the words). Live only (live_event), never an NPC's
+  or your own. The page paces it (CHAT_GAP, CHAT_SUMMARY, CHAT_STALE) because squadron chat comes in bursts (the
+  author's journals: 280 of 394 messages within a minute of the one before); a mention of you skips the pace. Chat is
+  no alert for chatter's quiet (lastAlert is left alone).
+- **Carrier trips plan, never fly** (#19): the game books one carrier jump at a time, so a trip is a list of legs
+  followed on the tile, never a route Outrider targets or presses keys for. Spansh's router assumes the depot full at
+  every jump; `carrier_route_legs` follows the real depot instead and marks only the legs that need tritium moved
+  across. The leg advances on the carrier's position (`carrier_trip_follow`), which moves on the booked jump's
+  departure (settle_carrier) and is corrected by a later CarrierLocation: accurate enough (the author), and "ready?"
+  rather than "ready" until the journal confirms. The cooldown is CARRIER_COOLDOWN_S from that arrival: an estimate,
+  since busy systems and the servers delay it and only a player docked on the carrier sees the real jump. No automatic
+  clipboard: the author found it confusing when not expected.
+- **Surface pins live in the places that exist** (#16, the author: UI space matters): no tab or panel of their own.
+  A body panel's folded 📍 Pins section, the map's legend (its title holds Pin here and copy), one line in the strip /
+  Now only while a pin is active, a one-character 📍 in the body lists, Bookmarks' list only when there are pins. Keyed
+  by the system and the body's full name (the panel, the map and Status.json all have it; a body id is not always
+  known). Only the active pin is guided or spoken: the others are drawn, never said. The tick refreshes the page as the
+  guidance changes (State.pin_watch: a distance step and a 10° turn), so it moves from orbit, above the map's 1,000 m.
 
 ## Known limits
 
@@ -1365,6 +1404,10 @@ confirmed while playing. Treat reports about them as likely real.
 - `CarrierBuy`, `CarrierDecommission` and `CarrierCancelDecommission`: written to Frontier's journal manual, never seen
   in the author's journals (the carrier was bought before them).
 - Status.json Flags2 on-foot-in-station bits (3, 13, 14) counting as docked.
+- Surface pins' guidance from orbital cruise down and their arrival distances; carrier trips' following (the leg on
+  the booked jump's departure, the cooldown estimate); chat read aloud from real squadron traffic (the pace, mentions).
+- Space chatter's places and blockers (`outrider.chatter.where`): the on-foot-on-planet and SRV bits, GuiFocus
+  values and the suit warnings, from Frontier's journal manual only.
 - Auto honk end to end since it reads the binding from the controls preset; the fire-group and combat-mode waits.
 - The co-pilot button on a real device (`python3 -m outrider.button --listen`), including rig marking in a live Rhino,
   and its tap targeting the next route system in a live game (the slow double tap's cancel included).
