@@ -2,6 +2,26 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-20 · Review fixes (1): Windows start-up, uploads, the target hop, the greeting, mining income
+From the full Fable review of 2026-10-20 (project/REVIEW-full-2026-10-20.md). PARSER_VERSION 55: one re-read.
+- **Windows start-up (H1):** with EDMC installed and not running, a non-English `tasklist` message (German
+  "ausgeführt") raised UnicodeDecodeError out of `edmc_running` and Outrider never started. Its output is now read as
+  bytes.
+- **Uploads keep their order (M0):** a Save or Check of a key (or Try again) during a backoff woke the sender, and rows
+  queued since went before the batch waiting to be retried (EDSM's events out of order; Inara sent to inside its
+  "slow down" hour, its status cleared). Nothing newer goes while a tried row waits (`uploads.due`), and the key's Save
+  or Check only wakes the sender when it lifted a hold.
+- **The target hop is from you (M1):** with Nearby Around another system, Now's target line and the overlay's Target
+  panel measured the hop (ly, fuel, jumps left, reach) from that centre: a 190 ly jump could read as a reachable 10 ly.
+- **"Away 3 days" again (M2):** the main menu's Music line (read since #12) counted as play, so the login's time away
+  was minutes and the greeting the plain one.
+- **The voice lab no longer freezes the server (M5):** picking a voice's person waited on the line being made, on the
+  event loop.
+- **Mining income (M6, L2):** a cargo transfer between the ship and the SRV on a planet was taken as ore back from your
+  carrier, and tritium put in the depot stayed counted as mined ore aboard; both inflated mining income later.
+- **Your fleet (L1, L5):** a ship stored at your carrier after it jumped was put in its previous system; a ship on its
+  way stayed "in transit" after arriving when a shipyard list was written meanwhile.
+
 ## 2026-10-20 · The Anaconda Mk II
 - Out today (4.4.2.0): its journal symbol `anacondamkii` (EDDN's shipyards, 19 of 94 in five minutes) is named
   "Anaconda Mk II" and needs a large pad (the dock finder's filter; a huge hardpoint). Almanac has no illustration of

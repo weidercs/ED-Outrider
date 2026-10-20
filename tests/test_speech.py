@@ -1728,6 +1728,21 @@ class Speakers(unittest.TestCase):
         self.assertTrue(sp.set_speaker("en_GB-vctk-medium", None))
         self.assertEqual(self.remembered[-1], {})
 
+    def test_picking_a_speaker_never_waits_for_a_line_being_made(self):
+        """Review 2026-10-20 M5: set_speaker runs on the event loop and waited on the synthesis lock, stalling the whole
+        server for the rest of a line; the cache clear is skipped then (the speaker is in every line's key)."""
+        import threading
+        import time as _t
+        self.heard("Hello.")
+        with self.sp._lock:   # a line being made on the speech thread
+            t0 = _t.monotonic()
+            done = []
+            th = threading.Thread(target=lambda: done.append(self.sp.set_speaker("en_GB-vctk-medium", 1)))
+            th.start()
+            th.join(2)
+            self.assertEqual((done, _t.monotonic() - t0 < 1), ([True], True))
+        self.assertEqual(self.heard("Hello."), 'en_GB-vctk-medium:{"speaker_id": 1}')   # the new person, not the cached clip
+
     def test_the_api(self):
         import asyncio
         from aiohttp.test_utils import TestClient, TestServer

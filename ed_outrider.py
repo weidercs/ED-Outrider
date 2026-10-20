@@ -1330,7 +1330,9 @@ DATA_EVENTS = ("MultiSellExplorationData", "SellExplorationData", "SellOrganicDa
 CMDR_EVENTS = ("LoadGame", "Commander", "Rank", "Progress", "Promotion", "Statistics")
 # written while the game loads (at the main menu, before LoadGame, and the snapshots just after it: missions,
 # reputation, engineers, Powerplay, squadron, ship locker): not play, so not where a session ended
-LOGIN_EVENTS = frozenset(CMDR_EVENTS) | {"Fileheader", "Materials"} | frozenset(outrider.commander.LOGIN_SNAPSHOTS)
+# Music too: read since #12, and the main menu's track is written at every launch before LoadGame (review 2026-10-20 M2:
+# it made the time away minutes, so the "away 3 days" greeting never came)
+LOGIN_EVENTS = frozenset(CMDR_EVENTS) | {"Fileheader", "Materials", "Music"} | frozenset(outrider.commander.LOGIN_SNAPSHOTS)
 RANK_KEYS = ("Combat", "Trade", "Explore", "Soldier", "Exobiologist", "Empire", "Federation", "CQC")
 RANK_NAMES = {   # the two ranks an explorer cares about
     "Explore": ["Aimless", "Mostly Aimless", "Scout", "Surveyor", "Trailblazer", "Pathfinder", "Ranger", "Pioneer",
@@ -1397,7 +1399,7 @@ CARRIER_CARGO_EVENTS = ("CarrierStats", "CarrierTradeOrder", "CargoTransfer", "M
 # off, a death empties it, a transfer to your carrier moves it to the carrier's own mined stock (meta mined_carrier) and
 # one back to the ship moves it back, and a MarketSell counts as mining up to what it holds (mining_sales; the rest of
 # the sale is trade)
-SALE_DOCK_EVENTS = ("Docked", "Undocked", "Location")
+SALE_DOCK_EVENTS = ("Docked", "Undocked", "Location", "CarrierJump")
 # Chat read aloud by Comms (NEXT-VERSION #17, the author 2026-10-17): other players' messages, live only (never a catch-up
 # or a re-read), never the NPCs'. Kept in memory only (Journals.chat, CHAT_KEEP): never in the database, outrider.log
 # or the voice's cache; the page decides what to say (the channels ticked, mutes, the rate)
@@ -1405,7 +1407,7 @@ CHAT_EVENTS = ("ReceiveText",)
 CHAT_KEEP = 32               # messages the payload carries (a burst between two polls loses none)
 CHAT_CHANNELS = ("squadron", "wing", "player", "friend", "local", "starsystem", "voicechat")
 CHAT_MAX = 300               # characters of a message kept (the page says "and more" past it)
-MINED_EVENTS = ("MiningRefined", "CargoTransfer", "EjectCargo", "Died", "MarketSell", "CarrierBuy")
+MINED_EVENTS = ("MiningRefined", "CargoTransfer", "EjectCargo", "Died", "MarketSell", "CarrierBuy", "CarrierDepositFuel")
 _OTHER_EVENTS = (POSITION_EVENTS + STAR_CLASS_EVENTS + SCAN_EVENTS + DATA_EVENTS + SHIP_EVENTS + CMDR_EVENTS + MATERIAL_EVENTS
                  + BODY_EVENTS + SRV_EVENTS + CARGO_ONLY + DOCKING_EVENTS + CHAT_EVENTS + ("Loadout", "Shutdown", "Fileheader"))
 # The Commander view (outrider/commander.py): Journals.handle_commander folds these into the meta keys of
@@ -1435,7 +1437,10 @@ WANTED = tuple(f'"event":"{e}"'.encode() for e in dict.fromkeys(_OTHER_EVENTS + 
 #     were dropped; the SRV's refinery and scoop stay out of the ship's hold; an older Location's relog is judged
 #     against the arrival before it (a legacy folder read late counted every login as a visit).
 # 43: a system's population (system_population) and own_firsts.bio_x5: no x5 bio bonus in populated systems.
-PARSER_VERSION = 54
+PARSER_VERSION = 55
+# 55: the review of 2026-10-20: a ship<->SRV cargo transfer and tritium into the carrier's depot no longer move the mined
+#     stock (mining income), a ship stored at your carrier after it jumped is in its new system, a ship on its way
+#     keeps its arrival time through a shipyard list
 # 54: ore you mined keeps counting as mined through your carrier (meta mined_carrier: moved there and back, then sold;
 #     the author, 2026-10-14: about half of his mining income went through it)
 # 53: a Vista Genomics sale keeps what each species paid and its name (bio_sales.bio_data: the Earnings' species, exact);
@@ -1461,6 +1466,8 @@ PARSER_VERSION = 54
 # Why each version reads the journals again, in the player's words: said at the start that re-reads (reread_message).
 # Every bump adds its line here too (a test checks PARSER_VERSION has one).
 PARSER_CHANGES = {
+    55: "mining income no longer counts ore moved between the ship and the SRV or tritium put in your carrier's depot, "
+        "and ships stored at your carrier or on their way show where they really are (the Commander tab)",
     54: "ore you mined still counts as mined after a trip through your carrier (the Commander tab's Earnings)",
     53: "each exobiology sale keeps what every species in it paid (the Commander tab's Earnings)",
     52: "each sale keeps where it was made and with which ship, as do your jumps, scans and samples, and the ore you "
@@ -4361,6 +4368,12 @@ class Journals:
         as cargo_dock is. A dock by Apex shuttle counts (you are there, and can sell your data there)."""
         if not self.fresh("sale_dock", ts, (self.sale_dock or {}).get("ts")):
             return   # an older dock or undock read late (a legacy folder) does not move it back
+        if name == "CarrierJump":   # aboard a carrier that jumped: the same dock, in its new system (review 2026-10-20 L1)
+            d = self.sale_dock or {}
+            if ev.get("Docked") and d.get("station") is not None and ev.get("MarketID") == d.get("market_id"):
+                self.sale_dock = dict(d, system=ev.get("StarSystem"), ts=ts)
+                meta_set(self.db, "sale_dock", self.sale_dock)
+            return
         here = name == "Docked" or (name == "Location" and ev.get("Docked"))
         self.sale_dock = {"station": ev.get("StationName") if here else None, "market_id": ev.get("MarketID") if here else None,
                           "type": ev.get("StationType") if here else None, "system": ev.get("StarSystem") if here else None,
@@ -4419,7 +4432,9 @@ class Journals:
                 if t.get("Direction") == "tocarrier":
                     moved = min(n, stock.get(k, 0))
                     stock[k], kept[k] = stock.get(k, 0) - moved, kept.get(k, 0) + moved
-                elif t.get("Direction") in ("toship", "tosrv"):
+                elif t.get("Direction") == "toship" and self.cargo_dock is not None:
+                    # from your carrier only while docked (transfers happen at your own carrier alone): the same event
+                    # moves cargo between the ship and the SRV on a planet (toship / tosrv), one stock here (review M6)
                     if kept.get(k):   # never more than the carrier holds of it (ore others bought is not journaled)
                         held = self.carrier_holding(k, ts)
                         if held is not None:
@@ -4430,6 +4445,9 @@ class Journals:
             k = cid(ev.get("Type"))
             if k in stock:
                 stock[k] = max(0, stock[k] - count(ev))
+        elif name == "CarrierDepositFuel":   # tritium from the hold into the depot, mined tons first (review L2)
+            amount = ev.get("Amount") if isinstance(ev.get("Amount"), int) and ev.get("Amount") > 0 else 0
+            stock["tritium"] = max(0, stock.get("tritium", 0) - amount)
         else:   # MarketSell
             k, tons, total = cid(ev.get("Type")), count(ev), ev.get("TotalSale")
             mined = min(tons, stock.get(k, 0))
@@ -8706,7 +8724,7 @@ class State:
         vp = row.get("value_parts") or {}
         return {"name": jt["name"], "star_class": jt.get("star_class"), "remaining": jt.get("remaining"),
                 "status": t.get("status"), "source": t.get("source"), "known": t.get("known"), "count": t.get("count"),
-                "edsm": t.get("edsm"), "hop": self.target_hop(jt) if pos else None, "distance": row.get("distance"),
+                "edsm": t.get("edsm"), "hop": self.target_hop(jt) if pos else None, "distance": self.near_from_you(row),
                 "value": {"carto": (vp.get("carto_now") or 0) + (vp.get("carto_left") or 0), "bio": vp.get("bio_left") or 0},
                 "notable": row.get("notable") or {},
                 "route_check": ((self.overlay_route() or {}).get("summary") or {}).get("target_check")}   # S11
@@ -9553,8 +9571,9 @@ class State:
         if not t or not pos or pos.get("x") is None:
             return None
         row = self.systems.get(t["id64"])
-        if row and row.get("distance") is not None:
-            d = row["distance"]
+        near = self.near_from_you(row) if row else None   # from you, not from Nearby's centre when it is elsewhere (M1)
+        if near is not None:
+            d = near
         else:
             where = self.locate(t["id64"])
             if not where or where[1] is None:
@@ -12841,11 +12860,15 @@ class State:
 
     def clear_key_hold(self, service):
         """A key EDSM or Inara refused: send again now (a new key, Settings' Try again; S16, S45 later). The hold stops
-        the sending only (what is played meanwhile waits in the outbox), and it lasts until this. True when it held."""
-        held = bool((self.upload_status.pop(service, None) or {}).get("held"))
+        the sending only (what is played meanwhile waits in the outbox), and it lasts until this. True when it held.
+        Nothing else is touched: a Save or Check with no hold keeps a backoff's or Inara's slow-down wait and its words
+        (review 2026-10-20 M0)."""
+        if not (self.upload_status.get(service) or {}).get("held"):
+            return False
+        self.upload_status.pop(service, None)
         if service in self.upload_wake:
             self.upload_wake[service].set()   # the sender's wait ends at once
-        return held
+        return True
 
     def retry_upload(self, service, schema=None):
         """POST /api/uploads/retry: EDDN's schema on hold sent again (new messages only: its refused ones were dropped),
