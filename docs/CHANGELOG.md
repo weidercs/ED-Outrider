@@ -2,6 +2,22 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-20 · Review fixes (3): the smaller ones
+From the full Fable review of 2026-10-20.
+- **Unsold reads only Journal.*.log (L4):** a beta or alpha branch's JournalBeta.* files in the folder fed their scans,
+  sales and deaths into the estimate.
+- **"1 million credits", not "1000 thousand" (L6):** the spoken answers' credits carry at unit boundaries (as the
+  routes' already did).
+- **A self-made voice for a personality (L7):** a voice installed under its own name was accepted, then silently
+  dropped; it is kept now, as the main voice and the crew take it.
+- **The speech file's banner follows the file (L8):** it was set once at start, so it stayed after a fix and never
+  came for a file that broke later.
+- **"Since your last sale" after jumps (L9):** History's row stayed as it was across jumps without a scan.
+- **A stop stays a stop (L17, L18):** a Restart asked for while Outrider was already stopping turned the stop into a
+  restart; a "back up now" then made a zip never recorded. Both are refused once stopping (the quit backup still runs).
+- **Odd numbers in requests (L19, L20):** `fuel: Infinity` in a carrier trip and a Unicode digit in Search's
+  `around` are a 400, not a 500.
+
 ## 2026-10-20 · Review fixes (2): pins, the overlay, Now's target, the page
 From the full Fable review of 2026-10-20.
 - **A pin from the map's legend on the right system (M7):** it sent the system's id64 as a JSON number, which loses

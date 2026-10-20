@@ -1728,6 +1728,36 @@ class Speakers(unittest.TestCase):
         self.assertTrue(sp.set_speaker("en_GB-vctk-medium", None))
         self.assertEqual(self.remembered[-1], {})
 
+    def test_the_lines_banner_follows_the_file(self):
+        """Review 2026-10-20 L8: the speech banner was set once at start: it stayed after the file was fixed, and a file
+        that broke later raised none (Settings showed the error, the banner did not)."""
+        import inspect
+        import types
+        info = {"version": 1, "error": None, "file": "speech.json", "problems": []}
+        self.state.speech = types.SimpleNamespace(info=lambda: dict(info))
+        self.assertIn("self.speech_status()", inspect.getsource(ed_outrider.State.payload))   # with every payload
+        self.state.speech_status()
+        self.assertNotIn("speech", self.state.notices.items)
+        info["problems"] = ['"mine": line 3: unknown placeholder {sistem}']   # broke after start
+        self.state.speech_status()
+        self.assertIn("1 problem", self.state.notices.items["speech"]["text"])
+        info["problems"] = []                                                # fixed
+        self.state.speech_status()
+        self.assertNotIn("speech", self.state.notices.items)
+
+    def test_a_self_made_voice_for_a_personality(self):
+        """Review 2026-10-20 L7: a voice installed under its own name (not language_REGION-name-quality) was accepted for a
+        personality, then dropped by style_picks (the main voice and the crew take it)."""
+        import types
+        for ext, body in ((".onnx", "x"), (".onnx.json", "{}")):
+            with open(os.path.join(self.dir, "myvoice" + ext), "w") as f:
+                f.write(body)
+        self.state.speech = types.SimpleNamespace(lines=lambda: {"styles": {"naval": "Naval"}})
+        self.assertIsNone(self.state.set_style_pick("naval", "myvoice"))
+        self.assertEqual(self.state.style_picks(), {"naval": {"voice": "myvoice", "speaker": None}})
+        os.remove(os.path.join(self.dir, "myvoice.onnx"))   # gone from the PC: left out again
+        self.assertEqual(self.state.style_picks(), {})
+
     def test_picking_a_speaker_never_waits_for_a_line_being_made(self):
         """Review 2026-10-20 M5: set_speaker runs on the event loop and waited on the synthesis lock, stalling the whole
         server for the rest of a line; the cache clear is skipped then (the speaker is in every line's key)."""

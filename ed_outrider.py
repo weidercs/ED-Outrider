@@ -7396,7 +7396,7 @@ class State:
             "voice_memory": self.voice_memory(),  # the voices besides the main one in use, their memory and how many are kept
             "sound_files": self.sounds.info() if self.sounds and self.sounds.own_dir else None,   # your own sounds (S16)
             "player": self.player.info() if self.player else None,
-            "speech": self.speech.info() if self.speech else None,
+            "speech": self.speech_status(),
             "autohonk": self.autohonk_info(),
             "autotarget": self.autotarget_info(), "rail": self.rail_info(),   # the tablet's game buttons
             # boxel exploration: the page fetches api/boxel when this changes (a jump, a scan, Spansh's answer, a pick)
@@ -8265,6 +8265,8 @@ class State:
             return {"error": f"Outrider cannot restart itself: {r.get('why')}", "code": "cannot_restart"}, 409
         if self.stop_event is None:
             return {"error": "Outrider is not serving from here", "code": "cannot_restart"}, 503
+        if self.stop_event.is_set():   # told to stop (a signal, the game PC shutting down): not turned into a restart (L17)
+            return {"error": "Outrider is stopping", "code": "stopping"}, 409
         up = (time.monotonic() if now is None else now) - STARTED
         if r.get("how") == "docker" and up < RESTART_MIN_UPTIME_S:
             return {"error": f"Outrider started {up:.0f} s ago: Docker starts a container again only once it has run "
@@ -8456,6 +8458,10 @@ class State:
             return {"error": "no database path"}, 500
         if self.backup_task and not self.backup_task.done():
             return {"running": True}, 200
+        if not auto and self.stop_event is not None and self.stop_event.is_set():
+            # stopping: one asked for now is never waited for, its zip never recorded (review L18); the quit
+            # backup at a stop (finish_backup) is automatic and still runs
+            return {"error": "Outrider is stopping"}, 409
         if self.backup_done_at is not None and time.monotonic() - self.backup_done_at < BACKUP_MIN_GAP:
             return {"error": f"the last backup finished under {BACKUP_MIN_GAP} s ago; try again in a minute"}, 429
         self.backup_task = asyncio.create_task(self.backup(auto))
@@ -11065,8 +11071,11 @@ class State:
     def ledger(self):
         """The turn-back numbers: since your last sale, each sale-to-sale trip with what it actually paid,
         what each ship loss cost, the game's own career statistics and your most valuable finds."""
+        # the jumps and the clock too: "since your last sale" counts jumps, light years and days, and the trip its hours
+        # (review 2026-10-20 L9: it stayed as it was across jumps without a scan)
         key = (self.scan_version, self.db.execute("SELECT count(*) FROM sale_events").fetchone()[0],
-               self.db.execute("SELECT count(*) FROM sale_estimates").fetchone()[0])
+               self.db.execute("SELECT count(*) FROM sale_estimates").fetchone()[0],
+               self.db.execute("SELECT count(*) FROM jumps").fetchone()[0], int(time.time() // 600))
         if getattr(self, "_ledger_key", None) == key:
             return self._ledger
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -14485,13 +14494,43 @@ class State:
     # re-read leaves it). Every browser and the tablet speak each personality so: a pick wins over speech.json's own
     # voice and speaker, which win over the main voice. The page sends the voice and speaker with each line; the server
     # never downloads a voice for it (a pick whose voice was deleted is spoken in the main voice).
+    def speech_status(self):
+        """The lines file's state for the payload (SpeechLines.info: re-read when the files change), its banner kept in
+        step: set for an error or problems, cleared once fixed (review 2026-10-20 L8: set once at start, it stayed after
+        a fix and never came for a file that broke later)."""
+        sp = self.speech.info() if self.speech else None
+        if sp:
+            self.speech_notice(sp)
+        return sp
+
+    def speech_notice(self, sp):
+        if not sp["version"]:
+            self.notices.set("speech", f"Spoken alerts: {sp['error']}", action="open:log")
+        elif sp["problems"]:
+            n = len(sp["problems"])
+            self.notices.set("speech", f"The spoken lines file {sp['file']} has {n}{'+' if n >= 20 else ''} problem"
+                             f"{'' if n == 1 else 's'}: {sp['problems'][0]}" + (" (the others in the log)" if n > 1 else ""),
+                             action="open:log")
+        else:
+            self.notices.clear("speech")
+
     def style_picks(self):
-        """{style: {voice, speaker}} as kept, the malformed left out (speaker None: the voice's own pick)."""
+        """{style: {voice, speaker}} as kept, the malformed left out (speaker None: the voice's own pick). A voice is a
+        Piper-style name, or one installed under another name (a self-made voice, as the main voice and the crew take;
+        review 2026-10-20 L7: kept, then silently dropped here); the folder is only listed when a pick needs it."""
         raw = meta_get(self.db, "style_picks")
+        installed = None
+
+        def ok(name):
+            nonlocal installed
+            if outrider.speech.VOICE_NAME.fullmatch(name):
+                return True
+            if installed is None:
+                installed = set(self.speaker.installed()) if self.speaker else set()
+            return name in installed
         return {k: {"voice": v["voice"], "speaker": outrider.speech.speaker_number(v.get("speaker"))}
                 for k, v in (raw.items() if isinstance(raw, dict) else ())
-                if isinstance(k, str) and isinstance(v, dict) and isinstance(v.get("voice"), str)
-                and outrider.speech.VOICE_NAME.fullmatch(v["voice"])}
+                if isinstance(k, str) and isinstance(v, dict) and isinstance(v.get("voice"), str) and ok(v["voice"])}
 
     def set_style_pick(self, style, voice, speaker=None):
         """A personality's voice (and speaker) from now on; voice None: speech.json's or the main voice again. The
@@ -16502,7 +16541,9 @@ class State:
             v = body.get(k, default)
             if v is None or v == "":
                 v = default
-            if isinstance(v, bool) or not isinstance(v, (int, float)) or v != int(v) or not lo <= v <= hi:
+            # finite first: int() of Infinity raises OverflowError, not the 400 (review 2026-10-20 L19)
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v != int(v) \
+                    or not lo <= v <= hi:
                 raise ValueError(f"{k} must be a whole number from {lo:,} to {hi:,}")
             return int(v)
         try:
@@ -16789,7 +16830,7 @@ class State:
             id64 = (meta_get(self.db, "next_stop") or {}).get("id64")
             if id64 is None:
                 return None, "no next stop is set"
-        elif isinstance(around, str) and around.isdigit() and int(around) < 2 ** 63:
+        elif isinstance(around, str) and around.isascii() and around.isdigit() and int(around) < 2 ** 63:   # "²": L20
             id64, around = int(around), "system"
         else:
             return None, AROUND_BAD
@@ -21020,14 +21061,9 @@ async def run(args, st):
     state.speech =outrider.speech.SpeechLines(st["speech_file"])
     sp = state.speech.info()
     print(f"spoken alerts: lines from {sp['file']}" if sp["version"] else f"spoken alerts: {sp['error']}")
-    if not sp["version"]:
-        notices.set("speech", f"Spoken alerts: {sp['error']}", action="open:log")
     for msg in sp["problems"]:
         print(f"  {sp['file']}: {msg}", file=sys.stderr)
-    if sp["version"] and sp["problems"]:
-        n = len(sp["problems"])
-        notices.set("speech", f"The spoken lines file {sp['file']} has {n}{'+' if n >= 20 else ''} problem{'' if n == 1 else 's'}: "
-                    f"{sp['problems'][0]}" + (" (the others in the log)" if n > 1 else ""), action="open:log")
+    state.speech_notice(sp)
     if st["voices_preload"]:   # the journals are read: the voices in use load now, one at a time, behind the main one
         state.speaker.preload(state.voices_in_use())
     rules_task = asyncio.create_task(check_bio_rules(state)) if outrider.bio else None
