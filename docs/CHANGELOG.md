@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-20 · Version 2026.10.27, a bug fix release
+- The pre-Odyssey call-outs (#11), the geology a body could show, 🎯 on Search, the Anaconda Mk II, limpets in the
+  hold, and the full Fable review's 31 fixes on main (the mining branch's own wait for the mining release). What's new
+  has its section. PARSER_VERSION 55: one re-read at the first start.
+
 ## 2026-10-20 · Review fixes (3): the smaller ones
 From the full Fable review of 2026-10-20.
 - **Unsold reads only Journal.*.log (L4):** a beta or alpha branch's JournalBeta.* files in the folder fed their scans,
