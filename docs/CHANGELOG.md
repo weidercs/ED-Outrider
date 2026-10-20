@@ -2,6 +2,11 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-20 · The Anaconda Mk II
+- Out today (4.4.2.0): its journal symbol `anacondamkii` (EDDN's shipyards, 19 of 94 in five minutes) is named
+  "Anaconda Mk II" and needs a large pad (the dock finder's filter; a huge hardpoint). Almanac has no illustration of
+  it yet, so the CMDR tab's Inventory shows no picture for it (`SHIP_NO_PICTURE`) until one can be built.
+
 ## 2026-10-19 · Limpets bought, sold and launched move the hold
 - 200 limpets bought, yet the hold (Materials → Cargo) had none (the author): the game wrote a Cargo line with only
   the count and never rewrote Cargo.json, and limpet purchases were not read at all. `BuyDrones` now adds limpets,
