@@ -2,6 +2,23 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-20 · Review fixes (2): pins, the overlay, Now's target, the page
+From the full Fable review of 2026-10-20.
+- **A pin from the map's legend on the right system (M7):** it sent the system's id64 as a JSON number, which loses
+  digits above 2^53, so in such a system the pin never matched its body again; now the exact id.
+- **The overlay drops its panels when Outrider answers errors (M8):** an error answer (a panel failing to build) kept
+  the last system drawn after you jumped on, and the window logged nothing.
+- **Now never names the previous target (L10):** while a new target's lookup ran, Now (and its overlay panel) still
+  showed the old target and its verdict; it now names the new one, "checking…" (`current_target`).
+- **The overlay's panels follow a newer Spansh record (L11):** the full dump after the search's brief one (same status)
+  was missed until your next scan.
+- **Pins (L12, L13, L21):** Here's 📍 marks redraw when a pin is added or deleted; a pin changed on another system's
+  body (from another window) is noticed (the payload's `pins.v`); a pin's body name stays capped at 200 characters, and
+  an odd system id is a 400, not a 500.
+- **The page (L14, L15, L16):** another tab while a system is pinned no longer draws it as the one you are in for a
+  moment; Server settings opened from a notice keep the field it focused (only the newest load draws); the header's
+  route line follows Plot Route's Highway / Riches switch at once.
+
 ## 2026-10-20 · Review fixes (1): Windows start-up, uploads, the target hop, the greeting, mining income
 From the full Fable review of 2026-10-20 (project/REVIEW-full-2026-10-20.md). PARSER_VERSION 55: one re-read.
 - **Windows start-up (H1):** with EDMC installed and not running, a non-English `tasklist` message (German

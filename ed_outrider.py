@@ -7289,6 +7289,7 @@ class State:
         self.riches_task = None
         self.carrier_trip_plotting = None   # #19: {state, from, to, started, error} of the last carrier trip plot
         self._pin_seen = None   # #16: (the active pin's id, the distance band said last)
+        self.pins_version = 0   # every pin change, anywhere (the payload's pins.v: other windows ask for the list again)
         self._pin_key = None    # #16: the guidance last sent (the page hears of a change)
         self.carrier_trip_task = None
         self.dock_cache = {}   # the Nearest finder's last Spansh search and permit check (DOCK_CACHE_S)
@@ -7444,8 +7445,8 @@ class State:
             # the range with the fuel and cargo aboard now (the fuel model), None without the Loadout's mass
             "jump_range_now": self.range_now(),
             "systems": list(self.systems.values()),
-            "target": dict(with_id(self.target), leaving=self.leaving_summary(pos["id64"]), hop=self.target_hop(self.target))
-                      if self.target and pos else with_id(self.target),
+            "target": dict(with_id(self.current_target()), leaving=self.leaving_summary(pos["id64"]),
+                           hop=self.target_hop(self.current_target())) if self.current_target() and pos else with_id(self.current_target()),
             "arrival": self.arrival,
             "scan_version": self.scan_version, "history_version": self.history_version,
             "cargo_version": f"{self.journals.cargo_version}.{self.counts_version}",   # the Materials tab's Cargo
@@ -8648,13 +8649,15 @@ class State:
 
     def overlay_detail(self, id64):
         """system_detail for the overlay's panels, kept until your scans or what is known of the system change (the
-        window asks once a second)."""
-        key = (id64, self.scan_version, id64 in self.bases, (self.systems.get(id64) or {}).get("status"))
+        window asks once a second). The Spansh record itself is part of the key (by identity: a refresh or the full dump
+        after the search's brief one replaces it, often with the same status; review 2026-10-20 L11)."""
+        key = (id64, self.scan_version, (self.systems.get(id64) or {}).get("status"))
+        base = self.bases.get(id64)
         cached = getattr(self, "_overlay_detail", None)
-        if cached and cached[0] == key:
+        if cached and cached[0] == key and cached[2] is base:
             return cached[1]
         detail = self.system_detail(id64)
-        self._overlay_detail = (key, detail)
+        self._overlay_detail = (key, detail, base)
         return detail
 
     def overlay_strip_info(self, pos):
@@ -8696,7 +8699,7 @@ class State:
         # a body of this system by its id, as the page's Now view finds it: a targeted station or mining site is none
         dest = dest and next((b for b in bodies.values() if b.get("body_id") == dest["body_id"]), None)
         a = self.arrival if self.arrival and self.arrival.get("id64") == str(pos["id64"]) else None
-        t = self.target
+        t = self.current_target()
         return {"name": pos.get("name"), "now": now, "arrival": a,
                 "target": t and {k: t.get(k) for k in ("name", "status", "known", "count", "star_class")},
                 "route": self.overlay_route(), "boxel": self.overlay_boxel(),
@@ -11942,6 +11945,16 @@ class State:
             return False
         self.row_failed.discard(id64)
         return True
+
+    def current_target(self):
+        """self.target while it is the journal's current FSD target; while a new target's lookup runs, a stand-in that
+        names it (status "checking") so Now, its overlay panel and the header never name the previous one (review
+        2026-10-20 L10). None with no target, and before the first lookup lands."""
+        t, jt = self.target, self.journals.target
+        if not t or not jt or (t.get("id64"), t.get("ts")) == (jt.get("id64"), jt.get("ts")):
+            return t
+        return {"id64": jt["id64"], "name": jt.get("name"), "ts": jt.get("ts"), "star_class": jt.get("star_class"),
+                "status": "checking"}
 
     def maybe_classify_target(self):
         t = self.journals.target
@@ -16323,7 +16336,7 @@ class State:
         """The payload's pins: counts per body of this system (short names: the 📍 in Here and Overview), and on a body
         with a position (from orbit down), its pins with where each is, the active one marked."""
         pos, h = self.journals.pos, self.surface_here()
-        out = {"counts": {}, "here": None}
+        out = {"counts": {}, "here": None, "v": self.pins_version}   # v: any pin changed, in any system (review L13)
         if pos:
             for r in self.db.execute("SELECT body, count(*) AS n FROM surface_pins WHERE system=? GROUP BY body", (pos["id64"],)):
                 out["counts"][short_name(pos.get("name") or "", r["body"])] = r["n"]
@@ -16361,11 +16374,13 @@ class State:
                 system, bname, lat, lon = h["system"], h["name"], h["lat"], h["lon"]
                 sysname = (self.journals.pos or {}).get("name")
             else:
-                sid, bname = str(body.get("system") or ""), name_of(body.get("body") or "")[:200] if isinstance(body.get("body"), str) else ""
-                if not sid.isdigit() or not bname:
+                # the body's whole name (not cut to a pin name's length), at most 200 characters; an id64 in ASCII
+                # digits under 2^63 (review 2026-10-20 L21: "²" or 30 digits raised, and the cap was undone)
+                sid = str(body.get("system") or "")
+                bname = " ".join(body["body"].split())[:200] if isinstance(body.get("body"), str) else ""
+                if not (sid.isascii() and sid.isdigit()) or int(sid) >= 2 ** 63 or not bname:
                     return {"error": "give the system (its id64) and the body's full name"}, 400
                 system, sysname = int(sid), name_of(body.get("sysname") or "") or None
-                bname = " ".join(body["body"].split())
                 try:
                     lat, lon = coord("lat", 90), coord("lon", 180)
                 except ValueError as e:
@@ -16411,6 +16426,7 @@ class State:
                 return {"error": "action must be add, here, delete, reset, activate, rename or move"}, 400
         self.db.commit()
         self._pin_seen = None   # a change: the active pin is said again ("set")
+        self.pins_version += 1
         self.bump()
         return {"ok": True, "pins": [{"id": p["id"], "name": p["name"], "lat": p["lat"], "lon": p["lon"], "reached": bool(p["reached_ts"])}
                                      for p in self.pins_body(system, bname)]}, 200
