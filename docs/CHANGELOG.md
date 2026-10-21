@@ -2,9 +2,23 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-20 · Docs brought up to date
+- **The guides:** Plot Route (🎯 on Search's results, 🪨 terraformable routes on the route line, Plot here's Exact for
+  Trade or Carrier, the carrier trip kept apart, every docking warning), Cargo (limpets followed, stale last-seen lines
+  dropped), Install (what a backup holds and `--restore` leaves alone), Uploads (the footer at the end, what waits keeps
+  its order), the views (`?view=cmdr`, the geology a body could show, Now's "checking…", the Anaconda Mk II's picture),
+  Voice (twelve AI tools, the Science Officer's full row) and the overlay (Now's target).
+- **The journal reference and design notes** after the review's changes: the mined stock (transfers back only while
+  docked, tritium deposits), `WANTED`, Music in `LOGIN_EVENTS`, a carrier jump while docked, ships in transit,
+  Status.json after a clean quit, uploads' order; Windows and KDE on Wayland as players confirmed them.
+- **The agent guide, For the curious, CLAUDE.md and AGENTS.md:** the "tf" survey kind, the mined stock's rules,
+  limpets, `geoCandidatesHtml`, `SHIP_NO_PICTURE`, `surface_pins` live-only, the pre-Odyssey names, the shorter line
+  lists, and the keep-in-step lists (every personality file, `ROW_WORDS`, `CREW_ROLES`); the box's missing files.
+- **What's new:** 2026.10.27's fix count corrected to 28 (three of the review's fixes are the mining branch's).
+
 ## 2026-10-20 · Version 2026.10.27, a bug fix release
 - The pre-Odyssey call-outs (#11), the geology a body could show, 🎯 on Search, the Anaconda Mk II, limpets in the
-  hold, and the full Fable review's 31 fixes on main (the mining branch's own wait for the mining release). What's new
+  hold, and the full Fable review's 28 fixes on main (the mining branch's own wait for the mining release). What's new
   has its section. PARSER_VERSION 55: one re-read at the first start.
 
 ## 2026-10-20 · Review fixes (3): the smaller ones
