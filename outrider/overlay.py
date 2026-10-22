@@ -866,7 +866,9 @@ def strip_panel(info, pal, size="normal"):
     rest += [(f"🏁 {info['firsts']}" if info.get("firsts") else "", "good"),
              (f"🗺 {info.get('mapped') or 0}/{info['planets']}" if info.get("planets") else "", "text")]
     if info.get("in_spansh") is not None:
-        rest.append(("Spansh ✓" if info["in_spansh"] else "Spansh ✗ (new to it)", "muted" if info["in_spansh"] else "warn"))
+        old = info["in_spansh"] and info.get("spansh_old")   # #11: its data predates Odyssey, worth a rescan
+        rest.append(("Spansh ✓ (pre-Odyssey)" if old else "Spansh ✓" if info["in_spansh"] else "Spansh ✗ (new to it)",
+                     "warn" if old else "muted" if info["in_spansh"] else "warn"))
     two = line(None, rest)
     lines = [one] + ([two] if two else [])
     st = info.get("standing") or {}
@@ -1062,7 +1064,7 @@ def pad_panel(d, pal, size="normal", pid="radar"):
 
 # supercruise seconds from the arrival star on the page's community curve (page.js scSeconds): a rough guide
 SC_KNEE = 7.5 * math.log(2000) - 20
-TARGET_WORDS = {"unreported": ("never reported", "good"), "no bodies": ("no scan data", "warn"),
+TARGET_WORDS = {"checking": ("checking…", "muted"), "unreported": ("never reported", "good"), "no bodies": ("no scan data", "warn"),
                 "partial": ("partly scanned", "warn"), "explored": ("fully scanned", "muted"), "visited": ("visited", "muted")}
 ARRIVAL_SECONDS = 20   # the arrival verdict stays this long after the jump, as on Now
 NOW_W = 520

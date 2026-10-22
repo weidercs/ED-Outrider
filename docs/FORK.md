@@ -155,6 +155,10 @@ Beside upstream's ([DESIGN_NOTES.md](DESIGN_NOTES.md)):
 
 Newest first. Upstream's is [CHANGELOG.md](CHANGELOG.md).
 
+## 2026-10-21 · This fork: upstream's 2026.10.27 merged in
+- Upstream's review fixes, pre-Odyssey Spansh data called out (Now, Nearby's 🪦, the briefing), the geology a body's
+  signals could be, 🎯 on Search's results, limpets moving the hold, the Anaconda Mk II. No conflicts.
+
 ## 2026-10-18 · This fork: Plan the trip asks only for the picked parts' grades
 - A grade picked for a part that was then unpicked (Load my ship, then a part turned off) stayed in the picks while
   hidden: Plan the trip still asked for it, adding engineers for modules not picked, and the Engineers list and the

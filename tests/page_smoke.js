@@ -1615,7 +1615,9 @@ const releasePayloads = async () => {
     w.eval(`data.highway = {id: "h1", created_ts: "2026-10-07T09:00:00Z", destination: "Hw Z", total: 9, index: 4, at: 3,
       next: {name: "Hw E", neutron: true, jumps: 1, distance: 5}}; renderHwyLine()`);
     got.both = line().slice(0, 2);   // the survey route: plotted after the Highway's
-    w.localStorage.setItem("hwyShow", JSON.stringify("hwy")); w.eval("renderHwyLine()");
+    // picked on Plot Route's radio: the header line follows at once (review 2026-10-20 L16: only at the next payload)
+    w.eval(`(() => { const r = document.createElement("input"); r.type = "radio"; r.name = "hwyKind"; r.value = "hwy";
+      document.getElementById("hwyHead").appendChild(r); r.dispatchEvent(new Event("change", {bubbles: true})); })()`);
     got.picked = line().slice(0, 2);
     // every view shows it, Plot Route's included: the header is the header (the author, 2026-10-15)
     got.views = ["hist", "hwy", "mat", "cmdr", "log", "search"].map(v => { w.eval(`view = "${v}"; renderHwyLine()`); return line().slice(0, 2); }).join("");
@@ -2802,7 +2804,7 @@ const releasePayloads = async () => {
     const txt = h => { const el = d.createElement("div"); el.innerHTML = h; el.querySelectorAll(".sf, .sf1, .sf2").forEach(e => e.remove()); return el.textContent; };
     const old = {bodies: 3, genera_top: ["Bacterium", "Stratum"], up_to: 4200000, reported: "2019-06-01"};
     got.near = txt(w.eval(`oldDataTag(${JSON.stringify(old)})`));
-    got.nearTitle = /Last reported 2019 by a pre-Odyssey client/.test(w.eval(`oldDataTag(${JSON.stringify(old)})`));
+    got.nearTitle = /Last reported 2019-\d\d-\d\d by a pre-Odyssey client/.test(w.eval(`oldDataTag(${JSON.stringify(old)})`));
     got.none = w.eval("oldDataTag(null)");
     got.pop = /landable\? \(old data\)/.test(w.eval(`bodyPopHtml({name: "A 3", type: "Planet", landable: false, stale_bio: true, updated: "2019-06-01", bio: 0, genera: [], organics: [], codex: []}, null)`));
     got.popPlain = /not landable/.test(w.eval(`bodyPopHtml({name: "A 4", type: "Planet", landable: false, stale_bio: false, bio: 0, genera: [], organics: [], codex: []}, null)`));
@@ -6143,6 +6145,12 @@ const releasePayloads = async () => {
     got.pin = w.eval(`(() => { const had = !!hereData; pinSystem("88");
       const r = [had, hereData === null, /loading/.test(document.getElementById("hereHead").textContent)];
       unpinSystem(); return r; })()`);
+    // review 2026-10-20 L14: another tab while a system is pinned drops its Here data with the pin (else it is drawn as
+    // the system you are in until the fetch lands)
+    got.tabSwitch = JSON.parse(w.eval(`(() => { const v0 = view; pinSystem("88"); hereData = {id64: "88", bodies: []};
+      const other = [...document.querySelectorAll(".views [data-view]")].find(b => b.dataset.view !== view && b.dataset.view !== "now");
+      other.click(); const r = [pinnedSystem, hereData && hereData.id64];
+      document.querySelector('.views [data-view="' + v0 + '"]').click(); return JSON.stringify(r); })()`));
     // #17: two lookups, the first slower: the second's answer stays
     w.document.getElementById("findName").value = "slow";
     w.document.getElementById("findForm").dispatchEvent(new w.Event("submit", {cancelable: true}));
@@ -6180,7 +6188,7 @@ const releasePayloads = async () => {
     w.fetch = realF;
     w.eval("loadFirsts(); render()");
     await sleep(300);
-    const want = {onbody: "new", pin: [true, true, true], find: "fast lookup", firsts: true, map: [true, false, "new"], mapReopen: [1, 2]};
+    const want = {onbody: "new", pin: [true, true, true], tabSwitch: [null, null], find: "fast lookup", firsts: true, map: [true, false, "new"], mapReopen: [1, 2]};
     const goodO = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && goodO;
     console.log(goodO ? "OK" : "FAIL", "| answers out of order |", goodO ? "on-body strip, a pin's loading, Find, a failed older firsts, the map: the newest answer kept; the map asks again when reopened" : JSON.stringify(got), errors.slice(before));
@@ -7298,6 +7306,11 @@ const releasePayloads = async () => {
     got.focus = JSON.parse(w.eval(`(() => { const a = document.activeElement;
       return JSON.stringify([document.getElementById("alertDialog").open, document.getElementById("serverSettings").open,
         a && a.id, !!(a && a.classList.contains("srvfocus")), !!(a && a.closest('details[data-srvsec="journals"][open]'))]); })()`));
+    // review 2026-10-20 L15: two loads at once (opened from a notice with the section stored open): only the newer draws
+    got.twoLoads = await w.eval(`(async () => { const real = apiJson, cfg = (p, ms) => new Promise(r => setTimeout(() => r({path: p, exists: true, sections: []}), ms));
+      apiJson = u => u === "api/config" ? cfg(__n++ ? "/newer.toml" : "/older.toml", __n === 1 ? 300 : 10) : real(u); window.__n = 0;
+      try { await Promise.all([loadServerSettings(), loadServerSettings()]); } finally { apiJson = real; delete window.__n; }
+      return document.getElementById("serverSettingsBody").textContent.includes("/newer.toml"); })()`);
     w.eval(`data.freshness = window.__fr0; render(); document.getElementById("srvBackups").open = true; loadBackups();`);
     await settle(2000);
     got.empty = w.eval(`document.getElementById("srvBackupsBody").textContent.includes("No backups yet.")`);
@@ -7321,7 +7334,7 @@ const releasePayloads = async () => {
     w.copyText = realCopy;
     w.eval(`document.getElementById("srvBackups").open = false; tabClose(document.getElementById("alertDialog"));`);
     const want = {git: [true, true, true], docker: [true, false], nojournals: "no journals yet: see the Data tile",
-                  nojump: "No FSD jump yet: the page fills in after your first jump", focus: [true, true, "srv-journals-live", true, true],
+                  nojump: "No FSD jump yet: the page fills in after your first jump", focus: [true, true, "srv-journals-live", true, true], twoLoads: true,
                   empty: true, list: [1, true, true, "by hand", true, true, true], copied: true};
     const good = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
     allOk = allOk && good;
@@ -9049,7 +9062,8 @@ const releasePayloads = async () => {
       ptr(row("Krait Phantom"), "pointerenter"); await sleep(2300);
       d.querySelector('[name=cmdrTab][value="profile"]').click(); await settle(400);
       got.otherTab = card().hidden;
-      got.pure = w.eval(`[shipPicture("Krait_Light"), shipPicture("new_hull_x"), shipPicture("constructor")]`);
+      got.pure = w.eval(`[shipPicture("Krait_Light"), shipPicture("new_hull_x"), shipPicture("constructor"),
+        shipPicture("AnacondaMkII"), shipName("AnacondaMkII")]`);
     } finally {
       w.eval(`apiJson = __scKeep.api; data.commander_version = __scKeep.ver; shipCardHide();
         CM.data = {}; CM.key = {}; CM.tab = "profile"; store.set("cmdrTab", "profile");`);
@@ -9063,7 +9077,7 @@ const releasePayloads = async () => {
       left: true, unknown: true, touch: true,
       krait: ["static/ships/krait_light.webp", "Krait Phantom", "lazy", "300", "200", "Krait Phantom", true],
       escape: true, otherTab: true,
-      pure: ["static/ships/krait_light.webp", null, null],
+      pure: ["static/ships/krait_light.webp", null, null, null, "Anaconda Mk II"],   // named, no picture yet (2026-10-20)
     };
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodSC = !bad.length && errors.length === before;
@@ -9512,7 +9526,9 @@ const releasePayloads = async () => {
         const a = chatMayTalk(xo, nav), b = chatMayTalk(xo, eng); localStorage.setItem("speechStyles", '["business","sarcastic"]');
         return JSON.stringify([a, b, chatMayTalk(xo, nav)]); })()`));
       // the legend's 📍 on a body with no pins yet: the body is named, the pin is added
-      w.eval(`data.pins = {counts: {}, here: {body: "Sys B 7", pins: [], active: null}}`);
+      // in a system whose id64 is past 2^53 the JSON number rounds: the exact id string is sent (review 2026-10-20 M7)
+      w.eval(`data.pins = {counts: {}, here: {body: "Sys B 7", pins: [], active: null}};
+        data.position = Object.assign({}, data.position, {id64: 9007199254740993, id: "9007199254740993"})`);
       w.eval(`window.__go = document.createElement("button"); __go.dataset.pingo = "1.5,2.5"; __go.dataset.pinname = "Ship"; pinLegendClick({target: __go})`);
       await sleep(30);
       got.firstPin = posts.filter(p => /pins/.test(p[0])).map(p => { const b = Object.assign({}, p[1]); delete b.sysname; return b; });
@@ -9526,12 +9542,42 @@ const releasePayloads = async () => {
     }
     const want = {replays: [["Kurbo: o7", true], ["Kurbo: o7", true], ["Kurbo: o7", true], ["Kurbo: o7", true]],
       capTap: [{action: "replay", words: "Kurbo: o7", private: true}], mark: [true, ""], xo: [false, true, true],
-      firstPin: [{action: "add", system: "42", body: "Sys B 7", name: "Ship", lat: 1.5, lon: 2.5, active: true}]};
+      firstPin: [{action: "add", system: "9007199254740993", body: "Sys B 7", name: "Ship", lat: 1.5, lon: 2.5, active: true}]};
     const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
     const goodSW = !bad.length && errors.length === before;
     allOk = allOk && goodSW;
     console.log(goodSW ? "OK" : "FAIL", "| sweep fixes 2026-10-17 |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "a chat line replayed stays private (▶, a Now caption, again, replay), Here's 📍 for your system only, the XO as heard, the first pin from the legend", errors.slice(before));
+  }
+  // Review 2026-10-20 L12, L13: a pin changed in any system (pins.v) asks for the list again (a pin added from another
+  // window on another system's body went unnoticed), and Here redraws its 📍 marks when this system's counts change
+  {
+    holdPayloads();
+    const w = dom.window, before = errors.length, got = {};
+    w.eval(`window.__pv = {pins: data.pins, sig: PINS.sig, counts: PINS.counts, rh: renderHere, lp: loadPins, hd: hereData};
+      window.__calls = []; renderHere = () => __calls.push("here"); loadPins = () => __calls.push("list");
+      hereData = hereData || {id64: 0}; PINS.sig = null;`);
+    const calls = () => JSON.parse(w.eval(`JSON.stringify(__calls.splice(0))`));
+    try {
+      w.eval(`data.pins = {counts: {"A 1": 1}, here: null, v: 1}; pinsTick()`);
+      got.first = calls();
+      w.eval(`data.pins = {counts: {"A 1": 1}, here: null, v: 2}; pinsTick()`);   // a pin on another system's body
+      got.elsewhere = calls();
+      w.eval(`data.pins = {counts: {"A 1": 2}, here: null, v: 3}; pinsTick()`);   // one more on A 1, here
+      got.here = calls();
+      w.eval(`pinsTick()`);
+      got.same = calls();
+    } finally {
+      w.eval(`const k = window.__pv; data.pins = k.pins; PINS.sig = k.sig; PINS.counts = k.counts; renderHere = k.rh; loadPins = k.lp;
+        hereData = k.hd; delete window.__pv; delete window.__calls;`);
+      await releasePayloads();
+    }
+    const want = {first: ["list"], elsewhere: ["list"], here: ["list", "here"], same: []};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodPV = !bad.length && errors.length === before;
+    allOk = allOk && goodPV;
+    console.log(goodPV ? "OK" : "FAIL", "| pins anywhere |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "a pin changed in any system asks for the list again; Here redraws when this system's counts change", errors.slice(before));
   }
   // Surface pins (#16): the coordinates read in every common layout; the spoken words; the active pin's line; the map's
   // pins and the legend (tap one to go there, 📍 on a site pins it); a body panel's Pins (what it reads as, Add); the 📍
@@ -9553,7 +9599,7 @@ const releasePayloads = async () => {
       pinSpoken({what: "arrived", name: "Beacon", next: {name: "Ruins", dist: 2300, turn: 95}})])`));
     w.eval(`window.__pn = {pins: data.pins, surface: data.surface, pos: data.position, speak, flags: [speechOn, isSpeaker], hush: hushState, list: PINS.list};
       window.__spoken = []; speak = (t, o) => window.__spoken.push([t, o.kind]); speechOn = true; isSpeaker = true; hushState = null; alertSpeak.pins = true;
-      data.position = Object.assign({}, data.position, {id64: 42, name: "Sys"});
+      data.position = Object.assign({}, data.position, {id64: 42, id: "42", name: "Sys"});
       const pin = {id: 1, name: "Wreck", lat: 0, lon: 0.5, dist: 8726, bearing: 90, turn: 90, way: "on your right", reached: false, active: true};
       data.pins = {counts: {"B 7": 2}, here: {body: "Sys B 7", pins: [pin, {id: 2, name: "Old", lat: 0, lon: 0.001, dist: 17, bearing: 90, turn: 90, way: "", reached: true, active: false}], active: pin}};
       data.surface = {body: "B 7", lat: 0, lon: 0, heading: 0, radius: 1000000, show: true, ship: null, rigs: [], sites: [{kind: "unmarked", lat: 0.002, lon: 0, minerals: {}, tons: 5}],
@@ -9776,6 +9822,89 @@ const releasePayloads = async () => {
     allOk = allOk && goodCR;
     console.log(goodCR ? "OK" : "FAIL", "| chat read aloud |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
       : "no backlog, the channels and a mention, one sender in a row as one line, the gap, the summary, stale shown not said, the headers, links and emoji, mute and unmute, off, private to the PC", errors.slice(before));
+  }
+  // The geology a body's signals could be (the author, 2026-10-19): the body card names the kinds its volcanism allows,
+  // each new to your codex marked (✪ anywhere, ✦ this region), and how one is logged
+  {
+    const w = dom.window, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const saved = data.codex_types; data.codex_types = {"Inner Orion Spur": [1400102], "Odin's Hold": [1400402]};
+      const b = {name: "B 7", type: "Planet", subtype: "High metal content world", geo: 3, volcanism: "Major Rocky Magma volcanism", ring_details: [],
+                 codex_geo: [{id: 1400102, name: "Sulphur Dioxide Fumarole"}, {id: 1400306, name: "Silicate Magma Lava Spout"},
+                             {id: 1400402, name: "Sulphur Dioxide Gas Vent"}]};
+      const card = document.createElement("div"); card.innerHTML = bodyPopHtml(b, "Inner Orion Spur");
+      const sec = [...card.querySelectorAll(".sec")].find(x => /geological signals/.test(x.textContent));
+      const out = [sec ? [...sec.childNodes].map(n => n.textContent).join(" ").replace(/\\s+/g, " ").trim() : null, geoCandidatesHtml({...b, geo: 0}, "Inner Orion Spur"),
+                   geoCandidatesHtml({...b, codex_geo: null}, "Inner Orion Spur")];
+      data.codex_types = saved;
+      return JSON.stringify(out); })()`));
+    const want = ["3 geological signals from its major rocky magma, one of: Sulphur Dioxide Fumarole · Silicate Magma Lava Spout ✪ · Sulphur Dioxide Gas Vent ✦ " +
+                  "✪ new to your codex anywhere, ✦ new in this region: logged when you scan one on the surface. The DSS map shows where the signals are.", "", ""];
+    const okG = JSON.stringify(got) === JSON.stringify(want) && errors.length === before;
+    allOk = allOk && okG;
+    console.log(okG ? "OK" : "FAIL", "| geology kinds |", okG ? "the body card names the kinds its volcanism allows, new ones marked, how to log one" : JSON.stringify(got), errors.slice(before));
+  }
+  // 🎯 on a Search result (the author, 2026-10-19): where auto-target can work, never on the system you are in
+  {
+    const w = dom.window, d = w.document, before = errors.length;
+    const got = JSON.parse(w.eval(`(() => {
+      const saved = {search, gp: data.game_pc, at: data.autotarget};
+      data.game_pc = true; data.autotarget = Object.assign({}, data.autotarget, {available: true, missing: []});
+      search = {running: false, status: "2 systems", results: [{id: "4242", name: "Far Sys", distance: 3.5, visited: false, firsts: null, matches: {}},
+                                                                {id: posId(), name: "Here Sys", distance: 0, visited: true, firsts: null, matches: {}}]};
+      renderSearch();
+      const aims = [...document.querySelectorAll("#sRows [data-aim]")].map(b => [b.dataset.route, b.dataset.aimid]);
+      data.autotarget = Object.assign({}, data.autotarget, {available: false}); renderSearch();
+      const off = document.querySelectorAll("#sRows [data-aim]").length;
+      search = saved.search; data.game_pc = saved.gp; data.autotarget = saved.at; renderSearch();
+      return JSON.stringify([aims, off]); })()`));
+    const okS = JSON.stringify(got) === JSON.stringify([[["system", "4242"]], 0]) && errors.length === before;
+    allOk = allOk && okS;
+    console.log(okS ? "OK" : "FAIL", "| search target |", okS ? "🎯 on a result, not your own system, not without auto-target" : JSON.stringify(got), errors.slice(before));
+  }
+  // #11 (Kurbo26): pre-Odyssey Spansh data: Nearby's pill (🪦 when narrow), Here's header date, never routine, the
+  // briefing's clause and line, the Now line until your own scans have every body
+  {
+    holdPayloads();
+    const w = dom.window, d = w.document, before = errors.length, got = {};
+    w.eval(`window.__po = {data, hereData, speak, flags: [speechOn, isSpeaker], hush: hushState, alert: lastAlert, aspeak: alertSpeak.brief, rq: localStorage.getItem("routineQuiet")};
+      window.__spoken = []; speak = (t, o) => window.__spoken.push([t, o.kind]);
+      speechOn = true; isSpeaker = true; hushState = null; alertSpeak.brief = true; linePlain = true;`);
+    try {
+      // in the Status column, beside "fully scanned"; its hover names the worlds that may hold life
+      const badge = w.eval(`spanshOldBadge({spansh_old: "2019-02-12", stale_bio: {bodies: 2, genera_top: ["Stratum"], up_to: 5e6, reported: "2019-02-12", names: ["A 3", "A 5"]}})`);
+      got.pill = [badge.includes("🪦 pre-Odyssey") && badge.includes("s-old"), badge.includes("Thin-atmosphere worlds that may hold life: A 3, A 5") && badge.includes("The rules allow: Stratum"),
+                  w.eval(`spanshOldBadge({stale_bio: null})`), w.eval(`notable({spansh_old: "2019-02-12", stale_bio: {bodies: 2, genera_top: [], up_to: 0, reported: "2019-02-12"}})`).includes("old data")];
+      const m = {spansh_old: "2019-02-12", all_found: false, worth: [], bio: null, star_class: "K", in_spansh: true, base_known: 5, body_count: 5, undiscovered: false};
+      got.routine = [w.eval(`isRoutine(${JSON.stringify(m)})`), w.eval(`isRoutine(${JSON.stringify({...m, spansh_old: null})})`),
+                     w.eval(`isRoutine(${JSON.stringify({...m, all_found: true})})`)];
+      w.eval(`localStorage.setItem("routineQuiet", "true"); data = Object.assign({}, data, {moments: [{seq: lastMomentSeq + 1, kind: "arrival_brief", system: "9", system_name: "Sys",
+        ...${JSON.stringify({...m, old_bodies: 2})}}]}); onData()`);
+      got.brief = JSON.parse(w.eval("JSON.stringify(__spoken.splice(0).filter(x => x[1] === 'brief'))")).map(x => x[0]).join("|");
+      got.card = w.eval("lastAlert && lastAlert.body");
+      w.eval(`hereData = Object.assign({}, __po.hereData || {}, {id64: posId(), name: "Sys", bodies: [{name: "A 3", type: "Planet", stale_bio: true, ring_details: []}], tree: null,
+        spansh_date: "2019-02-12", spansh_old: "2019-02-12", leaving: {all_found: false, honked: true, unscanned: 0, bio_pending: [], unmapped: []}, value_now: 0, value_max: 0}); renderNow(); hereData = Object.assign({}, hereData, {bodies: []}); renderHere();
+        hereData.bodies = [{name: "A 3", type: "Planet", stale_bio: true, ring_details: []}]`);
+      got.now = d.querySelector("#nowBody .now-old") ? d.querySelector("#nowBody .now-old").textContent : null;
+      got.nowNext = [/Next: rescan in the FSS/.test(d.getElementById("nowBody").textContent), /nothing worth staying for/.test(d.getElementById("nowBody").textContent)];
+      got.head = d.getElementById("hereHead").textContent.includes("Spansh: pre-Odyssey, 2019-02-12");
+      w.eval(`hereData = Object.assign({}, hereData, {leaving: {all_found: true, honked: true, unscanned: 0, bio_pending: [], unmapped: []}}); renderNow()`);
+      got.nowGone = [!d.querySelector("#nowBody .now-old"), /nothing worth staying for/.test(d.getElementById("nowBody").textContent)];
+    } finally {
+      w.eval(`const k = window.__po; data = k.data; hereData = k.hereData; speak = k.speak; [speechOn, isSpeaker] = k.flags; hushState = k.hush; lastAlert = k.alert;
+        alertSpeak.brief = k.aspeak; linePlain = false; if (k.rq === null) localStorage.removeItem("routineQuiet"); else localStorage.setItem("routineQuiet", k.rq);
+        delete window.__po; delete window.__spoken; render()`);
+      await releasePayloads();
+    }
+    const want = {pill: [true, true, "", false], routine: [false, true, true],
+      brief: "Known. 5 bodies. Scoopable K star. Spansh's data here is from February 2019, before Odyssey: worth a rescan. 2 thin-atmosphere worlds may hold life.",
+      card: "Known. 5 bodies. Scoopable K star. Spansh's data here is from 2019-02-12, before Odyssey: worth a rescan. 2 thin-atmosphere worlds may hold life.",
+      now: "🪦 Spansh data pre-Odyssey (2019-02-12): Rescan for Bio", head: true, nowGone: [true, true], nowNext: [true, false]};
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodPO = !bad.length && errors.length === before;
+    allOk = allOk && goodPO;
+    console.log(goodPO ? "OK" : "FAIL", "| pre-Odyssey data |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "the pill (🪦 narrow), never routine, the briefing's clause, Here's header date, the Now line until every body is yours", errors.slice(before));
   }
   // Main personality (the author, 2026-10-16): beside Main voice, one personality or "A mix…" (the boxes and One
   // personality per system); a browser with one ticked gets the dropdown, with several the mix; the explanation says

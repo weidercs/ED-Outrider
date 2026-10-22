@@ -2,6 +2,132 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-20 · Docs brought up to date
+- **The guides:** Plot Route (🎯 on Search's results, 🪨 terraformable routes on the route line, Plot here's Exact for
+  Trade or Carrier, the carrier trip kept apart, every docking warning), Cargo (limpets followed, stale last-seen lines
+  dropped), Install (what a backup holds and `--restore` leaves alone), Uploads (the footer at the end, what waits keeps
+  its order), the views (`?view=cmdr`, the geology a body could show, Now's "checking…", the Anaconda Mk II's picture),
+  Voice (twelve AI tools, the Science Officer's full row) and the overlay (Now's target).
+- **The journal reference and design notes** after the review's changes: the mined stock (transfers back only while
+  docked, tritium deposits), `WANTED`, Music in `LOGIN_EVENTS`, a carrier jump while docked, ships in transit,
+  Status.json after a clean quit, uploads' order; Windows and KDE on Wayland as players confirmed them.
+- **The agent guide, For the curious, CLAUDE.md and AGENTS.md:** the "tf" survey kind, the mined stock's rules,
+  limpets, `geoCandidatesHtml`, `SHIP_NO_PICTURE`, `surface_pins` live-only, the pre-Odyssey names, the shorter line
+  lists, and the keep-in-step lists (every personality file, `ROW_WORDS`, `CREW_ROLES`); the box's missing files.
+- **What's new:** 2026.10.27's fix count corrected to 28 (three of the review's fixes are the mining branch's).
+
+## 2026-10-20 · Version 2026.10.27, a bug fix release
+- The pre-Odyssey call-outs (#11), the geology a body could show, 🎯 on Search, the Anaconda Mk II, limpets in the
+  hold, and the full Fable review's 28 fixes on main (the mining branch's own wait for the mining release). What's new
+  has its section. PARSER_VERSION 55: one re-read at the first start.
+
+## 2026-10-20 · Review fixes (3): the smaller ones
+From the full Fable review of 2026-10-20.
+- **Unsold reads only Journal.*.log (L4):** a beta or alpha branch's JournalBeta.* files in the folder fed their scans,
+  sales and deaths into the estimate.
+- **"1 million credits", not "1000 thousand" (L6):** the spoken answers' credits carry at unit boundaries (as the
+  routes' already did).
+- **A self-made voice for a personality (L7):** a voice installed under its own name was accepted, then silently
+  dropped; it is kept now, as the main voice and the crew take it.
+- **The speech file's banner follows the file (L8):** it was set once at start, so it stayed after a fix and never
+  came for a file that broke later.
+- **"Since your last sale" after jumps (L9):** History's row stayed as it was across jumps without a scan.
+- **A stop stays a stop (L17, L18):** a Restart asked for while Outrider was already stopping turned the stop into a
+  restart; a "back up now" then made a zip never recorded. Both are refused once stopping (the quit backup still runs).
+- **Odd numbers in requests (L19, L20):** `fuel: Infinity` in a carrier trip and a Unicode digit in Search's
+  `around` are a 400, not a 500.
+
+## 2026-10-20 · Review fixes (2): pins, the overlay, Now's target, the page
+From the full Fable review of 2026-10-20.
+- **A pin from the map's legend on the right system (M7):** it sent the system's id64 as a JSON number, which loses
+  digits above 2^53, so in such a system the pin never matched its body again; now the exact id.
+- **The overlay drops its panels when Outrider answers errors (M8):** an error answer (a panel failing to build) kept
+  the last system drawn after you jumped on, and the window logged nothing.
+- **Now never names the previous target (L10):** while a new target's lookup ran, Now (and its overlay panel) still
+  showed the old target and its verdict; it now names the new one, "checking…" (`current_target`).
+- **The overlay's panels follow a newer Spansh record (L11):** the full dump after the search's brief one (same status)
+  was missed until your next scan.
+- **Pins (L12, L13, L21):** Here's 📍 marks redraw when a pin is added or deleted; a pin changed on another system's
+  body (from another window) is noticed (the payload's `pins.v`); a pin's body name stays capped at 200 characters, and
+  an odd system id is a 400, not a 500.
+- **The page (L14, L15, L16):** another tab while a system is pinned no longer draws it as the one you are in for a
+  moment; Server settings opened from a notice keep the field it focused (only the newest load draws); the header's
+  route line follows Plot Route's Highway / Riches switch at once.
+
+## 2026-10-20 · Review fixes (1): Windows start-up, uploads, the target hop, the greeting, mining income
+From the full Fable review of 2026-10-20 (project/REVIEW-full-2026-10-20.md). PARSER_VERSION 55: one re-read.
+- **Windows start-up (H1):** with EDMC installed and not running, a non-English `tasklist` message (German
+  "ausgeführt") raised UnicodeDecodeError out of `edmc_running` and Outrider never started. Its output is now read as
+  bytes.
+- **Uploads keep their order (M0):** a Save or Check of a key (or Try again) during a backoff woke the sender, and rows
+  queued since went before the batch waiting to be retried (EDSM's events out of order; Inara sent to inside its
+  "slow down" hour, its status cleared). Nothing newer goes while a tried row waits (`uploads.due`), and the key's Save
+  or Check only wakes the sender when it lifted a hold.
+- **The target hop is from you (M1):** with Nearby Around another system, Now's target line and the overlay's Target
+  panel measured the hop (ly, fuel, jumps left, reach) from that centre: a 190 ly jump could read as a reachable 10 ly.
+- **"Away 3 days" again (M2):** the main menu's Music line (read since #12) counted as play, so the login's time away
+  was minutes and the greeting the plain one.
+- **The voice lab no longer freezes the server (M5):** picking a voice's person waited on the line being made, on the
+  event loop.
+- **Mining income (M6, L2):** a cargo transfer between the ship and the SRV on a planet was taken as ore back from your
+  carrier, and tritium put in the depot stayed counted as mined ore aboard; both inflated mining income later.
+- **Your fleet (L1, L5):** a ship stored at your carrier after it jumped was put in its previous system; a ship on its
+  way stayed "in transit" after arriving when a shipyard list was written meanwhile.
+
+## 2026-10-20 · The Anaconda Mk II
+- Out today (4.4.2.0): its journal symbol `anacondamkii` (EDDN's shipyards, 19 of 94 in five minutes) is named
+  "Anaconda Mk II" and needs a large pad (the dock finder's filter; a huge hardpoint). Almanac has no illustration of
+  it yet, so the CMDR tab's Inventory shows no picture for it (`SHIP_NO_PICTURE`) until one can be built.
+
+## 2026-10-19 · Limpets bought, sold and launched move the hold
+- 200 limpets bought, yet the hold (Materials → Cargo) had none (the author): the game wrote a Cargo line with only
+  the count and never rewrote Cargo.json, and limpet purchases were not read at all. `BuyDrones` now adds limpets,
+  `SellDrones` and `LaunchDrone` take them away (`outrider.cargo.ship_apply`; `LaunchDrone` still counted in CMDR →
+  Sessions too).
+
+## 2026-10-19 · 🎯 on Search's results
+- Search's results had no target button (the author): each now has 🎯 after its name, as Bookmarks and Nearby do,
+  where auto-target can work and never on the system you are in (`sysAimBtn`).
+
+## 2026-10-19 · The geology a body's signals could be, in its card and details
+- The ✪ beside a body's name (geology its volcanism could show, new to your codex) said nothing in the body card,
+  which read only "3 geological signals" (the author). The card now names the kinds its volcanism allows ("from its
+  major rocky magma, one of: Sulphur Dioxide Fumarole · Silicate Magma Lava Spout ✪ · ..."), each new one marked ✪
+  (anywhere) or ✦ (this region), and how one is logged; the details panel gets a 🪨 section saying the same
+  (`geoCandidatesHtml`).
+
+## 2026-10-19 · "Neutron jump target" only for the Highway
+- 🎯 on a Nearby row said "Successfully targeted neutron jump target Smojoo DL-Y d8" (the author): every target but a
+  boxel's took the Highway's wording. Now only the Highway's (Target next, the auto-target after a supercharge, 🎯 on a
+  Highway row: the target's `neutron`); Nearby, bookmarks, your carrier, a survey or trade route and the auto-target test say "Targeted X.".
+
+## 2026-10-19 · Lines for alerts Outrider does not know: one short line
+- A lines file newer than the running Outrider (after an update, before a restart) listed every unknown alert with
+  the names of all 150 known ones, once each (the author's Settings → Voice). Now one line: "3 lines are for alerts
+  this Outrider does not know yet: old_data, limpets_low, hold_nearly_full. Restart Outrider after an update;
+  otherwise check the names" (`outrider.speech.check`).
+
+## 2026-10-19 · Pre-Odyssey: Spansh dates as YYYY-MM-DD
+- Here's header, Now's line, the 🪦 and old data hovers and the briefing's card write the date Spansh last heard of
+  the system as YYYY-MM-DD ("Spansh: pre-Odyssey, 2019-02-14"; the author: "Feb 2019" read like the cutoff). The
+  voice still says "February 2019" (`spanshDay`, `spanshMonth`).
+
+## 2026-10-19 · Pre-Odyssey Spansh data called out (Kurbo26, discussion #11)
+- A system whose Spansh records all predate the legacy split (`LEGACY_CUTOFF`, 29 Nov 2022: thin-atmosphere worlds
+  marked not landable, life never reported) is "pre-Odyssey" (`spansh_date`, `spansh_old`; in the Spansh summaries,
+  CACHE_VERSION 18, and in `system_detail`, `merged_records`, `arrival_facts`), whatever its bodies (the old data tag
+  needed a thin-atmosphere world the rules allow life on).
+- **Nearby:** "🪦 pre-Odyssey" in the Status column beside "fully scanned", in the warning colour (🪦 when narrow;
+  `spanshOldBadge`; first in Notable, too quiet there: the author missed it in the mockup). Its hover: when, and the
+  thin-atmosphere worlds that may hold life by name (`stale_bio_summary`'s `names`), what the rules allow, about what
+  one genus each pays. **Here:** the header says when Spansh last heard ("Spansh: pre-Odyssey, 2019-02-14", or the
+  plain date). **The overlay's system strip:** "Spansh ✓ (pre-Odyssey)".
+- **Never routine** (`isRoutine`) until your own scans have every body; **the arrival briefing** ends with the clause
+  ("Spansh's data here is from February 2019, before Odyssey: worth a rescan." and the worlds that may hold life), a
+  line of its own (`old_data`, 15 a list, under the briefing's row). **Now:** a 🪦 line until every body is yours, and
+  "Next: rescan in the FSS" in place of "nothing worth staying for" (Spansh knowing every body left nothing "to find").
+  The 🪦 line reads "Spansh data pre-Odyssey (2019-02-14): Rescan for Bio" (the author: one line in Now's type).
+
 ## 2026-10-18 · Version 2026.10.26, The Release with Personality
 - The eight new personalities and over 70,000 lines, the crew as characters, space chatter, chat read aloud, surface
   pins, carrier trips, the terraformable worlds route, the fixes since 2026.10.25. What's new has its section. No

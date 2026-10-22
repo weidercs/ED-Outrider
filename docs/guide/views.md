@@ -10,8 +10,13 @@
 <b>Nearby</b> — every known system within range (20–50 ly, the Where tile's dropdown): distance, how much
 is scanned, the main star and whether it scoops, notable bodies, curiosities (🔭: odd orbits, ringed landables, rare
 classes such as water giants, helium giants, Sudarsky class V and green gas giants) and a credit estimate. Sort,
-hide visited and fully scanned systems, or keep only those one jump away. A dashed <i>old data</i> mark flags Spansh
-records from before Odyssey (thin-atmosphere planets there may hold unsampled life). Click a row to see that system
+hide visited and fully scanned systems, or keep only those one jump away. <i>🪦 pre-Odyssey</i> beside the status (🪦
+alone when the pane is narrow) marks a system whose Spansh data was all reported before Odyssey's surface data (the
+legacy split of 29 November 2022): its thin-atmosphere worlds were marked not landable and its life never reported, so
+"fully scanned" there may still hide bio and first footfalls. Hover it for when, and the thin-atmosphere worlds that
+may hold life: their names, what the exobiology rules allow there and about what one genus each would pay. A dashed <i>old data</i> mark flags such bodies in a system with newer data too. Here's
+header says when Spansh's data was last reported ("Spansh: pre-Odyssey, 2019-02-14"), and Now says "Spansh data
+pre-Odyssey (2019-02-14): Rescan for Bio" until your own scans have every body. Click a row to see that system
 body by body beside the list (click it again to close it); its name copies it, ☆ bookmarks it, and where auto-target
 can work (the game PC, see [Plot Route](plot-route.md)) the target button (the galaxy map's destination marker) left of the name, in a column of its own, targets it in
 the galaxy map (not on your own system's row). ⛏ N counts planetary mining
@@ -120,7 +125,8 @@ order back.
 <b>Search</b> — systems with particular stars (or just <i>scoopable</i>), planets, rings, hotspots,
 unfinished exobiology or planetary mining locations (one mineral, if you like) within a radius, from what
 Outrider knows (<i>Local</i>) or everything reported (<i>Spansh</i>; mining locations are Local only, as Spansh cannot
-filter on them). Planets has <i>Potential green gas giant</i> too (see
+filter on them); 🎯 after a result's name targets it in the galaxy map, where auto-target can work. Planets has
+<i>Potential green gas giant</i> too (see
 <a href="#-potential-green-gas-giants">below</a>). The name box finds any system (what Outrider knows,
 then EDSM, then Spansh when EDSM is down or doesn't know it) and opens it in Here, where ☆ bookmarks it or makes it the
 next stop. <i>Within N ly of</i> searches around you, your destination in game, your carrier, your next stop or a
@@ -166,7 +172,7 @@ forward). Such a window has no tab row and leaves the main window's view as it w
 in Here in the main window while that is open (otherwise the window shows Here itself, with ↩ back). The main window
 speaks, also after it reloads (**Speak from this window** makes such a window speak instead); Now has its own ↗
 (below). The address is `http://127.0.0.1:8025/?view=bm` (bm, near, here, bio, search,
-map, hwy, hist, log, mat, firsts, overview).
+map, hwy, hist, log, mat, cmdr, firsts, overview).
 
 **Bookmarks** is its own tab: the systems you have bookmarked (☆ beside any system), each with its note and distance.
 The same ☆ sets your **next stop**, shown in the header until you get there. Where auto-target can work (the game PC) a **🎯** beside a bookmark
@@ -203,7 +209,7 @@ and the nearest unvisited system. Under the target, the jump's cost ("56.7 ly ·
 fuel, "scoopable: 9 of last 20" (amber as on the fuel tile), and at the last scoopable star before a dry stretch "⛽ last
 scoop before 3 dry" with how much to scoop. The target says how much of it is
 known ("3/12 known", Spansh's bodies of its count) and what EDSM has ("EDSM 5/12", or "not logged"): two databases
-with different reporters.
+with different reporters. While a new target is looked up it says "checking…", never the previous target's verdict.
 
 - **Where the next jump goes**, under the target: the route's next stop as the strip under the header says it ("🛣
   Next: Stop 38 · 4.2 ly · 38 of 120 · refuel in 3 jumps", or the Road to Riches / Exomastery one), and a kept boxel's
@@ -305,7 +311,8 @@ not count).
 **Geology** too: a landable body with geological signals and volcanism gets **✦** (✪: anywhere) when its volcanism
 could show a geological feature not in your codex for the region. One volcanism can show one of a few features (rocky
 magma: a sulphur dioxide fumarole or gas vent, a silicate magma lava spout, now and then a silicate vapour gas vent), so
-the tooltip names the new ones; the approach card says them too. Your codex's geology is its lines in your journals (a
+the tooltip names the new ones; the approach card says them too. The body's hover card and its details panel (a 🪨
+section) list every kind its volcanism allows, the new ones marked ✪ or ✦. Your codex's geology is its lines in your journals (a
 scan logs none), and combinations never seen on EDDN (water or CO2 features on a rocky body, anything on a rocky ice
 body) get no mark.
 
@@ -510,7 +517,7 @@ above the list:
   Rest the mouse on a ship for 2 seconds to see a picture of its type, with its name; it goes when you move away (or
   press Escape). On the tablet, tap the ship's name (underlined with dots) to open the picture and tap anywhere to close
   it. The pictures are Frontier's ship designs, rendered from Elite Dangerous Almanac's illustrations; a ship type newer
-  than Outrider has none yet.
+  than Outrider has none yet, nor one Almanac has no illustration of yet (the Anaconda Mk II).
   Stored modules are as outfitting last listed them, with the modules stored, taken back, sent for or sold from
   storage since (one stored since shows its value once outfitting lists it again; one sent for is in transit until
   it arrives). A red ⚖ marks a ship or module the game says is hot (wanted). The ship locker is as the game last wrote it, in the journal or in

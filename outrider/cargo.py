@@ -34,7 +34,8 @@ LARGE, MEDIUM, SMALL = "L", "M", "S"
 # Loadout's Ship (lowercase) -> the landing pad it needs. Unknown ships (a new one) give None: no pad filter.
 SHIP_PAD = {
     **dict.fromkeys(("anaconda", "belugaliner", "cutter", "federation_corvette", "type7", "type9", "type9_military",
-                     "panthermkii", "empire_trader", "orca", "explorer_nx"), LARGE),
+                     "panthermkii", "empire_trader", "orca", "explorer_nx",
+                     "anacondamkii"), LARGE),   # Anaconda Mk II: its symbol from EDDN's shipyards on its day, 2026-10-20
     "mediumtransport01": MEDIUM,   # Lynx Highliner (the author checked, 2026-10-14)
     **dict.fromkeys(("python", "python_nx", "krait_mkii", "krait_light", "mandalay", "corsair", "typex", "typex_2",
                      "typex_3", "federation_gunship", "federation_dropship", "federation_dropship_mkii", "ferdelance",
@@ -247,6 +248,8 @@ def ship_apply(st, ev):
     counted = ts > (st.get("snap_ts") or "")
     if name == "MarketBuy":
         _ship_add(st, cid(ev.get("Type")), _n(ev.get("Count")), price=ev.get("BuyPrice"), count=counted)
+    elif name == "BuyDrones":   # limpets bought: the game writes a Cargo count but no new Cargo.json (2026-10-19)
+        _ship_add(st, "drones", _n(ev.get("Count")), price=ev.get("BuyPrice"), count=counted)
     elif name == "MarketSell":
         i = cid(ev.get("Type"))
         line = st["lines"].get(i)
@@ -271,6 +274,10 @@ def ship_apply(st, ev):
         _ship_add(st, cid(ev.get("Type")), 1, stolen=1 if ev.get("Stolen") else 0)
     elif name == "MiningRefined":
         _ship_add(st, cid(ev.get("Type")), 1)
+    elif name == "SellDrones":
+        _ship_remove(st, "drones", _n(ev.get("Count")))
+    elif name == "LaunchDrone":   # a prospector or collector (any limpet) leaves the hold
+        _ship_remove(st, "drones", 1)
     else:
         return False
     st["ts"] = max(st["ts"] or "", ts)

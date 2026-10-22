@@ -218,6 +218,19 @@ function codexGeoMark(list, region) {
   return ` <span class="cxnew cxgeo${gal ? " cxgal" : ""}" title="its volcanism could show geology new to your codex: ${fresh.map(x =>
     esc(x.t.name) + (x.st === "galaxy" ? " (anywhere)" : "")).join(", ")} (logged when you scan one)">${gal ? "✪" : "✦"}</span>`;
 }
+// the geology a body with geological signals could show (S22, from its volcanism), each marked ✪ / ✦ when new to your
+// codex, and how such an entry is logged: the body card and the details panel (the author, 2026-10-19: the ✪ beside
+// the name said nothing of the signals themselves). "" with no signals, or a volcanism that tells nothing
+function geoCandidatesHtml(b, region) {
+  const list = (b && b.codex_geo) || [];
+  if (!b || !b.geo || !list.length) return "";
+  const v = String(b.volcanism || "").replace(/ volcanism$/i, "").toLowerCase();
+  const states = list.map(t => codexTypeState(t, region));
+  const items = list.map((t, i) => esc(t.name) + (states[i] === "galaxy" ? ` <span class="cxnew cxgal" title="new to your codex anywhere">✪</span>`
+    : states[i] === "region" ? ` <span class="cxnew" title="new to your codex in this region">✦</span>` : ""));
+  return `<div class="unk">from its ${esc(v)}${list.length > 1 ? ", one of" : ""}: ${items.join(" · ")}</div>` +
+    (states.some(Boolean) ? `<div class="unk">✪ new to your codex anywhere, ✦ new in this region: logged when you scan one on the surface. The DSS map shows where the signals are.</div>` : "");
+}
 // Nearby: the types here new to your codex, one tag ("✦2"), each named in its title
 function codexTypesTag(s) {
   const fresh = (s.codex_types || []).map(t => ({t, st: codexTypeState(t, s.region)})).filter(x => x.st);
@@ -235,13 +248,13 @@ function notable(s) {
     (s.bio_potential ? `<span class="nb bio" title="exobiology: up to this much across ${s.bio_bodies_guessed} bod${s.bio_bodies_guessed === 1 ? "y" : "ies"}, from spawn rules">🧬≤${credits(s.bio_potential)}</span>` : "") +
     (gg.length ? gggIcon(false, `potential green gas giant${gg.length > 1 ? "s" : ""} (the community's ladder model, from your scans or Spansh's): ` +
       gg.map(x => `${x.body} (${x.chance})`).join(", "), gg.length) : "") + (s.ggg_green ? gggIcon(true, "a green gas giant your codex confirms", s.ggg_green) : "") +
-    codexTypesTag(s) + phenomenaTag(s.phenomena) + rareStarTag(s.rare_stars) + sitesTag(s.sites) + poiTag(s.pois) + oldDataTag(s.stale_bio) + bioUnknownTag(s.bio_unknown) +
+    codexTypesTag(s) + phenomenaTag(s.phenomena) + rareStarTag(s.rare_stars) + sitesTag(s.sites) + poiTag(s.pois) + (s.spansh_old ? "" : oldDataTag(s.stale_bio)) + bioUnknownTag(s.bio_unknown) +
     (s.curiosities ? `<span class="nb cur" title="${(s.curiosity_list || []).map(c => esc(`${c.body}: ${c.tag} (${c.why})`)).join("&#10;")}">🔭${s.curiosities > 1 ? "×" + s.curiosities : ""}</span>` : "");
 }
 // pre-Odyssey Spansh data (stale_bio {bodies, genera_top, up_to, reported}): thin-atmosphere worlds marked not
 // landable and bio never reported. A mark only: no value counts it, and nothing is spoken.
 function oldDataTitle(o) {
-  return `Last reported ${esc((o.reported || "").slice(0, 4))} by a pre-Odyssey client: thin-atmosphere worlds were marked not landable and bio was not reported. May hold unsampled life; footfall unknown.` +
+  return `Last reported ${esc((o.reported || "").slice(0, 10))} by a pre-Odyssey client: thin-atmosphere worlds were marked not landable and bio was not reported. May hold unsampled life; footfall unknown.` +
     ((o.genera_top || []).length ? `&#10;The rules allow: ${o.genera_top.map(esc).join(", ")}` : "") +
     (o.up_to ? `&#10;One genus per body at the median: about ${credits(o.up_to)} cr` : "");
 }
@@ -249,6 +262,26 @@ function oldDataTitle(o) {
 // life (BioScan's "Bios possible, check FSS for signals")
 const BIO_UNKNOWN_TITLE = "landable, signals not counted (your AutoScan or a nav beacon only) and the rules allow life: the FSS would say";
 const bioUnknownTag = n => !n ? "" : `<span class="nb" title="${n} bod${n === 1 ? "y" : "ies"}: ${BIO_UNKNOWN_TITLE}">${dual(`🧬? ${n} to check in the FSS`, `🧬? ${n}`)}</span>`;
+// #11 (Kurbo26): a system whose Spansh data all predates the legacy split (29 Nov 2022: the server's LEGACY_CUTOFF):
+// "Spansh: pre-Odyssey", with its worlds that may hold life ("· 2 may have life"); 🪦 in a narrow pane. Otherwise the
+// old data tag of its stale bodies (some Spansh records newer, some old)
+const SPANSH_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+// a Spansh date as written (the author: YYYY-MM-DD everywhere it is shown), and as the voice says it ("February 2019")
+const spanshDay = d => String(d || "").slice(0, 10);
+const spanshMonth = (d, long = false) => d ? `${(SPANSH_MONTHS[+String(d).slice(5, 7) - 1] || "").slice(0, long ? 9 : 3)} ${String(d).slice(0, 4)}`.trim() : "";
+// its hover: when, what that means, and the thin-atmosphere worlds that may hold life (their names, what the rules
+// allow there, about what one genus each would pay)
+const spanshOldTitle = (date, stale) => `Spansh's data here was last reported ${spanshDay(date)}, before Odyssey's surface data (the legacy split of 29 Nov 2022): ` +
+  `thin-atmosphere worlds were marked not landable and life was not reported, so bio and first footfalls may be waiting. Worth a rescan.` +
+  (stale && stale.bodies ? `&#10;&#10;Thin-atmosphere worlds that may hold life: ${(stale.names || []).length ? stale.names.map(esc).join(", ") : stale.bodies}` +
+    ((stale.genera_top || []).length ? `&#10;The rules allow: ${stale.genera_top.map(esc).join(", ")}` : "") +
+    (stale.up_to ? `&#10;About ${credits(stale.up_to)} cr at one genus each (the median)` : "") : "");
+// Nearby's Status column: "🪦 pre-Odyssey" beside "fully scanned", the warning colour (🪦 alone when narrow)
+const spanshOldBadge = s => s.spansh_old ? statusBadge("s-old", "🪦 pre-Odyssey", spanshOldTitle(s.spansh_old, s.stale_bio), "🪦") : "";
+// the briefing's clause and the Now line for a pre-Odyssey system you have not resolved yourself (#11)
+const spanshOldWords = (date, n, spoken = false) => `Spansh's data here is from ${spoken ? spanshMonth(date, true) : spanshDay(date)}, before Odyssey: worth a rescan.` +
+  (n ? ` ${n} thin-atmosphere world${n === 1 ? "" : "s"} may hold life.` : "");
+const spanshOldNow = date => `Spansh data pre-Odyssey (${spanshDay(date)}): Rescan for Bio`;   // Now's line
 const oldDataTag = o => { if (!o || !o.bodies) return "";
   const full = `old data: ${o.bodies} bod${o.bodies === 1 ? "y" : "ies"}`;
   return `<span class="nb old" title="${oldDataTitle(o)}">${dual(full, `old ${o.bodies}`, {titleHtml: `${full}. ${oldDataTitle(o)}`})}</span>`; };
@@ -309,12 +342,14 @@ const SHIP_NAMES = {sidewinder: "Sidewinder", eagle: "Eagle", hauler: "Hauler", 
   belugaliner: "Beluga Liner", type9_military: "Type-10 Defender", anaconda: "Anaconda", federation_corvette: "Federal Corvette",
   cutter: "Imperial Cutter", mandalay: "Mandalay", type8: "Type-8 Transporter", cobramkv: "Cobra Mk V", corsair: "Corsair",
   panthermkii: "Panther Clipper Mk II", explorer_nx: "Caspian Explorer", lakonminer: "Type-11 Prospector", smallcombat01_nx: "Kestrel Mk II",
-  mediumtransport01: "Lynx Highliner"};
+  mediumtransport01: "Lynx Highliner", anacondamkii: "Anaconda Mk II"};
+// hulls Almanac has no illustration of yet (no picture until scripts/build_ship_images.py can render one)
+const SHIP_NO_PICTURE = new Set(["anacondamkii"]);
 const shipName = t => SHIP_NAMES[(t || "").toLowerCase()] || (t || "").replace(/_/g, " ");
 // A ship type's picture (the CMDR tab's Inventory, 2026-10-15): static/ships/<symbol>.webp, one per SHIP_NAMES key
 // (test_tablet checks both ways), Frontier's ship rendered from Elite Dangerous Almanac's illustration by
 // scripts/build_ship_images.py (static/ships/CREDITS.txt); a type not in the table (a hull newer than it) has none
-const shipPicture = t => { const k = String(t || "").toLowerCase(); return Object.prototype.hasOwnProperty.call(SHIP_NAMES, k) ? `static/ships/${k}.webp` : null; };
+const shipPicture = t => { const k = String(t || "").toLowerCase(); return Object.prototype.hasOwnProperty.call(SHIP_NAMES, k) && !SHIP_NO_PICTURE.has(k) ? `static/ships/${k}.webp` : null; };
 const SHIP_CARD_MS = 2000;   // a hover this long on an Inventory ship row shows its picture
 const SC = {timer: null, key: null};   // the ship card: the hover's pending timer, the ship shown ("symbol|name") or null
 // what to call a ship: its own name, or its type's proper name when it has none (the journal gives an unnamed
@@ -1279,7 +1314,7 @@ function renderNow() {
     lines.push(`<div class="now-card ${a.undiscovered ? "yes" : "no"}">${a.undiscovered ? "🏁 Undiscovered — first discovery is yours" : "Already discovered"}</div>`);
   if (t) {
     const label = {"unreported": "never reported — new discovery!", "no bodies": "no scan data", "partial": "partly scanned",
-      "explored": "fully scanned", "visited": "you've been here"}[t.status] || t.status;
+      "explored": "fully scanned", "visited": "you've been here", "checking": "checking…"}[t.status] || t.status;
     const hz = hazardNote(t.star_class);
     lines.push(`<div class="now-line">➜ <b>${esc(t.name)}</b> <span class="t-${t.status.replace(" ", "")}">${esc(label)}</span>${targetCounts(t)}` +
       (t.star_class ? ` <span class="${/^[OBAFGKM](_|$)/.test(t.star_class) ? "ok" : "noscoop"}">${esc(t.star_class)}${/^[OBAFGKM](_|$)/.test(t.star_class) ? " ⛽" : " ✕"}</span>` : "") +
@@ -1316,6 +1351,8 @@ function renderNow() {
       : !hd ? `<span class="unk">checking…</span>`
       : !l || !l.honked ? `<span class="warnc">Next: honk</span> <span class="unk">(FSS discovery scan)</span>`
       : l.unscanned > 0 ? `<span class="warnc">Next: ${nBodies(l.unscanned)} to find in the FSS</span>${spanshNoteHtml(l)}`
+      // #11: "nothing" from Spansh's pre-Odyssey records means little (Kurbo26): rescan it yourself first
+      : hd.spansh_old && !l.all_found ? `<span class="warnc">Next: rescan in the FSS</span> <span class="unk">(Spansh's data predates Odyssey)</span>`
       : `<span class="ok">✓ nothing worth staying for</span>`}${here && here.value_now ? ` · <span class="unk">${credits(here.value_now)} cr aboard from here</span>` : ""}</div>`);
     // a body targeted that is not the next item: an extra line, never in place of Next (Status.json keeps the target
     // after you finish a body, so Next must stay visible)
@@ -1332,6 +1369,10 @@ function renderNow() {
       lines.push(`<div class="now-line now-ggg">` + (guess.length ? `${gggIcon(false, gggTitle(guess[0].ggg))} <span class="ok">Potential green gas giant${guess.length > 1 ? "s" : ""}: ` +
         `${guess.map(b => `${esc(b.name)}${b.ggg.chance === "possible" ? " (possible)" : ""}`).join(", ")}</span> <span class="unk">· check in the system map</span>` : "") +
         (sure.length ? `${guess.length ? " · " : ""}${gggIcon(true, gggTitle(sure[0].ggg))} <span class="ok">Green gas giant${sure.length > 1 ? "s" : ""}: ${sure.map(b => esc(b.name)).join(", ")}</span>` : "") + `</div>`);
+    }
+    if (hd && hd.spansh_old && !(hd.leaving && hd.leaving.all_found)) {   // #11: until your own scans have every body
+      // short, so it fits one line in Now's large type (the author): the details are in the hover
+      lines.push(`<div class="now-line now-old" title="${esc(spanshOldTitle(hd.spansh_old))}">🪦 ${esc(spanshOldNow(hd.spansh_old))}</div>`);
     }
     if (hd && hd.rare_stars && hd.rare_stars.length)   // a black hole, a Wolf-Rayet...: rare stars here
       lines.push(`<div class="now-line now-rare"><span class="ok">⭐ ${esc(rareStarText(hd.rare_stars).replace(/^./, c => c.toUpperCase()))}</span></div>`);
@@ -1694,7 +1735,7 @@ function pinLineHtml() {
 const pinMarkFor = (sys, short) => sys != null && String(sys) === String(posId()) ? pinMark(short) : "";
 const pinMark = short => { const n = data && data.pins && data.pins.counts && data.pins.counts[short];
   return n ? ` <span class="pinmark" title="${n} pin${n === 1 ? "" : "s"} on this body">📍</span>` : ""; };
-const PINS = {list: null, sig: null};
+const PINS = {list: null, sig: null, counts: null};
 async function loadPins() {
   try { const r = await apiJson("api/pins"); if (!r.error) PINS.list = r.pins || []; } catch {}
   refreshPinsUi();
@@ -1760,7 +1801,8 @@ function pinLegendClick(e) {
   if (go) {
     const [lat, lon] = go.dataset.pingo.split(",").map(Number), pos = data && data.position, body = data && data.pins && data.pins.here && data.pins.here.body;
     if (!pos || !body) { toast("Pin: no body here"); return true; }
-    pinsPost({action: "add", system: String(pos.id64), sysname: pos.name, body, name: go.dataset.pinname, lat, lon, active: true});
+    pinsPost({action: "add", system: posId(), sysname: pos.name, body,   // the exact id (id64 rounds above 2^53: review M7)
+              name: go.dataset.pinname, lat, lon, active: true});
     return true;
   }
   if (e.target.closest("[data-pinhere]")) { const n = prompt("Name this pin (where you are now):", ""); if (n !== null) pinsPost({action: "here", name: n}); return true; }
@@ -1782,10 +1824,15 @@ function drawBmPins() {
 document.getElementById("bmPins").addEventListener("click", e => {
   const rm = e.target.closest("[data-pinrm]"); if (rm && confirm("Delete this pin?")) pinsPost({action: "delete", id: Number(rm.dataset.pinrm)});
 });
-// the payload's counts changed (a pin added or deleted, in this window or another): the list is asked for again
+// a pin added, deleted or changed, in this window or another, in any system (pins.v; review 2026-10-20 L13: a pin on
+// another system's body went unnoticed): the list is asked for again; Here's 📍 marks follow the counts (L12)
 function pinsTick() {
-  const sig = JSON.stringify(data && data.pins && data.pins.counts) + "|" + ((data && data.pins && data.pins.here && data.pins.here.pins) || []).map(p => `${p.id}${p.reached ? "r" : ""}`).join();
-  if (sig !== PINS.sig) { PINS.sig = sig; loadPins(); }
+  const p = data && data.pins, counts = JSON.stringify(p && p.counts);
+  const sig = `${p && p.v}|${counts}|` + ((p && p.here && p.here.pins) || []).map(x => `${x.id}${x.reached ? "r" : ""}`).join();
+  if (sig === PINS.sig) return;
+  const recount = PINS.sig !== null && counts !== PINS.counts;
+  PINS.sig = sig; PINS.counts = counts; loadPins();
+  if (recount && hereData) renderHere();
 }
 
 // How Now fits its map on the screen (pure, so the tests can check it). vw, vh: the window; width: Now's content width;
@@ -2988,6 +3035,7 @@ const spokenStar = c => !c ? "star" : /^D/.test(c) ? "white dwarf" : c === "N" ?
 // a key's sample values: LINE_SAMPLES, else space chatter's, which come with the lines (speechLib.chatter.samples, #15)
 const lineSample = key => LINE_SAMPLES[key] || (speechLib.chatter && speechLib.chatter.samples && speechLib.chatter.samples[key]) || {};
 const LINE_SAMPLES = {
+  old_data: {year: "2019"},
   docking_granted: {pad: 34, station: "Jameson Memorial"}, docking_denied: {reason: "no pad free for your ship: try again shortly", station: "Jameson Memorial"},
   speech_on: {}, game_start: {}, game_exit: {}, heat: {},
   arrival_undiscovered: {system: "Drojau LL-O b26-3"}, arrival_discovered: {system: "Drojau LL-O b26-3"},
@@ -3221,6 +3269,7 @@ function sayJumponium(j) {
 }
 let briefFacts = null;   // the last arrival briefing's facts ({sys, m}): the FSS debrief of that system asks isRoutine too
 function isRoutine(m) {
+  if (m && m.spansh_old && !m.all_found) return false;   // #11: "known" from pre-Odyssey data is not routine
   if (!m || m.region || (m.undiscovered && !(m.visits > 1)) || (m.undiscovered == null && !m.in_spansh && !(m.visits > 1))) return false;
   const covered = m.all_found || (m.body_count > 0 && m.base_known != null && m.base_known >= m.body_count);
   if (!covered || !/^[OBAFGKM](_|$)/.test(m.star_class || "") || hazardNote(m.star_class)) return false;
@@ -3620,7 +3669,7 @@ function render() {
   else {
     const label = {"unreported": "never reported — new discovery!", "no bodies": "no scan data",
       "partial": "partly scanned", "explored": "fully scanned", "visited": "you've been here",
-      "lookup failed": "Spansh lookup failed"}[t.status] || t.status;
+      "lookup failed": "Spansh lookup failed", "checking": "checking…"}[t.status] || t.status;
     const row = data.systems.find(s => sysId(s) === sysId(t));
     const sc = t.star_class ? ` · <span class="mono">${esc(t.star_class)}</span>` +
       (/^[OBAFGKM](_|$)/.test(t.star_class) ? ` <span class="scoop" title="scoopable">⛽</span>`
@@ -3658,7 +3707,7 @@ function render() {
     const known = s.body_count ? `${s.bodies_known}/${s.body_count}` : (s.bodies_known || "");
     // compact3 merges (compact2 drops Jumps and Known first): the status badges go under the name, the notable tags under
     // the bodies
-    const status = statusPill(s) + (s.mapped ? statusBadge("s-mapped", `${s.mapped} mapped`, "DSS-mapped bodies, from your own journal", `🗺${s.mapped}`) : "") +
+    const status = statusPill(s) + spanshOldBadge(s) + (s.mapped ? statusBadge("s-mapped", `${s.mapped} mapped`, "DSS-mapped bodies, from your own journal", `🗺${s.mapped}`) : "") +
       (s.source === "own" ? statusBadge("s-own", "yours only", s.in_spansh === false ? "Spansh doesn't have this system; data is from your own scans"
                                                                                       : "data is from your own scans (Spansh's answer did not cover this system)") : "") +
       (s.source === "edsm" ? `<span class="badge s-edsm" title="Spansh is unreachable; this comes from EDSM (no body data)">EDSM</span>` : "");
@@ -4113,7 +4162,9 @@ if (!TABLET) document.querySelectorAll(".views [data-view]").forEach(b => {
 if (viewWindow) document.getElementById("viewWinBack").onclick = () => document.querySelector(`.views [data-view="${viewWindow}"]`).click();
 document.querySelectorAll("[data-view]").forEach(b => b.onclick = ev => {
   if (ev && ev.target && ev.target.closest && ev.target.closest("[data-popview]")) { popView(b.dataset.view); return; }
-  if (b.dataset.view !== view && pinnedSystem) { pinnedSystem = null; if (selectedBody) closeBody(); }  // a pin belongs to the view it was made in
+  // a pin belongs to the view it was made in; its Here data goes with it, or it is drawn as the system you are in until
+  // the fetch lands (review 2026-10-20 L14)
+  if (b.dataset.view !== view && pinnedSystem) { pinnedSystem = null; forgetOtherHere(); if (selectedBody) closeBody(); }
   if (b.dataset.view === "now" && view !== "now") viewBeforeNow = view;
   if (b.dataset.view === "hist" && view !== "hist") histKey = null;   // fresh numbers each time the tab opens
   if (b.dataset.view === "hwy" && view !== "hwy") H.key = null;   // the fleet, ship and cargo afresh (review F3)
@@ -4249,7 +4300,9 @@ function renderHere() {
     // the bookmark star (its dialog also sets the next stop) for a viewed system, which may be in no other list
     (pinned ? bmIcon(pinnedSystem, h.name, bmMap()) + " " : "") +
     `<b>${esc(h.name)}</b>` + (away != null ? ` <span class="unk">· ${away.toFixed(2)} ly away</span>` : "") +
-    ` · ${h.bodies.length} bod${h.bodies.length === 1 ? "y" : "ies"} known · ` + (h.phenomena && h.phenomena.length ? phenomenaTag(h.phenomena) + " · " : "") + (h.rare_stars && h.rare_stars.length ? rareStarTag(h.rare_stars) + " · " : "") + (h.pois && h.pois.length ? poiTag(h.pois) + " · " : "") +
+    ` · ${h.bodies.length} bod${h.bodies.length === 1 ? "y" : "ies"} known · ` +
+    // #11: when Spansh's data was last reported; pre-Odyssey marked
+    (h.spansh_date ? `<span class="${h.spansh_old ? "old" : "unk"}" title="${h.spansh_old ? esc(spanshOldTitle(h.spansh_old)) : "when Spansh's data on this system was last reported"}">Spansh: ${h.spansh_old ? "pre-Odyssey, " : ""}${spanshDay(h.spansh_date)}</span> · ` : "") + (h.phenomena && h.phenomena.length ? phenomenaTag(h.phenomena) + " · " : "") + (h.rare_stars && h.rare_stars.length ? rareStarTag(h.rare_stars) + " · " : "") + (h.pois && h.pois.length ? poiTag(h.pois) + " · " : "") +
     `<span title="what selling now would pay for data you hold from here / the most this system could pay">now <b>${credits(h.value_now || 0)} cr</b> · max <b>${credits(maxOf(h) || 0)} cr</b>${maxBonus() ? "" : ` <span class="unk" title="Max leaves out first-discovery, first-mapped and first-footfall bonuses (alerts & thresholds dialog)">no bonus</span>`}</span>` +
     ` <a class="unk" href="api/export?what=system&id=${encodeURIComponent(h.id64)}" download title="this system's bodies and values as a spreadsheet (CSV)">⬇ CSV</a>` +
     `<span class="modes">${HERE_MODES.filter(([m]) => m !== "split" || hereCtx() === "tab").map(([m, label, title]) =>
@@ -4705,7 +4758,7 @@ document.getElementById("hereSchematic").addEventListener("click", e => {
 });
 
 // a Spansh body last reported by a pre-Odyssey client (your own scan replaces it)
-const staleBodyTitle = b => `Last reported ${(b.updated || "").slice(0, 4)} by a pre-Odyssey client: thin-atmosphere worlds were marked not landable and bio was not reported. May hold unsampled life; footfall unknown. Your own scan replaces this.`;
+const staleBodyTitle = b => `Last reported ${(b.updated || "").slice(0, 10)} by a pre-Odyssey client: thin-atmosphere worlds were marked not landable and bio was not reported. May hold unsampled life; footfall unknown. Your own scan replaces this.`;
 // ---- body hover summary ----
 const fmtK = n => n == null ? "?" : Math.round(n).toLocaleString();
 // region: the region of the system the body is in (a search result may be elsewhere than Here)
@@ -4744,7 +4797,7 @@ function bodyPopHtml(b, region) {
     h += `<div class="sec"><div class="lbl">🧬 Bio${b.bio ? ` · ${b.bio} signal${b.bio === 1 ? "" : "s"}` : ""}${bioRange(b)}</div><ul>${lines.join("")}</ul></div>`;
   }
   h += curiosityList(b.curiosities);
-  if (b.geo) h += `<div class="sec">${b.geo} geological signal${b.geo === 1 ? "" : "s"}</div>`;
+  if (b.geo) h += `<div class="sec">${b.geo} geological signal${b.geo === 1 ? "" : "s"}${geoCandidatesHtml(b, region)}</div>`;
   if (b.mining || (b.mined || []).length) h += `<div class="sec">${b.mining ? `⛏ ${mineCount(b.mining)}` : ""}${b.mining_odds ? `<div class="unk">${mineOddsLine(b.mining_odds)}</div>` : ""}${minedHtml(b)}</div>`;
   const flags = [b.first_discovered && "🏁 first discovered", b.first_mapped && "🗺 first mapped", !b.first_mapped && b.mapped && "mapped", b.first_footfall && "👣 first footfall", !b.scanned && "not scanned by you"].filter(Boolean);
   h += `<div class="sec"><span>${maxOf(b) ? `now ${credits(b.value_now || 0)} · max ${credits(maxOf(b))}` : ""}</span>` +
@@ -4880,6 +4933,10 @@ function renderBodyInto(panel, d, bodyName, closeJs) {
     bioSec = sec("bio", `🧬 Exobiology${row.bio ? ` · ${row.bio} signal${row.bio === 1 ? "" : "s"}` : ""}${bioRange(row)}`,
                  `<ul>${lines.join("")}</ul>${cn ? `<div class="unk">${cn}</div>` : ""}${why}`);
   }
+  // the geology its signals could be, new to your codex marked (geoCandidatesHtml); the region only for Here's own system
+  const geoRegion = hereData && String(hereData.id64) === String(d.id64) ? hereData.region : null;
+  const geoSec = row.geo ? sec("geo", `🪨 ${row.geo} geological signal${row.geo === 1 ? "" : "s"}`,
+    geoCandidatesHtml(row, geoRegion) || `<span class="unk">its volcanism does not tell which kinds</span>`) : "";
   const curSec = (row.curiosities || []).length ? sec("curiosities", "🔭 Curiosities", row.curiosities.map(c => `<div><b>${esc(c.tag)}</b> · ${esc(c.why)}</div>`).join("")) : "";
   const mineSec = row.mining || (row.mined || []).length ? sec("mining", row.mining ? `⛏ ${mineCount(row.mining)}` : "⛏ Mining",
     (row.mining ? row.mining_odds ? mineOddsHtml(row.mining_odds) : `<span class="unk">no survey odds for this ground</span>` : "") + minedHtml(row)) : "";
@@ -4887,7 +4944,7 @@ function renderBodyInto(panel, d, bodyName, closeJs) {
   const npins = (PINS.list || []).filter(p => p.system === String(d.id64) && p.body === d.full_name).length;
   const pinSec = isStar ? "" : `<div class="sec${(bodySecs.pins ?? !npins) ? " closed" : ""}" data-sec="pins"><div class="lbl">📍 Pins${npins ? ` · ${npins}` : ""}</div>` +
     `<div class="secbody" data-sys="${esc(d.id64)}" data-body="${esc(d.full_name)}" data-sysname="${esc(d.system || "")}">${pinsListHtml(d.id64, d.full_name)}</div></div>`;
-  h += pinSec + curSec + bioSec + mineSec + ringSec + compSec + `<div class="two">${physSec}${orbitSec}</div>`;
+  h += pinSec + curSec + bioSec + geoSec + mineSec + ringSec + compSec + `<div class="two">${physSec}${orbitSec}</div>`;
   h += sec("value", "Value and discovery", kv([
     ["Pays now", has(row.value_now) ? credits(row.value_now) + " cr" : null], ["Could pay", has(row.value_max) ? credits(row.value_max) + " cr" + (has(row.value_max_base) && row.value_max_base !== row.value_max ? ` (${credits(row.value_max_base)} without bonuses)` : "") : null],
     ["Of which", row.value_parts ? `${credits(row.value_parts.carto_now)} + ${credits(row.value_parts.bio_now)} bio held · ${credits(row.value_parts.carto_left)} + ${credits(row.value_parts.bio_left)} bio still there (bio ×${row.value_parts.bio_factor})` : null],
@@ -7226,7 +7283,8 @@ function hwyAimBtn(name, route = null, index = null, icon = false) {
     ` title="target ${esc(name)} in the galaxy map${hwyFront() ? " (Outrider brings the game to the front)" : TABLET ? ""
       : ", 5 s from now: click back into the game meanwhile"}">${label}</button>`;
 }
-// S31: 🎯 on any system the page lists (a bookmark, the header's next stop, a Nearest row, a checklist find), by its id64
+// S31: 🎯 on any system the page lists (a bookmark, the header's next stop, a Nearest row, a checklist find, a Search
+// result: the author, 2026-10-19), by its id64
 // string; where auto-target can work (hwyAimBtn: canAim), never for the system you are in
 const sysAimBtn = (name, id) => id != null && data && String(id) !== posId() ? hwyAimBtn(name, "system", String(id), true) : "";
 // 🎯 on a Nearby row (the Overview's too: the author, 2026-10-14): S31's, by the row's id64 string, never your own
@@ -7893,7 +7951,8 @@ hEl("hwyGame").addEventListener("change", e => {
 });
 hEl("hwyHead").addEventListener("change", e => {
   if (e.target.name !== "hwyKind") return;
-  store.set("hwyShow", e.target.value); HM.auto = true; renderHwy();
+  // the header's route line reads the same choice (review 2026-10-20 L16: it kept the other route until a payload)
+  store.set("hwyShow", e.target.value); HM.auto = true; renderHwy(); renderHwyLine();
 });
 function richHeadHtml(d) {
   if (d.route.kind === "trade") return tradeHeadHtml(d);
@@ -8648,7 +8707,7 @@ function renderSearch(bms) {
     : (a, b) => a.distance - b.distance));
   document.getElementById("sRows").innerHTML = rows.map(r => `<tr>
       <td class="bmcell">${bmIcon(r.id, r.name, bms || bmMap())}</td>
-      <td class="name" data-name="${esc(r.name)}" title="click to copy">${nameWords(r.name)}${firstsIcon(r.firsts)}${r.visited
+      <td class="name" data-name="${esc(r.name)}" title="click to copy">${nameWords(r.name)}${/^\d+$/.test(String(r.id)) ? sysAimBtn(r.name, r.id) : ""}${firstsIcon(r.firsts)}${r.visited
         ? `<span class="badge s-visited">visited</span>` : ""}</td>
       <td class="num dist"${r.from_you != null ? ` title="${r.from_you.toFixed(2)} ly from you"` : ""}>${r.distance.toFixed(2)}</td>
       <td class="matches">${Object.entries(r.matches).map(([k, hits]) =>
@@ -9426,9 +9485,15 @@ function onData() {
         if (pendingRegion && pendingRegion.sys === String(m.system) && m.region && text) pendingRegion = null;   // said in it
         // "Routine systems: sound only": the soft routine sound in place of the words (only where they would be said)
         const hum = routineQuiet() && speechOn && alertSpeak.brief && isRoutine(m);
-        if (text) alertOut("brief", `${m.system_name || "Arrived"}: ${text.split(". ")[0].replace(/\.$/, "")}`, text,
+        // #11: Spansh's data here predates Odyssey and you have not resolved every body: "worth a rescan", the card's
+        // words and a line of its own after the briefing's (old_data), with the worlds that may hold life
+        const old = m.spansh_old && !m.all_found ? spanshOldWords(m.spansh_old, m.old_bodies) : "";
+        const lifeWords = m.old_bodies ? ` ${m.old_bodies} thin-atmosphere world${m.old_bodies === 1 ? "" : "s"} may hold life.` : "";
+        const card = [text, old].filter(Boolean).join(" ");
+        if (card) alertOut("brief", `${m.system_name || "Arrived"}: ${card.split(". ")[0].replace(/\.$/, "")}`, card,
                            hum ? {sound: "routine", quiet: "sound only: a routine system"}
-                               : {tag: "arrival_brief", say: () => line("arrival_brief", {text}, text)});
+                               : {tag: "arrival_brief", say: () => [text && line("arrival_brief", {text}, text),
+                                   old && line("old_data", {year: String(m.spansh_old).slice(0, 4)}, spanshOldWords(m.spansh_old, 0, true)) + lifeWords].filter(Boolean).join(" ")});
       }
       else if (m.kind === "fss_done" && m.leaving) {   // every body found in the FSS: go here, or move on
         const count = m.count || m.leaving.body_count, text = worthSaying(m.leaving);
@@ -9436,7 +9501,7 @@ function onData() {
         const bf = briefFacts && briefFacts.sys === m.system ? briefFacts.m : null;
         // a jumponium body (its own row, off by default) rides on the debrief when both are spoken, else goes alone
         const jp = m.jumponium, fold = !!(jp && alertSpeak.jumponium && alertSpeak.fss);
-        const hum = !text && !fold && routineQuiet() && speechOn && alertSpeak.fss && !!bf && isRoutine({...bf, all_found: true, worth: [], bio: null});
+        const hum = !text && !fold && routineQuiet() && speechOn && alertSpeak.fss && !!bf && isRoutine({...bf, all_found: true, worth: [], bio: null, spansh_old: null});
         const said = alertOut("fss", `All ${count ? nBodies(count) + " " : "bodies "}found`, (text ? `worth it: ${text}` : "nothing worth staying for") + (fold ? ` · ${jumponiumSaid(jp)}` : ""),
                  hum ? {sound: "routine", quiet: "sound only: a routine system"}
                      : {tag: "fss_done", say: () => (text ? line("fss_done", {count, text}, `All ${count || ""} found. Worth it: ${text}.`)
@@ -10628,7 +10693,7 @@ const ROW_WORDS = {pins: "surface pins", carriertrip: "carrier trips", chat: "ot
   rigs: "rigs", rigleash: "the rig leash", rigsout: "rigs out", uploads: "uploads"};
 // the speech keys each alert row says (a crew member's ▶, the by-crew audition, which rows hold danger lines)
 const ROW_KEYS = {arrival: ["arrival_undiscovered", "arrival_discovered", "region", "streak_new", "streak_known"],
-  game: ["game_start", "welcome_back", "game_exit", "session_recap"], jump: ["fsd_charge"], brief: ["arrival_brief"],
+  game: ["game_start", "welcome_back", "game_exit", "session_recap"], jump: ["fsd_charge"], brief: ["arrival_brief", "old_data"],
   fss: ["fss_done", "fss_nothing", "fss_unfinished"], leaving: ["leaving"], fuel: ["fuel_low", "fuel_star", "fuel_target", "fuel_topup"],
   scoop: ["tank_full"], scoopstop: ["scoop_stopped"], supercharge: ["supercharged"], refuelshort: ["fuel_short"], lastscoop: ["fuel_last_scoop"],
   autotarget: ["autotarget_nothing"], wrongtarget: ["wrong_target"], find: ["find_body", "find_bio", "mapped_before", "sample_clear"],
@@ -12891,10 +12956,14 @@ if (!TABLET) {
 const SRV_SET_OPEN = {};   // which config sections are open in this window
 let srvFocus = null;       // the id of the field openServerSettings(section, key) asked for, focused once drawn
 const DOCKER_NO_JOURNALS = "no journals in /journals: is the game PC's journal folder mounted? (JOURNALS in .env)";
+// only the newest load draws (review 2026-10-20 L15: opened from a notice, two loads ran and the second threw away the
+// field the first had focused for the notice)
+const SRV_LOAD = {gen: 0};
 async function loadServerSettings() {
-  const box = document.getElementById("serverSettingsBody");
+  const box = document.getElementById("serverSettingsBody"), gen = ++SRV_LOAD.gen;
   let c;
   try { c = await apiJson("api/config"); } catch { c = {error: "Outrider not reachable"}; }
+  if (gen !== SRV_LOAD.gen) return;
   if (!c || c.error) { box.innerHTML = `<div class="hint warnc">Cannot read the server's settings: ${esc((c && c.error) || "?")}</div>`; return; }
   const human = k => k.replace(/_/g, " ").replace(/^./, x => x.toUpperCase());
   const field = (sec, k) => {
@@ -13683,7 +13752,7 @@ function tabAutoView() {
   const shown = surfaceShows(data.surface) || !!(data.docking && data.docking.pad != null);
   if (shown && !TB.mapWas) {
     TB.beforeMap = view !== "now" ? view : null;
-    if (view !== "now") { pinnedSystem = null; view = "now"; saveView(); }
+    if (view !== "now") { pinnedSystem = null; forgetOtherHere(); view = "now"; saveView(); }
   } else if (!shown && TB.mapWas) {
     if (view === "now" && TB.beforeMap) { view = TB.beforeMap; saveView(); }
     TB.beforeMap = null;

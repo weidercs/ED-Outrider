@@ -215,7 +215,7 @@ the sentence ends:
 |---|---|
 | XO / Co-pilot | the main voice: voice answers, the status report, the co-pilot, the hush and speech on |
 | Navigator | jumps and every route line (the Highway, survey and trade routes), fuel short of a refuel, last scoop, auto-target, wrong target, supercharges, surface pins |
-| Science Officer | arrivals, briefings, the FSS, mapped planets, leaving with work left, codex, phenomena, rare stars, signals, curiosities |
+| Science Officer | target verdicts, arrivals, the honk, briefings, the FSS, mapped planets, high-g approaches, bio bodies ahead, leaving with work left, codex, phenomena, green gas giants, rare stars, surface sites, signals, curiosities |
 | Exobiologist | valuable bodies, sampling, Exomastery routes |
 | Chief Engineer | fuel, tank full, scooping stopped, jumponium, hull and heat |
 | Quartermaster | sales, unsold data, your carrier and its trips, losses |
@@ -271,7 +271,9 @@ the sentence ends:
 - **Arrival briefing.** One sentence after the honk: "Known. 12 bodies. Scoopable M star. The Earth-like
   world at A 2 is unmapped, 1.4 million." Entering a new galactic region opens it ("Entering the Norma Arm.").
 - **Routine systems: sound only** (a tick, off by default) plays a soft two-note sound instead of the
-  briefing where there is nothing to do.
+  briefing where there is nothing to do. A system whose Spansh data predates Odyssey is never routine until your own
+  scans have every body: its briefing ends "Spansh's data here is from February 2019, before Odyssey: worth a
+  rescan" (and how many thin-atmosphere worlds may hold life), since "everything known" there means little.
 - **FSS debrief:** what is worth doing once every body is found. **Signals** as the FSS finds them.
   **The jump line** in the hyperspace tunnel, with whether the star ahead is scoopable, and any hazard.
 - **Greeting and goodbye:** what is at stake after a long break (and any core module under your level), and a
@@ -423,8 +425,9 @@ your model with real questions: tool calling varies, and a slow model runs into 
 An AI client you already use (Claude Code, the Claude desktop app, or any other MCP client) can ask Outrider questions
 in plain language: "what's worth landing on here?", "how much am I carrying unsold?", "what's left within 50 ly?",
 "how far to the next refuel on the highway?". Your client starts `python3 -m outrider.mcp` when it needs it (nothing
-to run or switch on in Outrider), which reads your running Outrider and answers through eleven read-only tools: current
-status, this system, nearby systems, the nearest unvisited system, the nearest place to dock, one body, unsold data,
+to run or switch on in Outrider), which reads your running Outrider and answers through twelve read-only tools: current
+status, this system, nearby systems, the nearest unvisited system, the nearest place to dock, the nearest potential
+green gas giants, one body, unsold data,
 work left behind, the Highway route, travel history and materials. It can only read: it never presses keys, plots, bookmarks or hushes
 anything. Nothing extra to install.
 
