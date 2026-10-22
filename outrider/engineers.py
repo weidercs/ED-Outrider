@@ -6,12 +6,13 @@ engineers' trip (outrider/engtour.py). The page side is static/fork.js (forkEngi
     await engineer_distances(state)   # {from, distances {system: ly}, missing, error}
     ship_parts(loadout)               # the ship as the tab's picks: its modules' parts and engineered grades
     await engineer_tour(state, body)  # the trip
-    add_routes(app, state, dirs)      # GET /api/engineers, GET /api/engineers/ship, POST /api/engineers/tour
+    add_routes(app, state, dirs)      # GET /api/engineers, GET /api/engineers/ship, GET /api/engineers/gear,
+                                      # POST /api/engineers/tour
 """
 import json
 import re
 
-from . import engtour, shipinfo
+from . import engtour, gear, shipinfo
 
 PLACES_KEY = "engineer_places"   # meta: {system: [x, y, z]}, kept for good (the workshops do not move)
 PLACES_GAP_S = 0.3               # s between two Spansh lookups of a system not known here
@@ -255,6 +256,10 @@ def add_routes(app, state, dirs):
     async def ship(_):
         return web.json_response(await asyncio.get_running_loop().run_in_executor(None, ship_now))
 
+    async def gear_view(_):   # suits and weapons (outrider/gear.py)
+        v = getattr(state.journals, "cmdr_view", None) or {}
+        return web.json_response(gear.gear(v.get("ship_locker"), v.get("engineers"), v.get("suit_loadouts")))
+
     async def tour(request):
         try:
             body = await request.json()
@@ -264,4 +269,5 @@ def add_routes(app, state, dirs):
         return web.json_response(out, status=status)
     app.router.add_get("/api/engineers", listing)
     app.router.add_get("/api/engineers/ship", ship)
+    app.router.add_get("/api/engineers/gear", gear_view)
     app.router.add_post("/api/engineers/tour", tour)

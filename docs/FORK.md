@@ -7,8 +7,9 @@ gets its changelog entry, code-map row, design note and settings at the bottom o
 
 ## What the fork adds
 
-- **Commander** tab: inventory, engineering blueprints against your materials, missions, combat and mining
-  sessions (`outrider/commander.py`, `static/fork.js`); discoverer names in the route lists (EDSM).
+- **Commander** tab: inventory, engineering blueprints against your materials (ship modules, and suits and weapons:
+  `outrider/gear.py`), missions, combat and mining sessions (`outrider/commander.py`, `static/fork.js`); discoverer
+  names in the route lists (EDSM).
 - **Ship** tab: the ship you fly, its modules and engineering, with EDSY and Coriolis links (`outrider/shipinfo.py`).
 - **Locate** tab: EDCoPilot's Location search, the nearest Interstellar Factors, material traders, technology
   brokers, black markets, outfitting, shipyards, repair and mining hotspots (Spansh; `outrider/locate.py`).
@@ -64,8 +65,13 @@ nothing is asked of anyone):
   you open a shipyard and of stored modules when you open outfitting: each is shown as of then.
 - **Engineering**: every ship-module blueprint, grade by grade, with the materials one roll takes against what you
   hold (green: enough), how many rolls you could make now, and the engineers offering it (green: unlocked far
-  enough). Filter by module, blueprint or material, or show only what you can craft now. Experimental effects and
-  suit and weapon upgrades are not listed.
+  enough). Filter by module, blueprint or material, or show only what you can craft now. Experimental effects are
+  not listed. **Suits & weapons** (the switch at the top): each suit's and weapon's upgrades G2 to G5 (bought at
+  Pioneer Supplies) and its mods (an engineer's; a weapon's at its family's cost: kinetic, laser, plasma), what each
+  takes against your ship locker (a mission's own items left out), the on-foot engineers offering each mod. Pick
+  suits and weapons, upgrades and mods as the ship view picks parts and grades: the Engineers list narrows to those
+  who make the picked mods, Plan the trip visits them, what the picks are short of is said. Load my loadouts picks
+  the suits and weapons you own, their grade and mods marked ("yours: G3, 1 of 2 mods": one mod per grade above G1).
 - **Missions**: the missions you hold, the soonest to expire first: where they go, what they ask (and how much is
   delivered), the reward, and the time left, marked when under half an hour.
 - **Sessions**: your combat and mining sessions of the last 30 days, each from login to logout. Combat: kills, by
@@ -94,6 +100,7 @@ Beside upstream's ([AGENT_GUIDE.md](AGENT_GUIDE.md)):
 | File | What |
 |---|---|
 | `outrider/engineers.py` | This fork's engineers beside upstream's CMDR tab: `ENGINEER_SYSTEMS` (system, kind, region; the journal never says where), `engineer_system`, `engineer_list(known)` (with upstream's EngineerProgress fold, `journals.cmdr_view["engineers"]`), `engineer_distances(state)` (each place found once: `find_local`, else Spansh; meta `engineer_places`), `ship_parts(loadout)` (`SHIP_PARTS`: a module's journal symbol to upstream's blueprint row module, grades as `module|blueprint id|level`), `engineer_tour` (`engtour.plan`). GET `/api/engineers`, GET `/api/engineers/ship`, POST `/api/engineers/tour` (`add_routes`, one line in `make_app`). The page: `forkEngineeringHtml` in `static/fork.js` draws upstream's Engineering tab (one line at the top of page.js's `cmdrEngineeringHtml` hands it over), on upstream's rows (one per kind of module and blueprint). Tests: `tests/test_engineers.py`, the smoke test's "fork engineering" |
+| `outrider/gear.py` | This fork's suits and weapons for Engineering's Suits & weapons view: `load()` (resources/gear_blueprints.json, built by `scripts/build_gear_blueprints.py` from EDEngineer at a pinned commit, the Colonia engineers added from the ED Field Manual: `COLONIA`; the journal's mod symbols: `MODS`), `locker_counts(snap, materials)` (upstream's `cmdr_view["ship_locker"]`), `item_of`, `owned(suit_state, doc)` (upstream's `cmdr_view["suit_loadouts"]`, each piece once by its id), `gear(...)`. GET `/api/engineers/gear` (`engineers.add_routes`). The page: the Suits & weapons part of `static/fork.js` (`GX`, `forkGearHtml`, `gxTripRequirements`, `gxShort`; the switch `fxEngMode`, kept per device); Plan the trip and the Engineers list are the ship view's. Tests: `tests/test_gear.py`, the smoke test's "fork suits & weapons" |
 | `outrider/engtour.py` | This fork's engineers' trip, pure: `plan(requirements, engineers, places, start, end, include_locked)` (`_covers`: every minimal cover; `_order`: Held-Karp up to `EXACT_STOPS`, else nearest neighbour and 2-opt; `usable`: unlocked at a rank that reaches the grade). Served by `commander.engineer_tour` (POST `/api/engineers/tour`); the page builds the requirements from the picks (`cmdrTripRequirements` in `static/fork.js`). Tests: `tests/test_engtour.py` |
 | `outrider/locate.py` | This fork's Locate tab: `STATIONS` (each tile's Spansh station search filters), `MINERALS`, `station_body`/`station_rows` and `hotspot_body`/`hotspot_rows` (pure), `locate(state, what, mineral, pad, urls)`. GET `/api/locate?what=&mineral=&pad=` (`add_routes`, one line in `make_app`; it reads `SPANSH_STATION_SEARCH`/`SPANSH_BODY_SEARCH` when asked, so verify.sh's scratch server asks nowhere). The page: the Locate section of `static/fork.js` (`forkLocateShow`, one line in page.js's `render()`; Commodities and Where it sells hand over to `startLook`). Tests: `tests/test_locate.py`, the smoke test's "fork locate" |
 | `static/fork.js` | This fork's own page code, loaded before page.js (definitions only; page.js's helpers are used when called). New fork page code goes here, with a one-line hook in page.js where upstream's code must call it |
@@ -158,6 +165,15 @@ Newest first. Upstream's is [CHANGELOG.md](CHANGELOG.md).
 ## 2026-10-21 · This fork: upstream's 2026.10.27 merged in
 - Upstream's review fixes, pre-Odyssey Spansh data called out (Now, Nearby's 🪦, the briefing), the geology a body's
   signals could be, 🎯 on Search's results, limpets moving the hold, the Anaconda Mk II. No conflicts.
+
+## 2026-10-18 · This fork: suits and weapons in the Engineering tab
+- A **Suits & weapons** switch beside the ship modules: the three suits and eleven weapons with their upgrades (G2
+  to G5, Pioneer Supplies) and mods, the materials against your ship locker, the thirteen on-foot engineers (Colonia's
+  four too) for each mod. Picks, Load my loadouts, the Engineers list and Plan the trip work as the ship view's.
+- The table: `resources/gear_blueprints.json` (`scripts/build_gear_blueprints.py`): EDEngineer's data (MIT, commit
+  2cadd66 of 2024-03-22), which predates the Colonia engineers (added from the ED Field Manual's table) and lists
+  the hip fire accuracy mod twice (once kept). A mod's journal symbol (`MODS`) is how an owned mod is recognised;
+  one not in the table is shown in words.
 
 ## 2026-10-18 · This fork: Plan the trip asks only for the picked parts' grades
 - A grade picked for a part that was then unpicked (Load my ship, then a part turned off) stayed in the picks while

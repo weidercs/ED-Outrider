@@ -45,21 +45,22 @@ function fxDist(system, d) {
   if (v != null) return `${Number(v).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} ly`;
   return `<span class="unk" title="${esc(!d.from ? "no position yet: after your first jump" : d.error || "Spansh does not know this system")}">?</span>`;
 }
-// the Engineers section: every engineer (or those the search and the picks leave), where each works, how far. Pure.
-function fxEngineersHtml(sup, q) {
+// the Engineers section: every engineer (or those the search and the picks leave), where each works, how far; kind:
+// only those ("suit & weapon" for Suits & weapons), picks: whether anything is picked. Pure.
+function fxEngineersHtml(sup, q, kind = null, picks = FX.parts.size || FX.grades.size) {
   const d = FX.eng;
   if (!d) return `<div class="unk cmnote">Engineers: reading…</div>`;
   const all = d.engineers || [];
   if (!all.length) return d.error ? `<div class="unk cmnote">Engineers: ${esc(d.error)}</div>` : "";
   const keep = e => { const k = fxPlain(e.name);
     return (!q || [e.name, e.kind, e.system, e.region].filter(Boolean).join(" ").toLowerCase().includes(q))
-      && (!sup.byPart || sup.byPart.has(k)) && (!sup.byGrade || sup.byGrade.has(k)); };
-  const eng = all.filter(keep), picks = FX.parts.size || FX.grades.size;
+      && (!kind || e.kind === kind) && (!sup.byPart || sup.byPart.has(k)) && (!sup.byGrade || sup.byGrade.has(k)); };
+  const eng = all.filter(keep);
   const what = e => { const k = fxPlain(e.name), w = new Set([...(sup.byPart && sup.byPart.get(k) || []), ...(sup.byGrade && sup.byGrade.get(k) || [])]);
     return w.size ? ` <span class="cmsupports">· ${esc([...w].sort((a, b) => a.localeCompare(b)).join(", "))}</span>` : ""; };
   const status = e => e.progress === "Unlocked" ? `<span class="ok">unlocked${e.rank != null ? `, grade ${e.rank}` : ""}</span>`
     : e.progress ? `<span class="warnc">${esc(e.progress.toLowerCase())}</span>` : `<span class="unk">not met</span>`;
-  const row = e => `<tr><td><b>${esc(e.name)}</b>${what(e)}${e.kind && e.kind !== "ship" ? ` <span class="unk">${esc(e.kind)}</span>` : ""}</td><td>${status(e)}</td>` +
+  const row = e => `<tr><td><b>${esc(e.name)}</b>${what(e)}${!kind && e.kind && e.kind !== "ship" ? ` <span class="unk">${esc(e.kind)}</span>` : ""}</td><td>${status(e)}</td>` +
     `<td>${e.system ? `${esc(e.system)}${e.region === "Colonia" ? ` <span class="unk">Colonia</span>` : ""}` : `<span class="unk">not known</span>`}</td>` +
     `<td class="num">${fxDist(e.system, d)}</td>` +
     `<td class="num">${e.system ? `<button type="button" class="mini" data-fxcopy="${esc(e.system)}" title="copy ${esc(e.system)} for the galaxy map">Copy</button>${plotBtn(e.system)}` : ""}</td></tr>`;
@@ -132,9 +133,13 @@ function fxTripShort(blueprints, grades) {
 }
 function fxTripSave() { try { localStorage.setItem("fxTrip", JSON.stringify(FX.trip)); } catch {} }
 async function fxPlanTrip() {
-  const rows = (CM.data.engineering || {}).blueprints || [];
-  const requirements = fxTripRequirements(rows, FX.parts, FX.grades), live = fxLiveGrades(FX.parts, FX.grades);
-  if (!requirements.length) { FX.tripNote = "pick a part or a grade first"; return fxRedraw(); }
+  const rows = (CM.data.engineering || {}).blueprints || [], gearMode = GX.mode === "gear", items = (GX.data && GX.data.items) || [];
+  const requirements = gearMode ? gxTripRequirements(items, GX.picks) : fxTripRequirements(rows, FX.parts, FX.grades);
+  const live = fxLiveGrades(FX.parts, FX.grades);
+  if (!requirements.length) {
+    FX.tripNote = gearMode ? "pick a mod first: upgrades are bought at Pioneer Supplies, no engineer needed" : "pick a part or a grade first";
+    return fxRedraw();
+  }
   FX.tripNote = "planning…"; fxRedraw();
   let d;
   try {
@@ -143,7 +148,7 @@ async function fxPlanTrip() {
   } catch (err) { d = {error: err.message}; }
   if (!d || d.error) { FX.tripNote = `could not plan it: ${(d && d.error) || "no answer"}`; return fxRedraw(); }
   FX.tripNote = null;
-  FX.trip = Object.assign({}, d, {done: [], short: fxTripShort(rows, live), at: Date.now()});
+  FX.trip = Object.assign({}, d, {done: [], short: gearMode ? gxShort(items, GX.picks) : fxTripShort(rows, live), at: Date.now()});
   fxTripSave();
   fxRedraw();
 }
@@ -157,8 +162,8 @@ function fxTripTick(t) {
 const fxTripText = t => t.stops.map((s, i) => `${i + 1}. ${s.engineer} — ${s.system} (${s.leg_ly} ly): ${s.covers.join(", ")}${s.locked ? ` [${s.locked}]` : ""}`)
   .concat(t.carrier && t.back_ly != null ? [`then your carrier ${t.carrier.name || ""} — ${t.carrier.system} (${t.back_ly} ly)`] : [])
   .concat([`${t.total_ly} ly in all, from ${t.from}`]).join("\n");
-function fxTripHtml() {
-  const picks = FX.parts.size || FX.grades.size, carrier = data && data.carrier;
+function fxTripHtml(picks = FX.parts.size || FX.grades.size) {
+  const carrier = data && data.carrier;
   const ctl = !picks && !FX.trip ? "" : `<div class="cmtripctl">` +
     (picks ? `<button type="button" class="mini primary" data-fxplan title="the engineers who cover every pick for the fewest light years from where you are, in order">Plan the trip</button>` +
       ` <label title="also engineers you have not unlocked, or not far enough for the grade: each stop says what it still needs"><input type="checkbox" id="fxTripLocked"${FX.tripLocked ? " checked" : ""}> include engineers I have not unlocked</label>` +
@@ -189,6 +194,7 @@ function fxTripHtml() {
 // for the asks it starts.
 function forkEngineeringHtml(d) {
   fxEngLoad();
+  if (GX.mode === "gear") return gxModeHtml() + forkGearHtml();
   if (d.unreadable) return `<div class="short">Blueprint table unreadable: resources/blueprints.json is missing or damaged (a fresh copy of Outrider brings it back).</div>`;
   const q = CM.q.trim().toLowerCase(), rows = d.blueprints || [];
   const eng = d.engineers || [], unlocked = eng.filter(e => e.progress === "Unlocked").length;
@@ -214,18 +220,28 @@ function forkEngineeringHtml(d) {
   // collapsed unless you opened one (a search still opens what it found, as upstream's tab does); a pick shows in the title
   const open = k => q || CM.craft || CM.open[k];
   const picked = mod => rows.filter(b => b.module === mod).flatMap(b => b.grades.filter(g => FX.grades.has(fxGradeKey(b, g))).map(g => `${b.name} G${g.grade}`));
-  return `<div class="unk cmnote">${eng.length ? `${unlocked} of ${eng.length} engineers unlocked` : "no engineer on record yet"} · ship modules only: no experimental effects, suits or weapons</div>` +
+  return gxModeHtml() + `<div class="unk cmnote">${eng.length ? `${unlocked} of ${eng.length} engineers unlocked` : "no engineer on record yet"} · ship modules only: no experimental effects, suits or weapons</div>` +
     fxPartsHtml(rows) + fxShipHtml(FX.ship) + fxTripHtml() + fxEngineersHtml(sup, q) +
     ([...groups].map(([mod, list]) => `<details class="cmmod" data-cmmod="${esc(mod)}"${open(mod) ? " open" : ""}><summary><b>${esc(mod)}</b> <span class="unk">${list.length} blueprint${list.length === 1 ? "" : "s"}</span>` +
       `${picked(mod).length ? ` <span class="cmsupports">· ${esc(picked(mod).join(", "))}</span>` : ""}</summary>${list.join("")}</details>`).join("")
       || `<div class="unk">Nothing matches.</div>`);
 }
 document.addEventListener("click", e => {
-  const t = e.target.closest && e.target.closest("[data-fxpart], [data-fxgrade], [data-fxclear], [data-fxclearall], [data-fxship], [data-fxplan], [data-fxtripcopy], [data-fxtripforget], [data-fxcopy]");
+  const t = e.target.closest && e.target.closest("[data-fxpart], [data-fxgrade], [data-fxclear], [data-fxclearall], [data-fxship], [data-fxplan], [data-fxtripcopy], [data-fxtripforget], [data-fxcopy], " +
+    "[data-gxitem], [data-gxpick], [data-gxload], [data-gxclear], [data-gxclearall]");
   if (!t) return;
   const ds = t.dataset;
   if (ds.fxcopy) return copyText(ds.fxcopy);
-  if (ds.fxpart) { if (FX.parts.has(ds.fxpart)) FX.parts.delete(ds.fxpart); else FX.parts.add(ds.fxpart); }
+  if (ds.gxitem) { if (GX.items.has(ds.gxitem)) GX.items.delete(ds.gxitem); else GX.items.add(ds.gxitem); }
+  else if (ds.gxpick) { if (GX.picks.has(ds.gxpick)) GX.picks.delete(ds.gxpick); else GX.picks.add(ds.gxpick); }
+  else if ("gxload" in ds) gxLoadMine();
+  else if ("gxclear" in ds) { GX.items.clear(); GX.picks.clear(); GX.mine = null; }
+  else if ("gxclearall" in ds) {
+    GX.items.clear(); GX.picks.clear(); GX.mine = null; CM.q = ""; CM.craft = false;
+    const f = document.getElementById("cmFilter"), c = document.getElementById("cmCraft");
+    if (f) f.value = ""; if (c) c.checked = false;
+  }
+  else if (ds.fxpart) { if (FX.parts.has(ds.fxpart)) FX.parts.delete(ds.fxpart); else FX.parts.add(ds.fxpart); }
   else if (ds.fxgrade) { if (FX.grades.has(ds.fxgrade)) FX.grades.delete(ds.fxgrade); else FX.grades.add(ds.fxgrade); }
   else if ("fxclear" in ds) { FX.parts.clear(); FX.grades.clear(); FX.ship = null; }
   else if ("fxclearall" in ds) {
@@ -240,6 +256,11 @@ document.addEventListener("click", e => {
   fxRedraw();
 });
 document.addEventListener("change", e => {
+  if (e.target.name === "fxEngMode") {
+    GX.mode = e.target.value === "gear" ? "gear" : "ship";
+    try { localStorage.setItem("fxEngMode", GX.mode); } catch {}
+    fxRedraw();
+  }
   if (e.target.id === "fxTripLocked") FX.tripLocked = e.target.checked;
   if (e.target.id === "fxTripCarrier") FX.tripCarrier = e.target.checked;
 });
@@ -345,3 +366,135 @@ document.addEventListener("change", e => {
 document.addEventListener("keydown", e => {
   if (e.key === "Enter" && e.target.id === "lcCommodity") { e.preventDefault(); LC.commodity = e.target.value.trim(); lcLook(LC.commodity, "buy"); }
 });
+
+// ---- Commander → Engineering → Suits & weapons (this fork; GET /api/engineers/gear, outrider/gear.py): each suit's and
+// weapon's upgrades (G2 to G5, at Pioneer Supplies) and mods (an engineer's) against the ship locker, picked as the ship
+// view picks: the Engineers list narrows to those who do the picked mods, Plan the trip visits them, Load my loadouts
+// picks what you own (its grade and mods marked) ----
+const GX = {mode: "ship", data: null, key: null, items: new Set(), picks: new Set(), mine: null};
+try { if (localStorage.getItem("fxEngMode") === "gear") GX.mode = "gear"; } catch {}
+const gxKey = (what, item, x) => `${what}|${item}|${x}`;   // "up|Artemis|3", "mod|Karma AR-50|Stability"
+const gxModLabel = (item, mod) => `${item}: ${mod}`;
+// the table and the locker against it, asked again when the journals move (cmKey, as the tab itself is)
+async function gxLoad() {
+  const key = typeof cmKey === "function" ? cmKey("engineering") : null;
+  if (GX.key === key) return;
+  GX.key = key;
+  let d;
+  try { d = await apiJson("api/engineers/gear"); } catch (err) { d = {error: err.message}; }
+  GX.data = d && typeof d === "object" ? d : {error: "no answer"};
+  fxRedraw();
+}
+// Ship modules | Suits & weapons. Pure.
+const gxModeHtml = () => `<div class="cmtripctl"><span class="seg" role="radiogroup" aria-label="what to engineer">` +
+  [["ship", "Ship modules"], ["gear", "Suits & weapons"]].map(([v, l]) =>
+    `<label><input type="radio" name="fxEngMode" value="${v}"${GX.mode === v ? " checked" : ""}>${esc(l)}</label>`).join("") + `</span></div>`;
+// the picked mods as the trip's requirements: one per item and mod, any engineer who offers it. Pure.
+function gxTripRequirements(items, picks) {
+  const out = [];
+  for (const it of items) for (const m of it.mods) {
+    if (picks.has(gxKey("mod", it.name, m.name))) out.push({label: gxModLabel(it.name, m.name), grade: null, engineers: m.engineers.map(e => e.name)});
+  }
+  return out;
+}
+// who does what of the picked mods: {name (fxPlain): Set of "Item: Mod"}, null with no mod picked. Pure.
+function gxSupports(items, picks) {
+  const by = new Map();
+  for (const it of items) for (const m of it.mods) {
+    if (!picks.has(gxKey("mod", it.name, m.name))) continue;
+    for (const e of m.engineers) { const k = fxPlain(e.name); if (!by.has(k)) by.set(k, new Set()); by.get(k).add(gxModLabel(it.name, m.name)); }
+  }
+  return by.size ? by : null;
+}
+// what all the picks (upgrades and mods) take together against the locker: the materials short. Pure.
+function gxShort(items, picks) {
+  const tally = new Map();
+  const add = (mats, what) => { for (const x of mats) {
+    const t = tally.get(x.id) || {material: x.name, have: x.have, need: 0, for: []};
+    t.need += x.need; t.for.push(what); tally.set(x.id, t);
+  } };
+  for (const it of items) {
+    for (const u of it.upgrades) if (picks.has(gxKey("up", it.name, u.grade))) add(u.materials, `${it.name} G${u.grade}`);
+    for (const m of it.mods) if (picks.has(gxKey("mod", it.name, m.name))) add(m.materials, gxModLabel(it.name, m.name));
+  }
+  return [...tally.values()].filter(t => t.have < t.need).map(t => Object.assign(t, {for: t.for.join(", ")}))
+    .sort((a, b) => a.material.localeCompare(b.material));
+}
+// "Load my loadouts": the suits and weapons you own picked (their grade and mods are marked on their rows)
+function gxLoadMine() {
+  const items = (GX.data && GX.data.items) || [];
+  const mine = items.filter(it => it.owned.length).map(it => it.name);
+  GX.items = new Set(mine);
+  GX.mine = mine.length ? {names: mine} : {error: "no suit loadout on record: the journal names one once you create or wear it"};
+}
+function gxMineHtml(items) {
+  if (!GX.mine) return "";
+  if (GX.mine.error) return `<div class="unk cmnote">Load my loadouts: ${esc(GX.mine.error)}</div>`;
+  const piece = it => it.owned.map(o => `<span class="cmshipmod"><b>${esc(it.name)}</b> G${cmNum(o.class || 1)}` +
+    `${o.mods.length ? ` <span class="unk">· ${esc(o.mods.join(", "))}</span>` : ""}${o.loadout ? ` <span class="unk">(${esc(o.loadout)})</span>` : ""}</span>`).join("");
+  const own = items.filter(it => it.owned.length);
+  return `<div class="cmship"><b>Your suits and weapons</b> <span class="unk">${own.length} picked: their grades and mods are marked below</span>` +
+    `<div class="cmstats">${own.map(piece).join("")}</div></div>`;
+}
+// the items to pick, Load my loadouts, Clear, Clear filters. Pure.
+function gxItemsHtml(items) {
+  const chip = it => `<button type="button" class="mini cmpart${GX.items.has(it.name) ? " on" : ""}" data-gxitem="${esc(it.name)}" aria-pressed="${GX.items.has(it.name)}">${esc(it.name)}</button>`;
+  const any = GX.items.size || GX.picks.size, filters = any || CM.q || CM.craft || GX.mine;
+  return `<div class="cmparts" role="group" aria-label="suits"><span class="unk">Suits:</span>${items.filter(i => i.kind === "suit").map(chip).join("")}</div>` +
+    `<div class="cmparts" role="group" aria-label="weapons"><span class="unk">Weapons:</span>${items.filter(i => i.kind === "weapon").map(chip).join("")}` +
+    (any ? ` <button type="button" class="mini" data-gxclear title="every suit, weapon, upgrade and mod again">Clear</button>` : "") + `</div>` +
+    `<div class="cmtripctl"><button type="button" class="mini" data-gxload title="pick the suits and weapons in your loadouts, their grades and mods marked">Load my loadouts</button>` +
+    (filters ? ` <button type="button" class="mini" data-gxclearall title="the search, only what I can craft, the picks and the loadouts: all off">Clear filters</button>` : "") +
+    (GX.picks.size ? ` <span class="unk">· ${GX.picks.size} picked (click an upgrade or a mod below to pick or unpick it)</span>` : "") + `</div>`;
+}
+// one material against the locker, as the ship view draws it. Pure.
+const gxMat = x => `<span class="cmmat ${x.have >= x.need ? "ok" : "short"}" title="you hold ${cmNum(x.have)}${x.kind ? ` (${esc(x.kind.toLowerCase())})` : ""}">${esc(x.name)} ${cmNum(x.have)}/${cmNum(x.need)}</span>`;
+// the Suits & weapons view: the note, the picks, your loadouts, the trip, the engineers, then each suit and weapon with
+// its upgrades and mods. Pure but for the asks it starts.
+function forkGearHtml() {
+  gxLoad();
+  const d = GX.data;
+  if (!d) return `<div class="unk">Reading your suits and weapons…</div>`;
+  if (d.error) return `<div class="short">Suits &amp; weapons could not be read: ${esc(d.error)}</div>`;
+  if (d.unreadable) return `<div class="short">Suit and weapon table unreadable: resources/gear_blueprints.json is missing or damaged (a fresh copy of Outrider brings it back).</div>`;
+  const items = d.items || [], q = CM.q.trim().toLowerCase();
+  const engs = ((FX.eng || {}).engineers || []).filter(e => e.kind === "suit & weapon");
+  const unlocked = engs.filter(e => e.progress === "Unlocked").length;
+  const sup = {byPart: null, byGrade: gxSupports(items, GX.picks)};
+  const hasMods = [...GX.picks].some(k => k.startsWith("mod|"));
+  const toggle = (key, label, title) => { const on = GX.picks.has(key);
+    return `<button type="button" class="mini cmgrade${on ? " on" : ""}" data-gxpick="${esc(key)}" aria-pressed="${on}" title="${esc(on ? "unpick it" : title)}"><b>${esc(label)}</b></button>`; };
+  const found = (it, txt) => !q || `${it.name} ${txt}`.toLowerCase().includes(q);
+  const blocks = [];
+  for (const it of items) {
+    if (GX.items.size && !GX.items.has(it.name)) continue;
+    const top = Math.max(1, ...it.owned.map(o => o.class || 1)), have = new Set(it.owned.flatMap(o => o.mods));
+    const ups = it.upgrades.filter(u => (!CM.craft || u.rolls > 0) && found(it, `G${u.grade} upgrade ${u.materials.map(x => x.name).join(" ")}`));
+    const mods = it.mods.filter(m => (!CM.craft || m.rolls > 0) && found(it, `${m.name} ${m.materials.map(x => x.name).concat(m.engineers.map(e => e.name)).join(" ")}`));
+    if (!ups.length && !mods.length) continue;
+    const upRow = u => { const key = gxKey("up", it.name, u.grade), done = it.owned.length && u.grade <= top;
+      return `<tr${GX.picks.has(key) ? ` class="cmgradeon"` : ""}><td>${toggle(key, `G${u.grade}`, `pick the upgrade to G${u.grade}`)}</td>` +
+        `<td><div class="cmstats">${u.materials.map(gxMat).join("")}</div></td><td class="num ${u.rolls ? "ok" : "unk"}" title="how many times you could buy it now">${u.rolls ? `×${cmNum(u.rolls)}` : "–"}</td>` +
+        `<td>${done ? `<span class="ok">✓ yours is G${cmNum(top)}</span>` : `<span class="unk">Pioneer Supplies</span>`}</td></tr>`; };
+    const modRow = m => { const key = gxKey("mod", it.name, m.name);
+      const who = m.engineers.map(e => `<span class="${e.ready ? "ok" : "unk"}" title="${esc(e.progress || "not met yet")}">${esc(e.name)}</span>`).join(", ");
+      return `<tr${GX.picks.has(key) ? ` class="cmgradeon"` : ""}><td>${toggle(key, m.name, "show only the engineers who do this mod")}${have.has(m.name) ? ` <span class="ok" title="on one of yours already">✓</span>` : ""}</td>` +
+        `<td><div class="cmstats">${m.materials.map(gxMat).join("")}</div></td><td class="num ${m.rolls ? "ok" : "unk"}" title="how many times you could have it made now">${m.rolls ? `×${cmNum(m.rolls)}` : "–"}</td><td>${who}</td></tr>`; };
+    const picked = [...it.upgrades.filter(u => GX.picks.has(gxKey("up", it.name, u.grade))).map(u => `G${u.grade}`),
+                    ...it.mods.filter(m => GX.picks.has(gxKey("mod", it.name, m.name))).map(m => m.name)];
+    const owns = it.owned.length ? ` <span class="ok">yours: G${cmNum(top)}, ${have.size} of ${top - 1} mod${top - 1 === 1 ? "" : "s"}</span>` : "";
+    const k = "gear:" + it.name, open = q || CM.craft || CM.open[k];
+    const head = [["Materials <span class=\"unk\">(held / needed)</span>"], ["Can", 1]];
+    blocks.push(`<details class="cmmod" data-cmmod="${esc(k)}"${open ? " open" : ""}><summary><b>${esc(it.name)}</b> <span class="unk">${it.kind === "suit" ? "suit" : `${it.family} weapon`}</span>${owns}` +
+      `${picked.length ? ` <span class="cmsupports">· ${esc(picked.join(", "))}</span>` : ""}</summary>` +
+      (ups.length ? `<h4 class="cmbp">Upgrades <span class="unk">at Pioneer Supplies, one grade at a time</span></h4>` + cmTable([["Grade"], ...head, [""]], ups.map(upRow)) : "") +
+      (mods.length ? `<h4 class="cmbp">Mods <span class="unk">one per grade above G1, never taken off</span></h4>` + cmTable([["Mod"], ...head, ["Engineers"]], mods.map(modRow)) : "") +
+      `</details>`);
+  }
+  // with a mod picked the trip says what is short; with only upgrades picked it is said here
+  const short = gxShort(items, GX.picks);
+  const need = !hasMods && short.length ? `<div class="cmtripshort"><span class="warnc">Short for the picks:</span> ${short.map(m => `${esc(m.material)} ${cmNum(m.have)}/${cmNum(m.need)}`).join(", ")}</div>` : "";
+  return `<div class="unk cmnote">${engs.length ? `${unlocked} of ${engs.length} suit and weapon engineers unlocked` : "suit and weapon engineers"} · upgrades are bought at Pioneer Supplies, mods made by the engineers · the materials from your ship locker</div>` +
+    gxItemsHtml(items) + gxMineHtml(items) + fxTripHtml(hasMods) + need + fxEngineersHtml(sup, q, "suit & weapon", GX.picks.size > 0) +
+    (blocks.join("") || `<div class="unk">Nothing matches.</div>`);
+}

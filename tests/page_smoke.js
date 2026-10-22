@@ -9372,7 +9372,7 @@ const releasePayloads = async () => {
       body().querySelector("[data-fxplan]").click();
       await sleep(80);
       const tb2 = bodies.find(b => b[0] === "api/engineers/tour");
-      got.hiddenGrade = [tb2 && tb2[1].requirements.map(r => `${r.label}|${r.grade}`), engNames(), text(body().querySelector(".cmtripctl"))];
+      got.hiddenGrade = [tb2 && tb2[1].requirements.map(r => `${r.label}|${r.grade}`), engNames(), text(body().querySelector("[data-fxship]").parentElement)];
       body().querySelector("[data-fxtripforget]").click();
       d.getElementById("cmFilter").value = "x"; w.eval(`CM.q = "x"`);
       body().querySelector("[data-fxclearall]").click();
@@ -9402,6 +9402,103 @@ const releasePayloads = async () => {
     allOk = allOk && goodFX;
     console.log(goodFX ? "OK" : "FAIL", "| fork engineering |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))} asked ${JSON.stringify(asked)}`
       : "parts and grades narrow the Engineers list, Load my ship, Plan the trip, Clear filters, on upstream's rows", errors.slice(before));
+  }
+  // Commander → Engineering → Suits & weapons (this fork, static/fork.js forkGearHtml, GET /api/engineers/gear): the switch
+  // draws the suits and weapons, a picked mod narrows the Engineers list to the on-foot ones who make it and Plan the trip
+  // posts it, upgrades alone say what is short, Load my loadouts picks what you own, the switch is kept for this device
+  {
+    const w = dom.window, d = w.document, before = errors.length, got = {}, bodies = [];
+    w.__gxBodies = bodies;
+    w.eval(`window.__gxApi = apiJson;
+      apiJson = async (u, o) => {
+        const s = String(u);
+        if (!s.startsWith("api/engineers") && !s.startsWith("api/commander/engineering")) return __gxApi(u, o);
+        if (o && o.body) __gxBodies.push([s, JSON.parse(o.body)]);
+        if (s.startsWith("api/commander/engineering")) return {engineers: [], unreadable: false, blueprints: [
+          {id: "PowerPlant_Boosted", kind: "pp", module: "Power plant", name: "Overcharged", grades: [
+            {grade: 1, rolls: 0, materials: [], engineers: [{name: "Hera Tani"}]}]}]};
+        if (s === "api/engineers") return {from: "Sol", error: null, missing: [], distances: {Orishis: 223.7, Deriso: 22000.2, Candiaei: 140.1},
+          engineers: [{name: "Hera Tani", system: "Kuwemaki", kind: "ship", region: "bubble", progress: "Unlocked", rank: 5},
+                      {name: "Domino Green", system: "Orishis", kind: "suit & weapon", region: "bubble", progress: "Unlocked", rank: null},
+                      {name: "Oden Geiger", system: "Candiaei", kind: "suit & weapon", region: "bubble", progress: "Invited", rank: null},
+                      {name: "Rosa Dayette", system: "Deriso", kind: "suit & weapon", region: "Colonia", progress: null, rank: null}]};
+        if (s === "api/engineers/gear") {
+          const mat = (id, name, need, have) => ({id, name, kind: "Goods", need, have});
+          return {unreadable: false, items: [
+            {name: "Maverick", kind: "suit", family: null, owned: [{loadout: "Grab", class: 3, mods: ["Extra backpack capacity"]}],
+             upgrades: [2, 3, 4, 5].map(g => ({grade: g, rolls: g === 2 ? 1 : 0, materials: [mat("suitschematic", "Suit Schematic", g * 2, 6)]})),
+             mods: [{name: "Extra backpack capacity", rolls: 0, materials: [mat("weaponinventory", "Weapon Inventory", 10, 0)],
+                     engineers: [{name: "Domino Green", progress: "Unlocked", ready: true}, {name: "Rosa Dayette", progress: null, ready: false}]}]},
+            {name: "Karma AR-50", kind: "weapon", family: "kinetic", owned: [],
+             upgrades: [2, 3, 4, 5].map(g => ({grade: g, rolls: 0, materials: [mat("weaponschematic", "Weapon Schematic", g, 0)]})),
+             mods: [{name: "Stability", rolls: 0, materials: [mat("mininganalytics", "Mining Analytics", 10, 3)],
+                     engineers: [{name: "Domino Green", progress: "Unlocked", ready: true}, {name: "Oden Geiger", progress: "Invited", ready: false},
+                                 {name: "Rosa Dayette", progress: null, ready: false}]}]}]};
+        }
+        if (s === "api/engineers/tour") return {from: "Sol", total_ly: 223.7, back_ly: null, carrier: null, uncovered: [], covers_tried: 1,
+          stops: [{engineer: "Domino Green", system: "Orishis", covers: ["Karma AR-50: Stability"], leg_ly: 223.7, locked: null}]};
+      };
+      FX.parts.clear(); FX.grades.clear(); FX.trip = null; FX.eng = null; FX.engKey = null; CM.q = ""; CM.craft = false;
+      GX.mode = "ship"; GX.data = null; GX.key = null; GX.items.clear(); GX.picks.clear(); GX.mine = null;
+      CM.data.engineering = null; CM.key.engineering = null;`);
+    const text = el => el ? el.textContent.replace(/\s+/g, " ").trim() : "", body = () => d.getElementById("cmdrBody");
+    const engNames = () => [...body().querySelectorAll(".cmengtable:not(.cmtriptable) tbody tr")].map(t => text(t.cells[0]));
+    const click = sel => body().querySelector(sel).click();
+    try {
+      d.querySelector('[data-view="cmdr"]').click();
+      w.eval(`setCmdrTab("engineering")`);
+      await sleep(200);
+      const gear = body().querySelector('[name="fxEngMode"][value="gear"]');
+      gear.checked = true; gear.dispatchEvent(new w.Event("change", {bubbles: true}));
+      await sleep(120);
+      got.drawn = [[...body().querySelectorAll("[data-gxitem]")].map(text), engNames(),
+                   [...body().querySelectorAll("details.cmmod summary")].map(text), w.localStorage.getItem("fxEngMode")];
+      click('[data-gxitem="Karma AR-50"]');
+      click('[data-gxpick="mod|Karma AR-50|Stability"]');
+      got.mod = [[...body().querySelectorAll("details.cmmod summary")].map(text), engNames()];
+      click("[data-fxplan]");
+      await sleep(80);
+      const tb = bodies.find(b => b[0] === "api/engineers/tour");
+      got.asked = tb && tb[1].requirements;
+      got.trip = [text(body().querySelector(".cmtrip .hwyttl")), text(body().querySelector(".cmtrip .cmtripshort"))];
+      click("[data-fxtripforget]");
+      // upgrades alone: no trip to plan, what is short said
+      click("[data-gxclear]");
+      click('[data-gxpick="up|Karma AR-50|2"]');
+      click('[data-gxpick="up|Karma AR-50|3"]');
+      got.ups = [!!body().querySelector("[data-fxplan]"), text(body().querySelector(".cmtripshort"))];
+      click("[data-gxclear]");
+      click("[data-gxload]");
+      got.mine = [[...body().querySelectorAll(".cmpart.on")].map(text), text(body().querySelector(".cmship")),
+                  text(body().querySelector('details.cmmod[data-cmmod="gear:Maverick"] summary')),
+                  text(body().querySelector('[data-gxpick="up|Maverick|3"]').closest("tr").cells[3])];
+      const ship = body().querySelector('[name="fxEngMode"][value="ship"]');
+      ship.checked = true; ship.dispatchEvent(new w.Event("change", {bubbles: true}));
+      await sleep(60);
+      got.back = [!!body().querySelector("[data-fxpart]"), !body().querySelector("[data-gxitem]"), w.localStorage.getItem("fxEngMode")];
+    } finally {
+      w.eval(`apiJson = __gxApi; FX.trip = null; FX.eng = null; FX.engKey = null; GX.mode = "ship"; GX.data = null; GX.key = null;
+        GX.items.clear(); GX.picks.clear(); GX.mine = null; CM.data.engineering = null; CM.key.engineering = null;
+        localStorage.removeItem("fxTrip"); localStorage.removeItem("fxEngMode")`);
+      d.querySelector('[data-view="overview"]').click();
+    }
+    await sleep(60);
+    const want = {
+      drawn: [["Maverick", "Karma AR-50"], ["Domino Green", "Oden Geiger", "Rosa Dayette"],
+              ["Maverick suit yours: G3, 1 of 2 mods", "Karma AR-50 kinetic weapon"], "gear"],
+      mod: [["Karma AR-50 kinetic weapon · Stability"], ["Domino Green · Karma AR-50: Stability", "Oden Geiger · Karma AR-50: Stability", "Rosa Dayette · Karma AR-50: Stability"]],
+      asked: [{label: "Karma AR-50: Stability", grade: null, engineers: ["Domino Green", "Oden Geiger", "Rosa Dayette"]}],
+      trip: ["Trip from Sol: 1 stop, 223.7 ly", "Short for one roll: Mining Analytics 3/10 (Karma AR-50: Stability)"],
+      ups: [false, "Short for the picks: Weapon Schematic 0/5"],
+      mine: [["Maverick"], "Your suits and weapons 1 picked: their grades and mods are marked belowMaverick G3 · Extra backpack capacity (Grab)",
+             "Maverick suit yours: G3, 1 of 2 mods", "✓ yours is G3"],
+      back: [true, true, "ship"],
+    };
+    const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+    const goodGX = !bad.length && errors.length === before;
+    allOk = allOk && goodGX;
+    console.log(goodGX ? "OK" : "FAIL", "| fork suits & weapons |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
+      : "the switch, a mod narrows the on-foot engineers and plans the trip, upgrades say what is short, Load my loadouts, the switch kept", errors.slice(before));
   }
   // Locate (this fork, static/fork.js, GET /api/locate): the tiles ask for the nearest places, the rows draw with Copy and
   // Plot route, large pad only goes into the question, Mining asks for the mineral picked, Commodities and Where it sells
