@@ -38,6 +38,7 @@ Changing Outrider yourself, or with a coding agent? Start with [`docs/AGENT_GUID
 | `outrider/health.py` | What kind of failure a lookup or upload met, and which lookup services are down |
 | `outrider/fsd.py`, `outrider/highway.py`, `outrider/core.py` | The frame shift drive's maths and fuel model; the Highway's route helpers; small shared helpers |
 | `outrider/tools.py` | The read-only questions an AI may ask (one registry, used by the MCP bridge and the voice) |
+| `outrider/plugins/` | Plugins: `__init__.py` finds, loads and hosts them (`[plugins] enabled`); `audiobookshelf/` is the first. A plugin is a folder with `plugin.py` (`settings`, `setup(host)`, `tools(tool)`) and optionally `static/page.js` and `page.css`; your own go in `data/plugins/<name>/`. The module's docstring is the API |
 | `outrider/ask.py`, `resources/ask.json` | Questions by voice (`POST /api/ask`): the fixed phrases, then the optional AI layer |
 | `outrider/mcp.py` | The MCP bridge for AI clients: `python3 -m outrider.mcp` (stdio); `--list` shows the tools |
 | `outrider/honk.py` | Auto honk (Linux; Windows experimental; optional); `--show`, `--test` |

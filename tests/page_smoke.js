@@ -5352,16 +5352,16 @@ const releasePayloads = async () => {
     got.popup = [step("off"), step("installing"), step("starting"), step("installing"), step("install_failed"), step("off")]
       .map(t => t.replace(/ .*/, "") + (/installed/.test(t) ? " installed" : /failed/.test(t) ? " failed" : ""));
     w.eval(`data.overlay = JSON.parse(${JSON.stringify(saved)}); overlayNote = ""; overlayDrawn = ""; renderOverlay();`);
-    const want = {rows: 7, body: "20", figures: "≈ 26 px text|held at 9 px|", heldTip: true,
+    const want = {rows: 8, body: "20", figures: "≈ 26 px text|held at 9 px|", heldTip: true,
                   heldLine: "Target: held at 9 px: your screen is too small to go lower", sizeMin: "20",
                   text: "large:large :as all panels :as all panels", row: true, rowCss: "100% 0 60px",
                   rowFind: "overlay.theme overlay.text_size overlay.panel_scale text size all panels", ctrlWheel: true,
                   off: true, theme: "elite", nowin: true, nowName: true, inRows: true, tip: true,
-                  target: true, analysis: "system body radar strip now bio✓ alerts",
-                  docked: "system✓ body✓ –radar strip now✓ bio✓ alerts",
+                  target: true, analysis: "system body radar strip now bio✓ alerts plugins",
+                  docked: "system✓ body✓ –radar strip now✓ bio✓ alerts plugins",
                   heads: "Panel|Hide in mode|Corner|X %|Y %|Size %|Text|BG %|Opac. %||Combat|Docked|Foot", headTips: true,
                   finds: "overlay.analysis_only overlay.hide_docked",
-                  dimmed: true, wrapped: true, help: true, alerts: true, analysisAfter: "system bio", dockedAfter: "system body now", foot: [7, 0, "overlay.hide_on_foot"], mouseLock: [true, true], note: true, themeNote: true,
+                  dimmed: true, wrapped: true, help: true, alerts: true, analysisAfter: "system bio", dockedAfter: "system body now", foot: [8, 0, "overlay.hide_on_foot"], mouseLock: [true, true], note: true, themeNote: true,
                   posted: [["overlay/layout", {radar: {x: 0.3}}], ["overlay", {analysis_only: ["system", "bio"]}],
                            ["overlay", {hide_docked: ["system", "body", "now"]}], ["overlay", {hide_on_foot: ["now"]}],
                            ["overlay", {hide_mouse_lock: true}], ["overlay", {test: true}],

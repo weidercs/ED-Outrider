@@ -135,16 +135,15 @@ def session_view(s):
 
 
 def long_route_step(mem, remaining, jumping, playing, cfg, now):
-    """The long-route watcher's one look: "play" when a jump starts on a plotted route of at least long_route_jumps
-    jumps and the book is not playing (once per route); "pause" when that route ended (nothing left, or under 2 jumps
+    """The long-route watcher's one look: "play" while jumping on a plotted route of at least long_route_jumps jumps
+    with the book not playing (once per route: paused by hand, it stays paused); "pause" when that route ended (nothing left, or under 2 jumps
     left and not jumping any more) and it was the watcher that started it. `mem` is kept between looks."""
     need = cfg.get("long_route_jumps") or 0
     if not need:
         return None
-    if jumping and not mem.get("jumping") and remaining and remaining >= need and not mem.get("started") and not playing:
-        mem.update(jumping=True, started=True, at=now)
+    if jumping and remaining and remaining >= need and not mem.get("started") and not playing:
+        mem.update(started=True, at=now)
         return "play"
-    mem["jumping"] = bool(jumping)
     if mem.get("started") and not jumping and (not remaining or remaining <= 1) and now - mem.get("at", now) > 20:
         mem.clear()
         return "pause" if cfg.get("pause_on_arrival") and playing else None

@@ -288,6 +288,20 @@
 # timeout = 20              # seconds for the whole answer (2 to 120)
 # max_rounds = 4            # tool rounds before it must answer (1 to 8)
 
+[plugins]
+# Optional add-ons (outrider/plugins/, or your own in data/plugins/): only the ones listed load, at the next start.
+# Each has its own [plugins.<name>] table; a key ending in token, key, password or secret stays on this PC.
+# enabled = ["audiobookshelf"]
+
+# [plugins.audiobookshelf]
+# url = "http://abs.lan:13378"   # your Audiobookshelf server
+# token = ""                     # an API token: Audiobookshelf -> Settings -> Users -> your user -> API token
+# duck = "duck"                  # while Outrider speaks: "duck" (quieter), "pause", or "off"
+# duck_volume = 0.25             # the book's volume while ducked (0 to 1)
+# long_route_jumps = 0           # start the book on a plotted route of at least this many jumps (0: never)
+# pause_on_arrival = true        # and pause it when that route ends
+# overlay = true                 # the cover and chapter in the overlay's Plugins panel while it plays
+
 [eddn]
 # EDDN, the Elite Dangerous Data Network: what your journals say as you play (systems, scans, signals, biology
 # samples, markets), sent as it happens for Spansh, EDSM, Inara and others to read. Switched on and off in the page's

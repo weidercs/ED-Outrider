@@ -68,6 +68,7 @@ and `resources/speech.json`.
 | `[autohonk]` | `enabled` (false), `key` ("auto": read from your controls preset), `delay` (2.0 s), `hold` (6.0 s), `skip_honked` (true), `announce` (true) |
 | `[speech]` | `server_player` ("auto"), for **Play speech and sounds on this PC**; `pad_delay` (5: seconds after a docking grant before your landing pad is said, Settings → Voice); `sound_dir` (none), your own alert sounds; `voices_loaded` (unset: the voices in use up to 4; a number, or "all"), how many voices besides the main one stay loaded (each about 1.6 times its file's size in memory, about 100 MB for a medium voice; one set aside waits about a second the next time it speaks); `voices_preload` (false), load them when Outrider starts instead of on their first line (both also in Settings → Voice → Voices kept loaded, used at once) |
 | `[copilot]` | `enabled` (false), `device` (""), `button` (""), `hold_ms` (600), `double_ms` (400) |
+| `[plugins]` | `enabled` ([]): the plugins to load; each one's own `[plugins.<name>]` table (see [Plugins](#-plugins)) |
 | `[assistant]` | `enabled` (false), `base_url` (""), `api_key` (""), `model` (""), `timeout` (20 s), `max_rounds` (4): the voice's optional AI layer |
 | `[mcp]` | `url` (this PC at `[server] port`), `max_rows` (25), `password` (""): for the MCP bridge (see Ask an AI about your game) |
 | `[eddn]`, `[edsm]`, `[inara]` | `enabled` (false): written by the switches in Settings → Uploads (the only place to change them) |
@@ -88,6 +89,50 @@ Command-line flags override the file for a single run:
 | `--simulate` | For screenshots and demos: the panels show the last known values (fuel...) as if the game were running; auto honk, auto-target, the co-pilot button, the clipboard and the in-game overlay's window are off |
 
 </details>
+
+## 🧩 Plugins
+
+Plugins are optional add-ons. None loads unless you list it in `ed_outrider.toml`, and each has its own table
+there (applied at the next start):
+
+```toml
+[plugins]
+enabled = ["audiobookshelf"]
+
+[plugins.audiobookshelf]
+url = "http://abs.lan:13378"
+token = "..."
+```
+
+A setting whose name ends in `token`, `key`, `password` or `secret` is kept on the PC like the AI's key. The
+shipped plugins are in `outrider/plugins/`; your own go in `data/plugins/<name>/` (see
+[For the curious](for-developers.md)).
+
+**Audiobookshelf** plays your audiobooks from your own [Audiobookshelf](https://www.audiobookshelf.org/) server in
+Outrider's page. Audiobookshelf's apps cannot be controlled from outside, so the book plays in the page where you
+press ▶ (the 📖 mini player, bottom right): the audio comes through Outrider, so the token never reaches a browser,
+and where you are is saved back to Audiobookshelf, so the phone app carries on from there.
+- **The mini player:** the cover, title, author and narrator, the chapter, ⏮ ⟲ ▶ ⟳ ⏭, the volume, and 📚 to pick a
+  book in progress. ▶ with nothing loaded starts the book you listened to last.
+- **Ducking:** while Outrider says a line, the book is turned down (`duck = "duck"`, to `duck_volume`), paused
+  (`"pause"`), or left alone (`"off"`). Only lines said by the page playing the book duck it.
+- **By voice:** "pause the book", "resume the book", "next chapter", "previous chapter", "rewind the book" and
+  "what am I listening to" are answered before the AI layer. With the AI layer on, it can also look at what is
+  playing and what you have in progress.
+- **Long routes:** with `long_route_jumps = 10`, the book starts as you jump on a plotted route of 10 or more jumps,
+  and pauses when it ends (`pause_on_arrival`). Paused by hand mid-route, it stays paused.
+- **In the game:** the overlay's **Plugins** panel shows the cover, the chapter and the time left while it plays
+  (`overlay = true`; the panel is in Settings → In-game overlay).
+
+| Setting | Default | |
+|---|---|---|
+| `url` | "" | your Audiobookshelf server, `http(s)://host:port` |
+| `token` | "" | an API token: Audiobookshelf → Settings → Users → you → API token |
+| `duck` | "duck" | while Outrider speaks: "duck", "pause" or "off" |
+| `duck_volume` | 0.25 | the book's volume while ducked (0 to 1) |
+| `long_route_jumps` | 0 | start the book on a route of this many jumps or more (0: never) |
+| `pause_on_arrival` | true | pause it when that route ends |
+| `overlay` | true | the cover and chapter in the overlay's Plugins panel while it plays |
 
 ## 🧭 Good to know
 
