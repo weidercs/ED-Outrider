@@ -308,6 +308,26 @@ class Audiobookshelf(unittest.TestCase):
         self.assertEqual(out["events"], ["loaded", "command"])
         self.assertTrue(all(s[2] == "Bearer tok" for s in seen if isinstance(s, tuple)))
 
+    def test_a_dropped_connection_is_said(self):
+        async def go(c, m, books):
+            books.cfg["url"] = "http://127.0.0.1:%d" % port
+            return await (await c.get("/api/plugins/audiobookshelf/library")).json()
+        import socket
+        import threading
+        ls = socket.socket()
+        ls.bind(("127.0.0.1", 0))
+        ls.listen()
+        port = ls.getsockname()[1]
+
+        def drop():   # accepts, reads the request, closes without an answer
+            c, _ = ls.accept()
+            c.recv(4096)
+            c.close()
+        threading.Thread(target=drop, daemon=True).start()
+        out, _ = self.run_with(go)
+        ls.close()
+        self.assertIn("cannot reach Audiobookshelf", out["error"])
+
     def test_a_refused_token_is_said(self):
         async def go(c, m, books):
             return await (await c.get("/api/plugins/audiobookshelf/library")).json()
