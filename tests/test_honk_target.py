@@ -1,4 +1,4 @@
-"""Auto honk's "then target the next route system" (this fork): after an auto honk the journal confirms, the next
+"""Auto honk's "then target the next route system": after an auto honk the journal confirms, the next
 system of the route you follow is targeted a set number of seconds later, when switched on. Nothing here presses a
 key: the honker is a fake and the target run is recorded, not started."""
 import argparse

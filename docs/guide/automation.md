@@ -16,10 +16,12 @@ you tick it in ⚙ Settings.
   row (one miss can be an alt-tab, which sends the key to another window).
   The dialog's **forget** clears that after you move the scanner.
 - It skips systems you've already honked, Apex shuttles and multicrew.
-- **Then target the next route system** (this fork; off by default): after a honk that found its discovery scan,
+- **Then target the next route system** (off by default): after a honk that found its discovery scan,
   the next system of the route you follow in Plot Route is targeted in the galaxy map, the number of seconds you
   set later (0 to 60). It is the same run as Target next, so it needs the same key bindings and takes over the
-  keyboard for a moment; with no route nothing happens. Switch it in the dialog or with `[autohonk] target_next`.
+  keyboard for a moment; with no route nothing happens. Switch it in Plot Route's **Auto-target the next system** box
+  (**Auto-target after an auto honk**, beside Smart targeting: see [Plot Route](plot-route.md)) or with
+  `[autohonk] target_next`.
 
 Setting it up:
 

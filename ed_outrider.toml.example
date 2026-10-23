@@ -140,7 +140,7 @@
 # announce = true        # when it completes, say "System Scan Completed, 12 Bodies discovered" (or "...all
 #                        # bodies were found" when the honk found everything); ⚙ Settings → Auto honk can switch
 #                        # it per browser
-# target_next = false    # this fork: after a successful auto honk, target the next system of the route you follow
+# target_next = false    # after a successful auto honk, target the next system of the route you follow
 #                        # (Plot Route) in the galaxy map, as Target next does; ⚙ Settings → Auto honk switches it too
 # target_delay = 3.0     # seconds between that honk and the targeting (0 to 60)
 
@@ -203,6 +203,10 @@
 # autotarget is on.
 # autotarget = false
 # autotarget_delay = 5      # seconds after the supercharge (0 to 60)
+# smart_target = false     # Smart targeting: on a route plotted in Outrider (not the game's own), target
+#                          # the next system after the supercharge where Spansh expects one (autotarget_delay), and
+#                          # elsewhere after auto honk's honk ([autohonk] target_delay); it overrides autotarget and
+#                          # [autohonk] target_next while on. The Plot Route tab switches it
 # autotarget_entry = "type" # "type" the name (US keyboard layout) or "paste" it (wl-copy/xclip, then Ctrl+V)
 # autotarget_map_wait = 5   # seconds to wait for the galaxy map to open (and to close) before giving up
 # autotarget_search_wait = 2   # seconds after submitting the search for the map to fly to the system
