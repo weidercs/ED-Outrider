@@ -6,7 +6,6 @@ import contextlib
 import io
 import os
 import tempfile
-import textwrap
 import tomllib
 import unittest
 
@@ -219,9 +218,7 @@ def fake_abs(seen):
 
 class Audiobookshelf(unittest.TestCase):
     def setUp(self):
-        import importlib
         self.mod = P.load_module("audiobookshelf", P.discover()["audiobookshelf"])
-        importlib.reload  # noqa: B018 -- the module is shared; nothing kept in it between tests
 
     def test_settings(self):
         with contextlib.redirect_stderr(io.StringIO()) as err:
