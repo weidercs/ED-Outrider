@@ -198,10 +198,10 @@ def fake_abs(seen):
         auth(r)
         return web.json_response(SESSION)
 
-    async def ok(r):
+    async def ok(r):   # as Audiobookshelf's sync and close answer: plain text, not JSON
         auth(r)
         seen.append(await r.json())
-        return web.json_response({})
+        return web.Response(text="OK")
 
     async def audio(r):
         auth(r)

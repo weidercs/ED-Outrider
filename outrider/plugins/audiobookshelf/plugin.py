@@ -17,6 +17,7 @@ pause_on_arrival = true        # and pause it when that route ends
 overlay = true                 # the cover and chapter in the overlay's Plugins panel while it plays
 """
 import asyncio
+import json
 import re
 import sys
 import time
@@ -181,9 +182,14 @@ class Books:
                     raise RuntimeError("Audiobookshelf refused the API token")
                 if r.status >= 400:
                     raise RuntimeError(f"Audiobookshelf answered HTTP {r.status} to {path.split('?')[0]}")
-                return await r.json(content_type=None) if r.content_length != 0 else {}
+                text = await r.text()
         except (OSError, ClientError, asyncio.TimeoutError) as e:   # ClientError: a dropped connection, a bad answer
             raise RuntimeError(f"cannot reach Audiobookshelf at {self.cfg['url']} ({type(e).__name__})") from None
+        try:   # some answers are plain text (sync and close say "OK")
+            got = json.loads(text) if text.strip() else {}
+        except ValueError:
+            return {}
+        return got if isinstance(got, dict) else {}
 
     # ---- what the page and the tools read ----
 
@@ -367,12 +373,12 @@ def setup(host):
         return web.json_response({"now": v})
 
     async def sync(request):
-        b = await request.json()
         try:
-            got = await books.sync(b.get("position", 0), b.get("listened", 0), b.get("playing"), b.get("player"))
-        except (TypeError, ValueError):
+            b = await request.json()
+            position, listened = float(b.get("position", 0)), float(b.get("listened", 0))
+        except (TypeError, ValueError, AttributeError):
             return web.json_response({"error": "expected {position, listened, playing}"}, status=400)
-        return web.json_response(got)
+        return web.json_response(await books.sync(position, listened, b.get("playing"), b.get("player")))
 
     async def command(request):
         b = await request.json()
