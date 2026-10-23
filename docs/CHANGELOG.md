@@ -2,6 +2,14 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-23 · Plot Route: Engage! beside Clear route
+- **Engage!** targets the next system of the route the tab shows in the galaxy map, by the same run as 🎯 Target next:
+  the Highway's next system, or a survey route's next stop. After a plot that is the first system; after each jump the
+  one after it, since the route follows you. Greyed out until a route is plotted (or once it is complete), while a run is
+  under way, and where auto-target cannot work (the same rule as every 🎯).
+- `drawEngage` in page.js, drawn with the auto-target box; no server change (POST `/api/highway/target`, with
+  `{route: "survey", index}` for a survey route).
+
 ## 2026-10-23 · Smart targeting, and the honk's auto-target moves to Plot Route
 - **Smart targeting** in Plot Route's Auto-target the next system box (off by default; `[highway] smart_target`): on a
   route plotted here (not the game's own), the next system is targeted after the supercharge where Spansh's plan

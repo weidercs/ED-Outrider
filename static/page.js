@@ -7788,6 +7788,7 @@ function drawHwyAuto() {
   const busy = !a.available || !!a.running || !!(a.test && ["counting", "running"].includes(a.test.state));
   hEl("hwyAutoTest").disabled = busy;
   hEl("hwyAutoNext").disabled = busy || !canAim() || !(data.highway && !data.highway.complete);   // a key without a binding: no 🎯
+  drawEngage(busy);
   hEl("hwyAutoState").textContent = a.running ? "· pressing keys…" : a.enabled || a.smart ? `· ${a.status || "on"}${a.smart ? " (smart)" : ""}`
     : a.available ? "· off" : `· ${a.status || "not available"}`;
   const last = hEl("hwyAutoLast"), lt = hwyAutoLastText(a.last);
@@ -7803,6 +7804,17 @@ function drawHwyAuto() {
   frEl.className = fr && !fr.front ? "warnc" : "unk";
   hwyRunTrack();
   hEl("hwyAutoTestMsg").textContent = hwyRun ? hwyRun.msg : "";
+}
+// Engage! beside Clear route: Target next for the route shown here (routeKind), the Highway's next system or the survey
+// route's; greyed out until a route is plotted (or once it is complete), while a run is under way, and where auto-target
+// cannot work. The route moves on as you jump (its `at`), so it is always the system after the one you are in.
+function drawEngage(busy) {
+  const b = hEl("hwyEngage"), sv = data && data.survey, hw = data && data.highway;
+  const survey = routeKind() === "rich" && !!(R.data && R.data.route);
+  const live = survey ? !!(sv && !sv.complete && sv.next) : !!(hw && !hw.complete);
+  b.disabled = !!busy || !canAim() || !live;
+  if (survey && live) { b.dataset.route = "survey"; b.dataset.index = String(sv.index); }
+  else { delete b.dataset.route; delete b.dataset.index; }
 }
 // the outcome of this page's run comes back in the payload (every render: the line's button follows it too)
 function hwyRunTrack() {
