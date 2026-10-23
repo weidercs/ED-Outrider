@@ -87,6 +87,10 @@ def enabled_settings(cfg):
         else:
             problems.append(f"[plugins] enabled: {n!r} is not a plugin name (lower case, digits, _)")
     tables = {n: dict(p[n]) for n in names if isinstance(p.get(n), dict)}
+    for n, v in p.items():   # a table set up for a plugin not switched on (or `enabled` written inside its table)
+        if isinstance(v, dict) and n not in names:
+            problems.append(f"[plugins.{n}] is set but {n!r} is not in [plugins] enabled, so it does not load"
+                            + (" (enabled is inside [plugins.%s]: put it under [plugins])" % n if "enabled" in v else ""))
     return names, tables, problems
 
 

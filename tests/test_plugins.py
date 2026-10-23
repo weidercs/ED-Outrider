@@ -67,6 +67,10 @@ class Infrastructure(unittest.TestCase):
         self.assertEqual((names, tables), (["fake"], {"fake": {"greeting": "yo"}}))
         self.assertEqual(len(problems), 3)
         self.assertEqual(P.enabled_settings({})[:2], ([], {}))   # nothing enabled by default: nothing loads
+        # set up but not switched on, e.g. `enabled` written under the plugin's own table: said, not silent
+        _, _, problems = P.enabled_settings({"plugins": {"audiobookshelf": {"enabled": ["audiobookshelf"], "url": "x"}}})
+        self.assertEqual(len(problems), 1)
+        self.assertIn("put it under [plugins]", problems[0])
         with contextlib.redirect_stderr(io.StringIO()):
             st = ed_outrider.settings_from({"plugins": {"enabled": ["audiobookshelf"],
                                                         "audiobookshelf": {"url": "http://abs.lan", "token": "t"}}},
