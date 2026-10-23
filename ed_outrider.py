@@ -1167,7 +1167,7 @@ def plugins_text(st):
     """config_text's [plugins] part: the enabled list, then each enabled plugin's table as the file has it."""
     p = st.get("plugins") or {"enabled": [], "tables": {}}
     out = ["[plugins]   # optional add-ons (outrider/plugins/, or your own in data/plugins/): only those listed load",
-           "enabled = [" + ", ".join(outrider.config_edit.basic_string(n) for n in p["enabled"]) + "]   # e.g. [\"audiobookshelf\", \"mcp_client\"]; applies at the next start"]
+           "enabled = [" + ", ".join(outrider.config_edit.basic_string(n) for n in p["enabled"]) + "]   # e.g. [\"audiobookshelf\"]; applies at the next start"]
     for n in p["enabled"]:
         table = p["tables"].get(n) or {}
         if not table:

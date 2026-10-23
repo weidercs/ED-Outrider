@@ -96,6 +96,14 @@ def clock(seconds):
     return f"{h} h {m} m" if h else f"{m} m" if m else f"{s} s"
 
 
+def said_clock(seconds):
+    """3725 -> '1 hour 2 minutes', 60 -> '1 minute': clock() for speech."""
+    s = max(0, int(seconds or 0))
+    h, m = divmod(s // 60, 60)
+    unit = lambda n, w: f"{n} {w}" + ("" if n == 1 else "s")
+    return " ".join(x for x in (unit(h, "hour") if h else "", unit(m, "minute") if m or not h else "") if x)
+
+
 def chapter_at(chapters, t):
     """(index, chapter) of the chapter at `t` seconds, or (None, None)."""
     for i, c in enumerate(chapters or []):
@@ -292,7 +300,7 @@ class Books:
             if not b:
                 return "No audiobook is loaded."
             return (f"{b['title']}, by {b['author']}" + (f", chapter {b['chapter_number']}" if b["chapter_number"] else "") +
-                    f", {b['left']} left." + ("" if b["playing"] else " It is paused."))
+                    f", {said_clock(b['duration'] - b['position'])} left." + ("" if b["playing"] else " It is paused."))
         if kind == "play":
             if not self.now:
                 try:

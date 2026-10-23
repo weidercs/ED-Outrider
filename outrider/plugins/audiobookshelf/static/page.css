@@ -1,0 +1,29 @@
+/* Audiobookshelf's mini player: bottom right, over the page; the theme's colours */
+#absPlayer { position: fixed; right: 12px; bottom: 12px; z-index: 50; display: flex; align-items: flex-start; gap: 6px;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .35); max-width: min(440px, calc(100vw - 24px)); font-size: 13px; }
+#absPlayer[hidden] { display: none; }
+#absPlayer.absCollapsed .absBody { display: none; }
+#absPlayer.absPlaying .absMin { color: var(--accent); }
+#absPlayer button { background: none; border: 1px solid var(--line); color: var(--text); border-radius: 6px; cursor: pointer;
+  padding: 2px 7px; font-size: 15px; line-height: 1.3; }
+#absPlayer button:hover { border-color: var(--accent); }
+#absPlayer .absMin { border: none; font-size: 18px; padding: 0 2px; }
+.absBody { display: grid; grid-template-columns: 72px 1fr; gap: 4px 10px; min-width: 0; }
+.absCover { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; background: var(--line); }
+.absCover:not([src]), .absCover.absNone { visibility: hidden; }
+.absText { min-width: 0; }
+.absTitle { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.absBy, .absCh, .absTime { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.absCh { color: var(--text); }
+.absBar { height: 4px; background: var(--line); border-radius: 2px; margin: 4px 0 2px; overflow: hidden; }
+.absBar > div { height: 100%; width: 0; background: var(--accent); }
+.absCtl { grid-column: 1 / -1; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.absPlay { min-width: 2.4em; }
+.absVol { width: 80px; accent-color: var(--accent); }
+.absPick { grid-column: 1 / -1; display: grid; gap: 4px; max-height: 260px; overflow: auto; }
+.absPick button { display: flex; gap: 8px; align-items: center; text-align: left; font-size: 13px !important; }
+.absPick img { width: 36px; color: transparent; height: 36px; object-fit: cover; border-radius: 4px; }
+.absPick small { display: block; color: var(--muted); }
+.absErr { grid-column: 1 / -1; color: var(--bad); font-size: 12px; }
+.absErr:empty { display: none; }
