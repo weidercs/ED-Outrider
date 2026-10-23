@@ -21,7 +21,7 @@ import re
 import sys
 import time
 
-from aiohttp import ClientSession, ClientTimeout, web
+from aiohttp import ClientError, ClientSession, ClientTimeout, web
 
 TITLE = "Audiobookshelf"
 DESCRIPTION = "Your audiobooks from your Audiobookshelf server: a mini player, ducking, voice and long-route listening."
@@ -182,7 +182,7 @@ class Books:
                 if r.status >= 400:
                     raise RuntimeError(f"Audiobookshelf answered HTTP {r.status} to {path.split('?')[0]}")
                 return await r.json(content_type=None) if r.content_length != 0 else {}
-        except (OSError, asyncio.TimeoutError) as e:
+        except (OSError, ClientError, asyncio.TimeoutError) as e:   # ClientError: a dropped connection, a bad answer
             raise RuntimeError(f"cannot reach Audiobookshelf at {self.cfg['url']} ({type(e).__name__})") from None
 
     # ---- what the page and the tools read ----
@@ -395,7 +395,7 @@ def setup(host):
                 body = await r.read()
                 return web.Response(body=body, content_type=r.content_type or "image/jpeg",
                                     headers={"Cache-Control": "max-age=86400"})
-        except (OSError, asyncio.TimeoutError):
+        except (OSError, ClientError, asyncio.TimeoutError):
             raise web.HTTPBadGateway() from None
 
     async def stream(request):
@@ -420,7 +420,7 @@ def setup(host):
                     await out.write(chunk)
                 await out.write_eof()
                 return out
-        except (OSError, asyncio.TimeoutError):
+        except (OSError, ClientError, asyncio.TimeoutError):
             raise web.HTTPBadGateway() from None
 
     host.route("GET", "/library", library)
