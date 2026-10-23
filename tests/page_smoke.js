@@ -4460,6 +4460,20 @@ const releasePayloads = async () => {
     d.querySelector('[data-view="hwy"]').click(); await sleep(700);
     d.getElementById("hwyAutoNext").click(); await sleep(150);
     got.boxRefused = txt("hwyAutoTestMsg");
+    // Engage! beside Clear route: Target next for the route shown, greyed out without one (or where auto-target cannot work)
+    const eng = d.getElementById("hwyEngage");
+    answer = () => json({system: "Hwy Stop 38", in: 5, seq: 9, dry_run: false, kind: "next"});
+    w.eval("hwyRun = null; drawHwyAuto()");
+    calls.length = 0;
+    got.engage = [eng.disabled, eng.dataset.route ?? null, eng.closest("div").contains(d.getElementById("hwyClear"))];
+    eng.click(); await sleep(150);
+    got.engaged = [calls.join(), copied.length];
+    w.eval(`hwyRun = null; data.autotarget = Object.assign({}, data.autotarget, {test: {seq: 9, kind: "next", state: "done", system: "Hwy Stop 38", why: null}});
+      data.highway = null; drawHwyAuto()`);
+    got.engageNoRoute = eng.disabled;
+    w.eval(`data.highway = ${JSON.stringify(fx.summary)}; data.autotarget = Object.assign({}, data.autotarget, {missing: [{key: "UI_Up", why: "no binding"}]}); drawHwyAuto()`);
+    got.engageNoKeys = eng.disabled;
+    w.eval(`hwyRun = null; data.autotarget = Object.assign({}, data.autotarget, {missing: [], test: null}); drawHwyAuto()`);   // as before Engage!
     // Retry: a Target next that failed on row 38, still the next: that row has the button; it posts and copies nothing
     const failed = {system: "Hwy Stop 38", ts: "2026-10-03T21:15:00Z", done: false, phase: 7, label: "check the target",
       why: "no system was targeted", test: false, kind: "next", route: "hwy-test", index: 38};
@@ -4482,7 +4496,8 @@ const releasePayloads = async () => {
     w.fetch = realFetch; w.copyText = realCopy;
     w.eval(`hwyRun = null; data.autotarget = null; data.highway = null`);
     const want = {lineRun: ["POST", "overview", 0, "[destination]in 5 s", true], lineDone: ["[destination]target", false],
-      boxRefused: "cannot target: you are at the end of the route", retryRows: ["38"],
+      boxRefused: "cannot target: you are at the end of the route", engage: [false, null, true], engaged: ["POST", 0],
+      engageNoRoute: true, engageNoKeys: true, retryRows: ["38"],
       retried: ["POST", 0, "click into the game: targeting Hwy Stop 38 in 5 s"], noRetry: [[], [], [], []],
       spoken: ["Highway: then Hwy Stop 38, 4.2 light-years, refuel in 3 jumps",
                "Highway: off the route, the closest route system is Hwy Stop 39, 12 light-years",
@@ -4494,7 +4509,7 @@ const releasePayloads = async () => {
     const goodTN = !bad.length && errors.length === before;
     allOk = allOk && goodTN;
     console.log(goodTN ? "OK" : "FAIL", "| highway target next |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
-      : "line and box buttons post with a countdown (no tab, no copy), refusal in its words, Retry on the failed row only, the Highway spoken in the report and welcome", errors.slice(before));
+      : "line and box buttons post with a countdown (no tab, no copy), Engage! beside Clear route (greyed out with no route or keys), refusal in its words, Retry on the failed row only, the Highway spoken in the report and welcome", errors.slice(before));
     await releasePayloads();
   }
   // S74: a run that brings the game to the front itself (no countdown: "bringing the game to the front"), the server's

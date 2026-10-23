@@ -188,6 +188,10 @@ targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own aler
   on demand, whether or not auto-target is on: the next route system, or off the route the closest one, at once when
   it brings the game to the front, else after a 5-second countdown to click back into the game. A failed run puts
   **⟳ Retry** on its route row.
+- **Engage!**, beside **Clear route** under the plot form, is the same Target next for the route the tab shows (the
+  Highway's, or a survey route's next stop). Right after a plot it targets the route's first system; as you jump the
+  route follows you, so each press targets the system after the one you are in. It is greyed out until a route is
+  plotted, once it is complete, while a run is under way, and where auto-target cannot work (a missing key binding).
 - **Test now** in the box targets the nearest known system a plain jump away, the same way.
   `python3 -m outrider.target --show` prints the steps with your keys.
 - Every step can be changed under `[highway]` (`autotarget_search`, `autotarget_submit`, `autotarget_plot`…) if a

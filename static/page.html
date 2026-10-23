@@ -406,6 +406,7 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
         <div class="srow">
           <button type="submit" id="hwyGo" class="go">Plot</button>
           <button type="button" id="hwyClear">Clear route</button>
+          <button type="button" class="try pcOnly" id="hwyEngage" data-aim="next" disabled title="target the next system of the route shown here in the galaxy map (the same run as target next): after a plot the first system, after each jump the one after it. Greyed out until a route is plotted, and where auto-target cannot work (its keys)"><span class="mk mk-destination mkg" aria-hidden="true"></span>Engage!</button>
           <span class="unk trade-opt" id="tradeSlow" hidden title="Spansh's trade planner weighs every market along the way: four hops from Sol took over two minutes">⏳ Trade routes can take a few minutes to plot</span>
           <span id="hwyStatus" role="status"></span>
         </div>
