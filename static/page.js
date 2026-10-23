@@ -2740,8 +2740,8 @@ async function sayNow(item) {
       if (cur.stopped) return;
     }
     const tts = data && data.tts;
-    let ctx = tts && tts.engine === "piper" ? await runningAudio() : null;
-    if (!ctx && tts && tts.engine === "piper" && actx && actx.state !== "running" && !cur.stopped) {
+    let ctx = serverVoice(tts) ? await runningAudio() : null;
+    if (!ctx && serverVoice(tts) && actx && actx.state !== "running" && !cur.stopped) {
       // the browser holds audio back until a click: the line waits for it (the red pill asks), then plays in Piper
       // if it is still worth saying; never the browser's voice instead. Only when the pill shows and a click lets
       // it go: with Play on this PC (its call failed) or speech off, nothing asks for that click, and the whole queue
@@ -2776,13 +2776,13 @@ async function sayNow(item) {
     // the browser's own voice only where Outrider has no Piper at all (the author's choice): with Piper, a line it
     // could not say (or said while its voice is still loading) is not said
     if (item.piperOnly || (tts && tts.available)) {
-      item.unsaid = tts && tts.engine === "piper" ? "Piper could not say it (never the browser's voice while Outrider has Piper)"
+      item.unsaid = serverVoice(tts) ? (tts.engine === "wyoming" ? "the voice server could not say it (never the browser's voice while Outrider has a voice)" : "Piper could not say it (never the browser's voice while Outrider has Piper)")
         : tts && tts.available ? "Piper's voice is not ready yet (never the browser's voice while Outrider has Piper)"
         : "Piper could not say it (never the browser's voice for this line)";
       return;
     }
     if (typeof speechSynthesis === "undefined") { item.unsaid = "no voice in this browser"; return; }
-    item.engine = (tts && tts.engine === "piper" ? (ctx ? "browser voice (Piper failed)" : "browser voice (Piper audio blocked)") : "browser voice")
+    item.engine = (serverVoice(tts) ? (ctx ? "browser voice (Piper failed)" : "browser voice (Piper audio blocked)") : "browser voice")
       + (onPc ? " (the PC could not play it)" : "");
     await new Promise(res => {
       let done = false; const finish = () => { if (!done) { done = true; res(); } };
@@ -9077,7 +9077,7 @@ document.addEventListener("pointerdown", () => { if ((soundOn || speechOn) && (!
 function audioBlocked() {
   if (!speakerHere() || serverPlay()) return false;   // (a tablet only with Play alerts here)
   const t = data && data.tts;
-  if (!((speechOn && t && t.engine === "piper") || soundOn)) return false;
+  if (!((speechOn && serverVoice(t)) || soundOn)) return false;
   const ctx = audio();   // made here if not yet: a browser holding audio back leaves it suspended
   return !!ctx && ctx.state !== "running";
 }
@@ -9980,7 +9980,7 @@ function drawSpeechBtn() {
   speechBtn.classList.toggle("on", !!speechOn); speechBtn.style.opacity = speechOn && speakerHere() ? 1 : .45;
   const t = data && data.tts;
   speechBtn.title = (speechOn ? "spoken alerts on" : "spoken alerts off") + " — " +
-    (t && t.engine === "piper" ? `Piper voice ${t.voice}` : t && t.available ? `Piper: ${t.status}; browser speech meanwhile` : "browser speech (install Piper for a better voice: see outrider/tts.py)") +
+    (t && t.engine === "wyoming" ? `voice server ${t.server.address}${t.server.voice ? ` (${t.server.voice})` : ""}` : t && t.engine === "piper" ? `Piper voice ${t.voice}` : t && t.available ? `Piper: ${t.status}; browser speech meanwhile` : "browser speech (install Piper for a better voice: see outrider/tts.py)") +
     (speakerHere() ? "" : speakMode() === "never" ? " — this browser never speaks (see Settings)" : " — another window is speaking");
 }
 // "This screen speaks": the setting, whether this window is the one, and a way to take over
@@ -10225,9 +10225,12 @@ function drawServerPlay() {
     : "(no player found on the PC: pw-play, paplay, aplay or ffplay; this browser plays them)";
 }
 let mvVoices = null;   // More voices: Piper's catalogue once fetched (see loadMoreVoices)
+// the spoken lines come from Outrider (its Piper, or the voice server of [speech] tts_server), not the browser's voice
+function serverVoice(t) { return !!t && (t.engine === "piper" || t.engine === "wyoming"); }
 function drawTts() {
   const t = data && data.tts, sel = document.getElementById("ttsVoice");
-  document.getElementById("ttsEngine").textContent = t && t.engine === "piper" ? "· Piper" : "· browser speech";
+  document.getElementById("ttsEngine").textContent = t && t.engine === "wyoming" ? `· voice server ${t.server.address}`
+    : t && t.engine === "piper" ? "· Piper" : "· browser speech";
   // only when it says something: loading, downloading, a failure (the author, 2026-10-16: "ready" told nothing)
   document.getElementById("ttsStatus").textContent = t && t.available && t.status !== "ready" ? t.status : "";
   document.getElementById("ttsHint").textContent = !t || !t.available
@@ -13455,7 +13458,7 @@ const lostLine = {key: null, buf: null};   // buf: [AudioBuffer, ...], one per s
 async function prepareLostLine() {
   if (TABLET && !tabletSpeaks()) return;   // never said here
   const t = data && data.tts;
-  if (!t || t.engine !== "piper") return;
+  if (!serverVoice(t)) return;
   const ctx = actx || audio();   // decoding needs no click: the context may stay paused until the line is played
   if (!ctx) return;
   const speed = speechSpeed(), key = `${t.voice || ""}|${speed}`;

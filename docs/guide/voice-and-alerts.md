@@ -130,6 +130,16 @@ Outrider runs (a Docker server too):
 Without Piper installed, the browser's own voice speaks. With Piper, the browser's voice is never used: a line Piper
 can't say is not said (what you asked for is still shown as a caption).
 
+**A voice server on your network.** Outrider can have another machine speak its alerts: any Wyoming text-to-speech
+server, the kind Home Assistant uses for its local voices (`wyoming-piper`, a Kokoro server, ...). Put its address in
+`[speech] tts_server` (`host:port`) and, if you like, the voice to ask it for in `tts_server_voice` (empty: the
+server's default), then restart Outrider. Settings → Voice then says "voice server" with its address. It is useful
+when the PC running Outrider has no Piper (a Docker server, a slow machine) or when the server has a voice Piper
+doesn't. Nothing is sent anywhere until you set it. The main voice's lines go to the server; a personality or crew
+member with a Piper voice of its own still speaks it here. The server keeps its own pace, so the voice speed and
+speaker settings do not reach it. If the server can't be reached, Piper on this PC speaks the line when it is
+installed, else the browser's voice does; Outrider says so once in its log, and again when the server is back.
+
 **Body names are said letter by letter.** With an English Piper voice, "A 1" is "ay one" (not "uh one") and "ABC 3 a"
 is "ay, bee, see, three, ay", each letter clearly. Only a body's letters are spelled out: system, station and carrier
 names are read as they are written.
