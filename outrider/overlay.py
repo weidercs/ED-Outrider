@@ -32,11 +32,11 @@ from . import pads as outrider_pads
 from .riches import left_words, survey_kind
 
 CANVAS_W, CANVAS_H = 1280, 960
-PANELS = ("system", "body", "radar", "strip", "now", "bio", "alerts")
+PANELS = ("system", "body", "radar", "strip", "now", "bio", "alerts", "plugins")
 # "body" is the Target panel (D1): the body you are at or have targeted, else the system targeted. Its id, config key
 # (body_panel) and layout key stayed, so an arrangement and a config made for the Body panel carry over unchanged.
 PANEL_NAMES = {"system": "System", "body": "Target", "radar": "Surface radar", "strip": "System strip",
-               "now": "Now (To-Do & Info)", "bio": "Bio signals", "alerts": "Alerts"}
+               "now": "Now (To-Do & Info)", "bio": "Bio signals", "alerts": "Alerts", "plugins": "Plugins"}
 # a panel is placed from a corner of the game window, or centred along its top or bottom edge (n, s: x is not used)
 CORNERS = ("nw", "ne", "sw", "se", "n", "s")
 SIZES = ("small", "normal", "large")
@@ -53,7 +53,8 @@ HIDE_DOCKED_DEFAULT = ("system", "body", "now", "bio")
 # by default; hide_mouse_lock: the whole overlay off on foot and in the DSS, where Elite locks the mouse (#1: an overlay
 # window over the game broke that lock on the author's Linux PC; the windows only as big as their panels fixed it there)
 DEFAULTS = {"enabled": False, "theme": "default", "text_size": "normal", "system_panel": True, "body_panel": True,
-            "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "alerts_panel": False, "system_seconds": 0,
+            "radar": True, "strip_panel": False, "now_panel": False, "bio_panel": False, "alerts_panel": False, "plugins_panel": True,
+            "system_seconds": 0,
             "radar_range": 800, "analysis_only": [], "hide_docked": list(HIDE_DOCKED_DEFAULT), "show_inactive": False,
             "panel_scale": 100, "pad_diagram": True, "hide_on_foot": [], "hide_mouse_lock": False}
 # [overlay] panel_scale (a GitHub report, 2026-10-14: too large on a 4K TV): all panels' size in %, on top of each panel's
@@ -69,7 +70,9 @@ LAYOUT_DEFAULT = {"system": {"corner": "nw", "x": 0.02, "y": 0.16, "scale": 1.0,
                   "now": {"corner": "sw", "x": 0.02, "y": 0.06, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
                   "bio": {"corner": "nw", "x": 0.02, "y": 0.45, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
                   # under the system strip, centred (S26)
-                  "alerts": {"corner": "n", "x": 0.0, "y": 0.09, "scale": 1.0, "bg": 0.65, "alpha": 1.0}}
+                  "alerts": {"corner": "n", "x": 0.0, "y": 0.09, "scale": 1.0, "bg": 0.65, "alpha": 1.0},
+                  # what the enabled plugins show (an audiobook playing, its cover): above Now
+                  "plugins": {"corner": "sw", "x": 0.02, "y": 0.40, "scale": 1.0, "bg": 0.65, "alpha": 1.0}}
 for _entry in LAYOUT_DEFAULT.values():
     _entry["text"] = ""   # as all panels: a layout saved before the per-panel text size reads as it drew then
 del _entry
@@ -207,7 +210,7 @@ def overlay_settings(cfg):
         _warn("must be a section (a table of settings); ignored")
     out = dict(DEFAULTS)
     for key in ("enabled", "system_panel", "body_panel", "radar", "strip_panel", "now_panel", "bio_panel", "alerts_panel",
-                "show_inactive", "pad_diagram", "hide_mouse_lock"):
+                "plugins_panel", "show_inactive", "pad_diagram", "hide_mouse_lock"):
         v = o.get(key)
         if v is None:
             continue
@@ -429,6 +432,12 @@ def line(pts, c, lw=1):
 
 def marker(x, y, kind, c, r=6, rot=0):
     return {"t": "marker", "x": round(x, 1), "y": round(y, 1), "kind": kind, "c": c, "r": r, "rot": round(rot, 1)}
+
+
+def image(x, y, w, h, src, c=None):
+    """A picture from Outrider (`src`: a path under /api/plugins/, fetched by the window), in a frame of colour c until
+    it has come (or when it never does)."""
+    return {"t": "image", "x": round(x, 1), "y": round(y, 1), "w": round(w, 1), "h": round(h, 1), "src": str(src or ""), "c": c}
 
 
 def runs(x, y, parts, align="left"):
@@ -1673,6 +1682,48 @@ def alerts_panel(alerts, pal, size="normal", now=None):
             "accent": pal["bad"] if danger else pal["title"], "items": items}
 
 
+PLUGIN_W = 400   # the Plugins panel's width
+PLUGIN_IMAGE = 84   # its pictures' side (a cover)
+
+
+def plugins_panel(parts, pal, size="normal"):
+    """The Plugins panel: what the enabled plugins have to show now (each Host.overlay function's part, in their order),
+    one block each: a picture on the left (`image`: a path under /api/plugins/), its title (bold) and `lines` beside it
+    (a line: text, or [text, colour key]), and a bar for `progress` (0 to 1) under them. None when none has anything."""
+    parts = [p for p in parts or [] if isinstance(p, dict) and (p.get("title") or p.get("lines"))]
+    if not parts:
+        return None
+    lh, items, y = LINE_H.get(size, 20), [], PAD
+    for i, part in enumerate(parts):
+        if i:
+            items.append(line([(PAD, y + 2), (PLUGIN_W - PAD, y + 2)], pal["frame"]))
+            y += 8
+        top, x = y, PAD
+        src = part.get("image")
+        if isinstance(src, str) and src.startswith("/api/plugins/"):
+            items.append(image(PAD, y, PLUGIN_IMAGE, PLUGIN_IMAGE, src, pal["frame"]))
+            x = PAD + PLUGIN_IMAGE + PAD
+        room = PLUGIN_W - PAD - x
+        if part.get("title"):
+            items.append(runs(x, y, [(fit(part["title"], room, size), pal["title"], size, True)]))
+            y += lh
+        for ln in (part.get("lines") or [])[:5]:
+            s, key = (ln[0], ln[1]) if isinstance(ln, (list, tuple)) and len(ln) == 2 else (ln, "muted")
+            items.append(runs(x, y, [(fit(s, room, size), pal.get(key, pal["muted"]), size, False)]))
+            y += lh
+        prog = part.get("progress")
+        if isinstance(prog, (int, float)) and not isinstance(prog, bool) and math.isfinite(prog):
+            y += 2
+            items.append(rect(x, y, room, 5, c=pal["frame"]))
+            items.append(rect(x, y, room * min(1.0, max(0.0, prog)), 5, f=pal["accent"]))
+            y += 9
+        if x > PAD:
+            y = max(y, top + PLUGIN_IMAGE)
+        y += 4
+    return {"id": "plugins", "w": PLUGIN_W, "h": round(y + PAD - 4), "bg": pal["panel"], "frame": pal["frame"],
+            "style": pal.get("style", "rounded"), "accent": pal["title"], "items": items}
+
+
 # ---- the test panels: every panel with sample data, to arrange them before flying ----
 
 def test_panels(pal, size="normal", radar_range=800):
@@ -1725,7 +1776,10 @@ def test_panels(pal, size="normal", radar_range=800):
     alerts = alerts_panel([{"kind": "find", "title": "B 1: Earth-like world (test panel)", "body": "2.4M cr scanned and mapped",
                             "danger": False, "t": 0},
                            {"kind": "hull", "title": "Interdicted", "body": "you submitted", "danger": True, "t": 0}], pal, sizes.get("alerts", one), now=0)
-    return [system, body, radar_test(pal, sizes.get("radar", one), radar_range), strip, now, bio, alerts]
+    plugins = plugins_panel([{"title": "The Martian (test panel)", "image": "/api/plugins/test/cover",
+                              "lines": ["Andy Weir · read by R. C. Bray", ["Chapter 7 · 1 h 12 m left", "text"]], "progress": 0.42}],
+                            pal, sizes.get("plugins", one))
+    return [system, body, radar_test(pal, sizes.get("radar", one), radar_range), strip, now, bio, alerts, plugins]
 
 
 def radar_test(pal, size="normal", radar_range=800):

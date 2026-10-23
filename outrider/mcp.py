@@ -172,6 +172,11 @@ def main(argv=None):
         except (OSError, tomllib.TOMLDecodeError) as e:
             print(f"outrider.mcp: {args.config}: {e}; using the defaults", file=sys.stderr)
     st = mcp_settings(cfg)
+    # the enabled plugins' read-only tools too ([plugins] enabled), answered through the running Outrider's routes
+    import outrider.plugins as plugins
+    names, _tables, _problems = plugins.enabled_settings(cfg)
+    if names:
+        plugins.register_tools(names, log=lambda *a, **k: print(*a, file=sys.stderr))
     url = (args.url or st["mcp_url"] or default_url(cfg)).rstrip("/")
     if args.list:
         for t in tools.listing():

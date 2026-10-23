@@ -312,6 +312,12 @@ class Client:
         q = "&".join(f"{k}={urllib.request.quote(str(v))}" for k, v in (("since", since), ("w", track), ("h", height)) if v)
         return self._request("GET", "/api/overlay" + (f"?{q}" if q else ""))
 
+    def raw(self, path):
+        """The bytes at `path` on Outrider (a plugin's picture for the Plugins panel)."""
+        req = urllib.request.Request(self.url + path, headers={"User-Agent": "outrider-overlay"})
+        with self.opener.open(req, timeout=HTTP_TIMEOUT) as r:
+            return r.read(IMAGE_MAX + 1)
+
     def set_layout(self, change):
         return self._request("POST", "/api/overlay/layout", change)
 
@@ -327,6 +333,7 @@ class Feed:
         self.client, self.data, self.seq, self.error = client, None, 0, None
         self.track = None   # what the window sees (track_code), set by the window, sent with each GET
         self.height = None  # the game window's height in this window's pixels (None: no game window), sent too
+        self.images = {}    # {src: bytes or None}: the pictures the panels draw (image items), each fetched once
         self._stop = threading.Event()
         self._lock = threading.Lock()
 
@@ -353,6 +360,29 @@ class Feed:
             self.error = None
             if isinstance(got, dict) and not got.get("same") and isinstance(got.get("panels"), list):
                 self.data, self.seq = got, self.seq + 1
+        if not got.get("same"):
+            self.fetch_images(got)
+
+    def fetch_images(self, data):
+        """The pictures `data`'s panels draw that are not here yet (a path under /api/plugins/ only); the ones no panel
+        draws now are let go. One that fails is not asked for again until a panel stops and starts drawing it."""
+        wanted = image_sources(data)
+        fetched = False
+        for src in wanted:
+            if src in self.images:
+                continue
+            try:
+                got = self.client.raw(src)
+                got = got if len(got) <= IMAGE_MAX else None
+            except (OSError, ValueError, urllib.error.URLError, http.client.HTTPException):
+                got = None
+            self.images[src] = got
+            fetched = True
+        for src in [s for s in self.images if s not in wanted]:
+            del self.images[src]
+        if fetched:
+            with self._lock:
+                self.seq += 1   # drawn again with them
 
     def run(self):
         while not self._stop.is_set():
@@ -368,10 +398,36 @@ class Feed:
 
 # ---- Qt: painting and the window ----
 
-def paint(painter, data, win_w, win_h, arrange=False, override=None, all_pct=None):
+IMAGE_MAX = 4 << 20   # bytes of one picture (a cover): more is not one
+
+
+def image_sources(data):
+    """The picture paths `data`'s panels draw (image items with a src under /api/plugins/)."""
+    return {it["src"] for p in (data or {}).get("panels") or [] for it in p.get("items") or []
+            if it.get("t") == "image" and isinstance(it.get("src"), str) and it["src"].startswith("/api/plugins/")}
+
+
+_QIMAGES = {}   # {(src, size): QImage}: each picture decoded once
+
+
+def _qimage(src, raw):
+    from PyQt6.QtGui import QImage
+    if not raw:
+        return None
+    key = (src, len(raw))
+    if key not in _QIMAGES:
+        if len(_QIMAGES) > 16:
+            _QIMAGES.clear()
+        img = QImage()
+        _QIMAGES[key] = img if img.loadFromData(raw) else None
+    return _QIMAGES[key]
+
+
+def paint(painter, data, win_w, win_h, arrange=False, override=None, all_pct=None, images=None):
     """Draw every panel of `data` (GET /api/overlay's answer) for a game window of win_w x win_h px. arrange: frame
     and label each panel for moving and sizing, and the Done button (Arrange mode); override: {panel: layout entry}
-    being dragged here, not saved yet; all_pct: all panels' size being wheeled here (%), not saved yet. Each panel at
+    being dragged here, not saved yet; all_pct: all panels' size being wheeled here (%), not saved yet; images: {src:
+    bytes} of the pictures (Feed.images; one not there draws as its frame). Each panel at
     O.effective_scale: its text never under O.MIN_TEXT_PX. -> [(panel id, (x, y, w, h))] as drawn (for hit tests)."""
     from PyQt6.QtCore import QPointF, QRectF, Qt
     from PyQt6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainterPath, QPen, QPolygonF
@@ -435,6 +491,14 @@ def paint(painter, data, win_w, win_h, arrange=False, override=None, all_pct=Non
                 if it.get("f"):
                     painter.setBrush(QBrush(colour(it["f"])))
                 painter.drawRect(QRectF(it["x"], it["y"], it["w"], it["h"]))
+            elif t == "image":
+                r = QRectF(it["x"], it["y"], it["w"], it["h"])
+                img = _qimage(it.get("src"), (images or {}).get(it.get("src")))
+                if img is not None:
+                    painter.drawImage(r, img)
+                elif it.get("c"):
+                    painter.setPen(pen(it["c"], 1))
+                    painter.drawRect(r)
             elif t == "circle":
                 painter.setPen(pen(it.get("c"), it.get("lw", 1)))
                 if it.get("f"):
@@ -563,7 +627,7 @@ def paint_arrange_frame(painter, panel, rect):
 _APP = None      # render_png's application when none runs (kept: Qt must not lose it mid-paint)
 
 
-def render_png(data, path, win_w=1920, win_h=1080, arrange=False):
+def render_png(data, path, win_w=1920, win_h=1080, arrange=False, images=None):
     """One frame of `data` drawn into a PNG over a dark stand-in for the game (testing, screenshots): no window."""
     global _APP
     from PyQt6.QtGui import QColor, QGuiApplication, QImage, QPainter
@@ -573,7 +637,7 @@ def render_png(data, path, win_w=1920, win_h=1080, arrange=False):
     img.fill(QColor(20, 24, 30))
     painter = QPainter(img)
     try:
-        paint(painter, data, win_w, win_h, arrange)
+        paint(painter, data, win_w, win_h, arrange, images=images)
     finally:
         painter.end()
     return img.save(path)
@@ -663,7 +727,7 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
             try:
                 gw, gh = self.game[2:] if self.game else (self.width(), self.height())
                 p.translate(-self.off[0], -self.off[1])   # the panel laid out in the game window, this window a part of it
-                self.geoms = paint(p, dict(feed.data or {}, panels=[panel] if panel else []), gw, gh)
+                self.geoms = paint(p, dict(feed.data or {}, panels=[panel] if panel else []), gw, gh, images=feed.images)
             finally:
                 p.end()
             QTimer.singleShot(0, self.place)   # grown, moved or new: the window follows (not inside the paint)
@@ -825,7 +889,7 @@ def run_window(client, title_hint=None):   # pragma: no cover - needs a display;
             p = QPainter(self)
             try:
                 self.geoms = paint(p, feed.data, self.width(), self.height(), arrange=self.arranging(), override=self.override,
-                                   all_pct=self.all_pct)
+                                   all_pct=self.all_pct, images=feed.images)
             finally:
                 p.end()
 

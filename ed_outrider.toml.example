@@ -251,17 +251,19 @@
 # bio_panel = false         # every bio signal in the system, the ones over bio_min highlighted, with samples and values
 # alerts_panel = false      # the page's alerts for a few seconds (8 s, danger 15 s): every kind switched on in Settings ->
 #                           # Alerts (notify, sound or speak); worded by the page, so only while a page is open somewhere
+# plugins_panel = true      # what the enabled plugins show ([plugins] below): an audiobook playing, its cover
 # system_seconds = 0        # how long the system panel stays after arriving (0: while in supercruise in that system)
 # radar_range = 800         # metres from the radar's centre to its edge (it widens to fit a colony ring)
 # analysis_only = []        # panels shown in your ship only while the HUD is in analysis mode, e.g. ["system", "bio"]
-#                           # (any of system, body, radar, strip, now, bio, alerts; not in the SRV, on foot or over the galaxy map)
+#                           # (any of system, body, radar, strip, now, bio, alerts, plugins; not in the SRV, on
+#                           # foot or over the galaxy map)
 # hide_docked = ["system", "body", "now", "bio"]   # panels hidden while docked (the ship, or on foot in a station,
-#                           # hangar or social space): any of system, body, strip, now, bio, alerts; the Target panel
-#                           # still shows over the galaxy map
+#                           # hangar or social space): any of system, body, strip, now, bio, alerts, plugins; the
+#                           # Target panel still shows over the galaxy map
 # show_inactive = false     # keep showing when Elite is not the active window (Settings -> In-game overlay); it still
 #                           # hides while other windows cover the game, or the game is minimised or on another desktop
 # hide_on_foot = []         # panels hidden on foot (in a station or on a planet's surface), e.g. ["now"]: any of
-#                           # system, body, radar, strip, now, bio, alerts
+#                           # system, body, radar, strip, now, bio, alerts, plugins
 # hide_mouse_lock = false   # no overlay at all on foot and in the DSS, where Elite locks the mouse: an overlay can
 #                           # break that lock on some systems
 # pad_diagram = true        # while docking at a starport or carrier: a diagram of where your pad is under PAD 34, in the
