@@ -2,6 +2,15 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-23 · The voice: a voice server on your network
+- **`[speech] tts_server`** (`host:port`, empty by default) has a Wyoming text-to-speech server say the spoken alerts,
+  the kind Home Assistant uses for local voices (wyoming-piper, a Kokoro server...), with **`tts_server_voice`** the
+  voice asked of it (empty: its default). It works without Piper on this PC (a Docker server); with Piper here, Piper
+  says a line the server cannot. A personality's or crew member's own installed Piper voice still speaks here. The
+  server's pace is its own: the speed and speaker settings do not reach it. Nothing is sent unless it is set.
+- `outrider/wyoming.py` (the protocol, no dependency); `Speaker.remote`, `Speaker.engine()` and `_say_remote`; the
+  payload's `tts.engine` is `"wyoming"` and `tts.server` {address, voice, voices, error}; the page's `serverVoice()`.
+
 ## 2026-10-22 · Auto-target: control names in any case, its settings without a restart, keys in the log
 - From a Windows player's report on Reddit (the map found the system, then nothing was plotted):
   - **Control names in any case:** `UI_SELECT` or `ui_select` is `UI_Select`, in the steps and in `autotarget_keys`

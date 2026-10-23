@@ -192,6 +192,7 @@ import outrider.materials  # engineering materials and synthesis recipes (no dep
 import outrider.cargo      # the ship's hold and your carrier's, folded from the journal (no dependencies)
 import outrider.dock       # the nearest place to dock: stations and carriers from Spansh, the DSSA list, your carrier
 import outrider.tts        # spoken alerts; Piper itself is optional (the page falls back to browser speech)
+import outrider.wyoming    # [speech] tts_server: spoken alerts from a voice server on the network (Wyoming)
 import outrider.speech     # the words for spoken alerts, per personality (resources/speech.json)
 import outrider.honk       # auto honk: holds Primary Fire on arrival (optional; Linux with evdev, Windows experimental)
 import outrider.target     # the Highway's auto-target: targets the next route system in the galaxy map (same keyboard)
@@ -704,6 +705,11 @@ SERVER_PLAYER = "auto"
 VOICES_LOADED = None
 VOICES_LOADED_CHOICES = ("all",) + tuple(str(n) for n in range(1, 21))   # Settings -> Server settings' pick-list
 VOICES_PRELOAD = False
+# [speech] tts_server: a Wyoming voice server on your network ("host:port", e.g. a Piper or Kokoro server) that says the
+# spoken alerts instead of Piper on this PC, and tts_server_voice, the voice asked of it (empty: its default). Both empty
+# by default: nothing is ever sent anywhere until you set one (outrider/wyoming.py)
+TTS_SERVER = ""
+TTS_SERVER_VOICE = ""
 # The co-pilot button (see outrider/button.py): tap (in the ship) target the next route system, double tap a status
 # report, hold hush until the next jump.
 COPILOT = {"enabled": False, "device": "", "button": "", "hold_ms": outrider.button.HOLD_MS, "double_ms": outrider.button.DOUBLE_MS}
@@ -818,6 +824,24 @@ def _config_str(v):
     if isinstance(v, str):
         return v
     raise TypeError("not a string")
+
+
+def _config_tts_server(v):
+    """[speech] tts_server: "" (none) or "host:port" of a Wyoming voice server."""
+    if not isinstance(v, str):
+        raise TypeError("not text")
+    outrider.wyoming.parse_server(v)   # ValueError: not host:port
+    return v.strip()
+
+
+def _config_tts_voice(v):
+    """[speech] tts_server_voice: "" (the server's default) or a voice name, one line of at most 100 characters."""
+    if not isinstance(v, str):
+        raise TypeError("not text")
+    v = v.strip()
+    if len(v) > 100 or any(ord(c) < 32 for c in v):
+        raise ValueError("not a voice name")
+    return v
 
 
 def _config_player(v):
@@ -1050,6 +1074,8 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
                         else str(df.get("speech_names", SPEECH_NAMES)),
         "speech_file": speech_file_path(sv.get("speech_file")),
         "server_player": num("speech", spk, "server_player", _config_player, SERVER_PLAYER),
+        "tts_server": num("speech", spk, "tts_server", _config_tts_server, TTS_SERVER),
+        "tts_server_voice": num("speech", spk, "tts_server_voice", _config_tts_voice, TTS_SERVER_VOICE),
         # unset: the voices in use, up to 4; a value it cannot read: 4, said (outrider.tts.loaded_slots)
         "voices_loaded": VOICES_LOADED if spk.get("voices_loaded") is None else
         num("speech", spk, "voices_loaded", _config_voices_loaded, outrider.tts.VOICES_LOADED_DEFAULT),
@@ -1198,6 +1224,8 @@ watch_firsts = {"true" if st["watch_firsts"] else "false"}   # check your unsold
 
 [speech]   # the page's "Play speech and sounds on this PC" tick (per browser, off until ticked), and the voices kept loaded
 server_player = {q(st["server_player"])}   # auto (the first of pw-play, paplay, aplay, ffplay found), one of those, or off (Linux)
+tts_server = {q(st["tts_server"])}   # a Wyoming voice server on your network (host:port, e.g. a Piper or Kokoro server) that says the spoken alerts instead of Piper on this PC; empty: none (applies at the next start)
+tts_server_voice = {q(st["tts_server_voice"])}   # the voice asked of that server, e.g. en_GB-alan-medium or bm_lewis; empty: the server's default
 {"" if st["sound_dir"] else "# "}sound_dir = {p(_root_relative(st["sound_dir"]) if st["sound_dir"] else "my-sounds")}   # your own alert sounds: <name>.wav (fanfare, thud, chime, alert...), up to 3 s each
 {"# " if st["voices_loaded"] is None else ""}voices_loaded = {q(st["voices_loaded"]) if st["voices_loaded"] == "all" else st["voices_loaded"] or outrider.tts.VOICES_LOADED_DEFAULT}   # voices kept loaded beside the main one (each about 1.6 times its file's size in memory: ~100 MB for a medium voice): a number, or "all"; unset, the voices in use up to 4
 pad_delay = {st["pad_delay"]}   # s: your landing pad is said this long after docking is granted, after the station's own voice (0 to {PAD_DELAY_MAX}; with a docking computer fitted: {AUTO_DOCK_WAIT_S} s, unless it takes over)
@@ -20994,8 +21022,12 @@ async def run(args, st):
                                    on_speaker=lambda chosen: loop.call_soon_threadsafe(state.remember_speakers, chosen))
     # the voices kept loaded beside the main one, and whether they load now ([speech] voices_loaded / voices_preload)
     state.speaker.voices_loaded, state.speaker.voices_preload = st["voices_loaded"], st["voices_preload"]
+    server = outrider.wyoming.parse_server(st["tts_server"])   # [speech] tts_server: checked by settings_from
+    if server:
+        state.speaker.remote = outrider.wyoming.Remote(*server, st["tts_server_voice"])
     state.journals.pad_delay = st["pad_delay"]   # [speech] pad_delay: the landing pad said after the station's voice
-    print("spoken alerts: " + ("Piper found, preparing a voice" if state.speaker.available else
+    print("spoken alerts: " + (f"voice server {state.speaker.remote.label}" + (" (Piper here if it cannot)" if state.speaker.PiperVoice else "")
+                               if state.speaker.remote else "Piper found, preparing a voice" if state.speaker.available else
                                "Piper not installed, the page uses browser speech (see outrider/tts.py)"))
     state.speaker.start()
     state.game_pc, why = resolve_game_pc(st["game_pc"])

@@ -159,6 +159,12 @@
 # sound_dir = "my-sounds"  # your own alert sounds, played in the browser and on the PC: a folder of <name>.wav
 #                          # files (fanfare, thud, chime, alert... the names in static/sounds.json), WAV only,
 #                          # up to 3 seconds each; a sound with no file keeps Outrider's own
+# A voice server on your network can say the spoken alerts instead of Piper on this PC: any Wyoming text-to-speech
+# server, the kind Home Assistant uses (wyoming-piper, a Kokoro server...). Nothing is sent anywhere unless you set it.
+# Piper here, when installed, speaks a line the server cannot; without it the browser's own voice does.
+# tts_server = ""          # host:port, e.g. "voice.lan:10200" (applies at the next start)
+# tts_server_voice = ""    # the voice asked of it, e.g. "en_GB-alan-medium"; empty: the server's default. The server
+#                          # has its own pace: the voice settings' speed and speaker do not reach it
 # Voices besides the main one (a personality's own voice, a crew member's) are loaded the first time they speak and
 # stay loaded, least recently used set aside first. Each takes about 1.6 times its .onnx file's size in memory (about
 # 100 MB for a medium voice, 170 MB for a high one; the people of one several-person voice share a single load); the

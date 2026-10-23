@@ -35,6 +35,7 @@ from collections import OrderedDict
 
 from . import DATA_DIR, ROOT
 from . import pronounce
+from . import wyoming   # [speech] tts_server: a voice server on the network
 from . import tls   # every download verifies with the shared context (issue #9)
 
 VOICES_DIR = os.path.join(DATA_DIR, "piper-voices")
@@ -371,6 +372,8 @@ def voice_memory_estimate(names, voices_dir=VOICES_DIR):
 class Speaker:
     """Turns short alert phrases into WAV audio. Loading and downloading happen on a background thread;
     `say()` returns None until a voice is ready, and the page uses browser speech meanwhile."""
+    PiperVoice = None   # set by __init__ when Piper is installed
+    remote = None       # [speech] tts_server's outrider.wyoming.Remote, set by run() before start()
 
     def __init__(self, voice=DEFAULT_VOICE, fallback=DEFAULT_FALLBACK, voices_dir=VOICES_DIR, on_change=None,
                  on_switched=None, speakers=None, on_speaker=None):
@@ -406,14 +409,25 @@ class Speaker:
         self.fetching = set()       # voices downloading for the voice lab (fetch: not switched to)
         self.fetch_failed = {}      # voice -> why its last fetch failed (the lab says so)
         self.status = "Piper not installed" if not self.PiperVoice else "starting"
+        # [speech] tts_server: a voice server on your network (outrider.wyoming.Remote, set by run() before start()).
+        # It says the main voice's lines; Piper here (when installed) only when it cannot, and personalities' own
+        # installed voices as before
+        self.remote = None
 
     @property
     def available(self):
-        return self.PiperVoice is not None
+        return self.PiperVoice is not None or self.remote is not None
 
     @property
     def ready(self):
-        return self._voice is not None
+        return self._voice is not None or self.remote is not None
+
+    def engine(self):
+        """Who says the main voice's lines now: "wyoming" (the voice server, unless its last line failed and Piper here
+        can), "piper", or None (the page's browser voice)."""
+        if self.remote is not None and (self.remote.error is None or self._voice is None):
+            return "wyoming"
+        return "piper" if self._voice is not None else None
 
     def installed(self):
         return installed_voices(self.dir)
@@ -427,7 +441,10 @@ class Speaker:
     def info(self):
         sid = self.speaker_for(self.voice_name) if self.voice_name else None
         people = self.voice_speakers(self.voice_name) if self.voice_name else []
-        return {"engine": "piper" if self.ready else None, "voice": self.voice_name, "status": self.status,
+        r = self.remote
+        return {"engine": self.engine(), "voice": self.voice_name, "status": self.status,
+                # [speech] tts_server: where, the voice asked for, the voices it offers and why its last line failed
+                "server": {"address": r.label, "voice": r.voice, "voices": r.voices, "error": r.error} if r else None,
                 "voices": self.installed() if self.available else [], "available": self.available,
                 "fetching": sorted(self.fetching), "fetch_failed": dict(self.fetch_failed),
                 # the voice's speaker when it has several (the list itself: GET /api/voices/speakers)
@@ -488,8 +505,20 @@ class Speaker:
         return True
 
     def start(self):
-        if self.available:
+        if self.remote is not None:   # ask the voice server what it offers, off the event loop
+            threading.Thread(target=self._check_remote, daemon=True, name="voice-server").start()
+        if self.PiperVoice is not None:
             threading.Thread(target=self._prepare, args=(None,), daemon=True, name="piper").start()
+
+    def _check_remote(self):
+        r = self.remote
+        ok = r.check()
+        print(f"spoken alerts: voice server {r.label}: " + (f"{len(r.voices)} voices, speaking with {r.voice or 'its default'}"
+                                                             if ok and not r.error else r.error))
+        if self.PiperVoice is None:
+            self._set_status(f"voice server {r.label}" + (f" ({r.error})" if r.error else ""))
+        else:
+            self.on_change()
 
     def valid_name(self, name):
         """An installed voice, or a well-formed Piper voice name (so a download stays inside piper-voices/)."""
@@ -718,6 +747,32 @@ class Speaker:
             return None
         return buf.getvalue() or None
 
+    def _say_remote(self, text, keep):
+        """The voice server's WAV for a main-voice line (cached like Piper's; the speed and speaker are the server's
+        own: Wyoming carries neither), None for nothing to say, False when it failed (Remote.error says why)."""
+        r = self.remote
+        key = ("server", r.label, r.voice, text)
+        if keep:
+            with self._lock:
+                if key in self._cache:
+                    self._cache.move_to_end(key)
+                    return self._cache[key]
+        was = r.error
+        try:
+            audio = r.say(text)
+        except wyoming.WyomingError as e:
+            if e.args[0] != was:   # said once, not for every line while it is down
+                print(f"spoken alerts: voice server {r.label}: {e}", file=sys.stderr)
+                self.on_change()
+            return False
+        if was is not None:
+            print(f"spoken alerts: voice server {r.label} speaks again")
+            self.on_change()
+        if keep:
+            with self._lock:
+                self._keep(key, audio)
+        return audio
+
     def _keep(self, key, audio):
         self._cache[key] = audio
         while len(self._cache) > CACHE_PHRASES:
@@ -732,7 +787,13 @@ class Speaker:
         if not text or not self.ready:
             return None
         speed = min(2.0, max(0.5, float(speed or 1.0)))
-        extra = self.extra_voice(voice)
+        extra = self.extra_voice(voice) if self.PiperVoice is not None else None
+        if self.remote is not None and not extra:
+            audio = self._say_remote(text, keep)
+            if audio is not False:
+                return audio
+            if self._voice is None:   # the server failed and there is no Piper here: the page's browser voice
+                return None
         who = voice if extra else self.voice_name
         if speaker is None or isinstance(speaker, bool) or not isinstance(speaker, int) \
                 or not 0 <= speaker < len(self.voice_speakers(who)):
