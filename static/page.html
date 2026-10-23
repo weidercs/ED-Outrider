@@ -419,10 +419,19 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <summary>Auto-target the next system <span id="hwyAutoState" class="unk"></span></summary>
       <div class="srow">
         <label title="after an FSD supercharge on the route, press keys in the galaxy map to make the next route system the target (Linux, Windows experimental; the same keyboard as auto honk)"><input type="checkbox" id="hwyAutoOn"> Auto-target after a supercharge</label>
-        <label title="seconds after the supercharge before the keys are pressed">after <input type="number" id="hwyAutoDelay" min="0" max="60" step="any" inputmode="decimal"> s</label>
+        <label title="seconds after the supercharge before the keys are pressed">after <input type="number" id="hwyAutoDelay" min="0" max="60" step="any" inputmode="decimal"> s <span class="smartuse unk" hidden>· Smart targeting uses these seconds</span></label>
         <button type="button" class="try" id="hwyAutoTest" title="one run against the nearest known system a plain jump away (no route needed): Outrider brings the game to the front where it can, else 5 seconds from now: click into the game meanwhile">▶ test now</button>
         <button type="button" class="try" id="hwyAutoNext" data-aim="next" title="target the next route system now (off the route: the closest one): Outrider brings the game to the front where it can, else 5 seconds from now: click into the game meanwhile. Works with auto-target off"><span class="mk mk-destination mkg" aria-hidden="true"></span>target next</button>
         <span id="hwyAutoTestMsg" role="status"></span>
+      </div>
+      <div class="srow">
+        <label title="after an auto honk that found its discovery scan, target the next route system that many seconds later (the same run as Target next: it needs the keys auto-target needs). Needs auto honk on (Settings → Auto honk)"><input type="checkbox" id="autoHonkTarget"> Auto-target after an auto honk</label>
+        <label title="seconds after the honk before the keys are pressed">, <input type="number" id="autoHonkTargetDelay" min="0" max="60" step="0.5" inputmode="decimal" style="width:4.5em"> s after the honk <span class="smartuse unk" hidden>· Smart targeting uses these seconds</span></label>
+        <span id="autoHonkTargetNote" class="warnc small"></span>
+      </div>
+      <div class="srow">
+        <label title="on a route plotted here (not the game's own route): where Spansh expects a supercharge, target the next system after the supercharge (the delay above); everywhere else after auto honk's honk (the seconds after the honk above). While it is on, the two switches above are greyed out and ignored; their seconds still apply"><input type="checkbox" id="hwySmartOn"> Smart targeting <span class="unk">(overrides the two above, with their seconds)</span></label>
+        <span id="hwySmartNote" class="warnc small"></span>
       </div>
       <div id="hwyAutoFront" class="unk"></div>
       <div id="hwyAutoLast"></div>
@@ -719,7 +728,6 @@ try { var d = document.documentElement, t = JSON.parse(localStorage.getItem("des
       <div id="autoHonkReady" class="honkready" role="status"><span class="hint">checking whether auto honk can work here…</span></div>
       <label data-find="autohonk.enabled" class="mod"><input type="checkbox" id="autoHonk"> Honk automatically on arriving in a system by hyperspace
         <span id="autoHonkStatus" class="hint"></span></label>
-      <label data-find="autohonk.target_next" class="mod pcOnly" title="after an auto honk that found its discovery scan, open the galaxy map and target the next system of the route you follow in Plot Route (the same run as Target next: it needs the keys auto-target needs). Nothing happens without a route"><input type="checkbox" id="autoHonkTarget"> Then target the next route system, <input type="number" id="autoHonkTargetDelay" min="0" max="60" step="0.5" inputmode="decimal" style="width:4.5em"> s after the honk <span id="autoHonkTargetNote" class="warnc small"></span></label>
       <label data-find="autohonk.announce" class="mod"><input type="checkbox" id="autoHonkSay"> When it completes, say how many bodies it found
         <span class="hint">"System Scan Completed, 12 Bodies discovered", or "System scan complete, and all bodies were found" when the honk found everything</span></label>
       <div class="hint"><b>The Discovery Scanner must be on primary fire</b> in the fire group that is active when you jump.

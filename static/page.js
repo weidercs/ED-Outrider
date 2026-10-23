@@ -7505,12 +7505,19 @@ function hwyAutoLastText(l) {
 function drawHwyAuto() {
   const a = data && data.autotarget, on = hEl("hwyAutoOn"), dl = hEl("hwyAutoDelay");
   if (!a) return;
-  on.checked = !!a.enabled; on.disabled = !a.available;
+  // Smart targeting overrides "after a supercharge" and "after an auto honk": their ticks greyed out, their seconds
+  // left to change and marked as Smart targeting's too
+  const smart = !!a.smart;
+  on.checked = !!a.enabled; on.disabled = !a.available || smart; on.closest("label").style.opacity = smart ? .5 : 1;
+  hEl("hwySmartOn").checked = smart; hEl("hwySmartOn").disabled = !a.available;
+  hEl("hwySmartNote").textContent = smart && a.smart_note ? a.smart_note : "";
+  for (const el of document.querySelectorAll("#hwyAuto .smartuse")) el.hidden = !smart;
   if (document.activeElement !== dl) dl.value = a.delay ?? "";
   const busy = !a.available || !!a.running || !!(a.test && ["counting", "running"].includes(a.test.state));
   hEl("hwyAutoTest").disabled = busy;
   hEl("hwyAutoNext").disabled = busy || !canAim() || !(data.highway && !data.highway.complete);   // a key without a binding: no 🎯
-  hEl("hwyAutoState").textContent = a.running ? "· pressing keys…" : a.enabled ? `· ${a.status || "on"}` : a.available ? "· off" : `· ${a.status || "not available"}`;
+  hEl("hwyAutoState").textContent = a.running ? "· pressing keys…" : a.enabled || a.smart ? `· ${a.status || "on"}${a.smart ? " (smart)" : ""}`
+    : a.available ? "· off" : `· ${a.status || "not available"}`;
   const last = hEl("hwyAutoLast"), lt = hwyAutoLastText(a.last);
   last.textContent = lt ? "Last: " + lt : ""; last.className = a.last && !a.last.done ? "warnc" : "unk";
   const miss = hEl("hwyAutoMissing"), m = a.missing || [];
@@ -7573,9 +7580,10 @@ async function hwyAutoSet(body) {
   try { r = await apiJson("api/highway/autotarget", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
   catch (err) { r = {error: err.message}; }
   if (r.error) toast(`could not change auto-target: ${hwyErr(r.error)}`);
-  else if (data) { data.autotarget = r; drawHwyAuto(); }
+  else if (data) { data.autotarget = r; drawHwyAuto(); drawHonk(); }   // the honk's switch follows Smart targeting
 }
 hEl("hwyAutoOn").onchange = () => hwyAutoSet({enabled: hEl("hwyAutoOn").checked});
+hEl("hwySmartOn").onchange = () => hwyAutoSet({smart: hEl("hwySmartOn").checked});
 hEl("hwyAutoDelay").onchange = () => {
   const v = Number(hEl("hwyAutoDelay").value);
   if (hEl("hwyAutoDelay").value.trim() === "" || !isFinite(v) || v < 0 || v > 60) { toast("the delay is 0 to 60 seconds"); drawHwyAuto(); return; }
@@ -9855,10 +9863,11 @@ function drawHonk() {
   honkSayBox.closest("label").style.opacity = honkSayBox.disabled ? .5 : 1;
   // "then target the next route system" and its seconds: only with auto honk on
   { const tb = document.getElementById("autoHonkTarget"), td = document.getElementById("autoHonkTargetDelay");
-    tb.checked = !!(a && a.target_next); tb.disabled = td.disabled = !(a && a.wanted);
+    const smart = !!(data && data.autotarget && data.autotarget.smart);   // Smart targeting overrides the tick, not its seconds
+    tb.checked = !!(a && a.target_next); tb.disabled = !(a && a.wanted) || smart; td.disabled = !(a && a.wanted) && !smart;
     if (document.activeElement !== td) td.value = a && a.target_delay != null ? a.target_delay : 3;
     tb.closest("label").style.opacity = tb.disabled ? .5 : 1;
-    document.getElementById("autoHonkTargetNote").textContent = a && a.target_next && a.target_note ? `last time: ${a.target_note}` : ""; }
+    document.getElementById("autoHonkTargetNote").textContent = a && (a.target_next || smart) && a.target_note ? `last time: ${a.target_note}` : ""; }
   document.getElementById("autoHonkStatus").textContent = a ? a.status : "";
   document.getElementById("autoHonkKey").textContent = a ? (a.pressing || a.key) : "";
   document.getElementById("autoHonkTest").disabled = !(a && a.available);

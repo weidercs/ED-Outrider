@@ -1286,7 +1286,7 @@ class HighwayH1(unittest.TestCase):
               "autotarget_plot": ["hold CamZoomOut 0.2", "hold UI_Select 1"],
               "autotarget_search": ["hold CamYawRight 0.3", "press UI_Up", "press UI_Select"],
               "autotarget_submit": ["wait 1.5", "press Enter", "wait 0.5", "press Enter"], "autotarget_dry_run": False,
-              "voice_plot": True, "voice_plot_ly": 500.0}
+              "voice_plot": True, "voice_plot_ly": 500.0, "smart_target": False}
         self.assertEqual(st["highway"], dict({"clipboard": True, "autotarget": False, "autotarget_delay": 5.0, "efficiency": 60}, **bg))
         back = tomllib.loads(ed_outrider.config_text(st))["highway"]
         self.assertEqual(back, dict({"clipboard": True, "autotarget": False, "autotarget_delay": 5, "efficiency": 60}, **bg))
@@ -2510,7 +2510,7 @@ class HighwayAutoTarget(unittest.TestCase):
         self.assertEqual(self.honker.owners, {"target"})   # the test's hold on the keyboard was let go
         self.assertEqual(out["toggle"], (200, True))
         self.assertEqual(out["bad"], [400, 400, 400, 400])
-        self.assertEqual(ed_outrider.meta_get(self.db, "autotarget"), {"enabled": True, "delay": 3.0})
+        self.assertEqual(ed_outrider.meta_get(self.db, "autotarget"), {"enabled": True, "delay": 3.0, "smart": False})
         self.assertEqual((out["payload"]["enabled"], out["payload"]["delay"], out["payload"]["last"]["test"]), (True, 3.0, True))
 
     def test_target_next_endpoint(self):   # review Q4: Target next / Retry, whether or not auto-target is on

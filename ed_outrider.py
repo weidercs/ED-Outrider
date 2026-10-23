@@ -308,6 +308,8 @@ WRONG_TARGET_KEEP = 32      # S11: the wrong targets remembered as said (route, 
 SPANSH_SYSTEM_NAMES = "https://spansh.co.uk/api/systems/field_values/system_names"   # system names as you type
 SPANSH_SYSTEM_SEARCH = "https://spansh.co.uk/api/search/systems"   # ?q=name: {results: [{id64, name, x, y, z}]}
 HIGHWAY = {"clipboard": True, "autotarget": False, "autotarget_delay": 5.0, "efficiency": 60,   # [highway] defaults
+           # Smart targeting: after the supercharge where the route expects one, else after the honk
+           "smart_target": False,
            "conservative": False, "conservative_ly": 5.0,
            # auto-target's key sequence (outrider/target.py): how the name goes in, the waits, per-step key overrides,
            # the search, submit and plot-route steps (found in game 2026-10-02) and a dry run that only logs
@@ -1088,6 +1090,7 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
                     "double_ms": min(1000, max(100, num("copilot", cp, "double_ms", int, COPILOT["double_ms"])))},
         "highway": {"clipboard": flag("highway", hw, "clipboard", HIGHWAY["clipboard"]),
                     "autotarget": flag("highway", hw, "autotarget", HIGHWAY["autotarget"]),
+                    "smart_target": flag("highway", hw, "smart_target", HIGHWAY["smart_target"]),
                     "autotarget_delay": min(60.0, max(0.0, num("highway", hw, "autotarget_delay", float,
                                                                HIGHWAY["autotarget_delay"]))),
                     # the neutron plotter's efficiency (%): Spansh takes 1 to 100
@@ -1239,6 +1242,7 @@ clipboard = {"true" if st["highway"]["clipboard"] else "false"}   # on arriving 
 # kind as auto honk: check Frontier's rules for yourself.
 autotarget = {"true" if st["highway"]["autotarget"] else "false"}   # auto-target the next route system after a supercharge (the Plot Route tab switches it too)
 autotarget_delay = {n(st["highway"]["autotarget_delay"])}   # seconds after the supercharge (0 to 60)
+smart_target = {"true" if st["highway"]["smart_target"] else "false"}   # Smart targeting: on a Spansh route, target the next system after the supercharge where the route expects one (autotarget_delay), elsewhere after auto honk's honk ([autohonk] target_delay), overriding autotarget and [autohonk] target_next; the Plot Route tab switches it too
 autotarget_entry = {q(st["highway"]["autotarget_entry"])}   # "type" the name on the virtual keyboard (US layout), or "paste" it (wl-copy/xclip, then Ctrl+V)
 autotarget_map_wait = {n(st["highway"]["autotarget_map_wait"])}   # seconds to wait for the galaxy map to open (and close) before giving up
 autotarget_search_wait = {n(st["highway"]["autotarget_search_wait"])}   # seconds after submitting the search for the map to fly to the system
@@ -14002,13 +14006,29 @@ class State:
         the keys auto-target needs, waits out the arrival's danger flag, and a cleared route stops it). Nothing is
         said when there is no route; another refusal is kept for the page (autohonk_info's target_note)."""
         self.honk_target_pending = False
-        if not self.autohonk.get("target_next") or self.journals.jump_arrival is not a:
+        smart = self.highway_cfg.get("smart_target")   # Smart targeting overrides target_next (its seconds are kept)
+        if not (self.autohonk.get("target_next") or smart) or self.journals.jump_arrival is not a:
+            return None
+        if smart and self.supercharge_expected():   # here the supercharge targets (maybe_autotarget)
             return None
         out, status = self.start_autotarget_run("next", countdown=self.autohonk.get("target_delay", AUTOHONK["target_delay"]))
         no_route = status != 200 and not self.highway_summary()
         self.honk_target_note = None if status == 200 or no_route else out.get("error")
         self.honk_target_pending = status == 200
         return out if status == 200 else None
+
+    def supercharge_expected(self):
+        """Smart targeting: does the Highway route you are at expect a supercharge here before the next jump?
+        Its row is a neutron one (the exact plotter's has_neutron, the neutron plotter's neutron_star) and the plot did
+        not rule boosts out (the exact plotter's "no neutron boost"). False off the route or with none: the game's own
+        route is never a Highway route."""
+        hw, rows = self.highway_state()
+        if not hw or hw.get("done_ts") or hw.get("off_route") or hw.get("at") is None or not 0 <= hw["at"] < len(rows):
+            return False
+        if (hw.get("options") or {}).get("no_neutrons"):
+            return False
+        here, row = (self.journals.pos or {}).get("id64"), rows[hw["at"]]
+        return bool(row.get("neutron")) and here is not None and row.get("id64") == here
 
     def start_honk_test(self):
         """The dialog's Test button: hold Primary Fire once after a countdown (time to click into the game),
@@ -17038,6 +17058,10 @@ class State:
         """The Plot Route tab's auto-target block (in the payload, so the result shows as it comes)."""
         cfg, t, h = self.highway_cfg, self.targeter, self.honker
         info = {"enabled": bool(cfg["autotarget"]), "delay": cfg["autotarget_delay"], "entry": cfg.get("autotarget_entry"),
+                # Smart targeting, and why its honk half does nothing now (auto honk off)
+                "smart": bool(cfg.get("smart_target")),
+                "smart_note": "auto honk is off: only after a supercharge" if cfg.get("smart_target")
+                and not self.autohonk.get("enabled") else None,
                 "dry_run": bool(cfg.get("autotarget_dry_run")), "available": bool(t and t.available),
                 "last": self.autotarget_last, "test": self.autotarget_test, "running": self.autotarget_running is not None,
                 "missing": [], "steps": [], "countdown": self.autotarget_test_countdown,
@@ -17054,7 +17078,7 @@ class State:
         steps, missing = t.plan()
         info["missing"] = [{"key": n, "why": w} for n, w in missing]
         info["steps"] = t.describe(steps)
-        info["status"] = ("off" if not cfg["autotarget"] else "dry run: logs the steps, presses nothing" if info["dry_run"]
+        info["status"] = ("off" if not (cfg["autotarget"] or cfg.get("smart_target")) else "dry run: logs the steps, presses nothing" if info["dry_run"]
                           else h.device_error or "the virtual keyboard is not open" if not h.ready
                           else "not ready: a key has no keyboard binding" if missing
                           else "ready" + outrider.honk.EXPERIMENTAL)   # "ready (experimental on Windows)" there
@@ -17181,20 +17205,28 @@ class State:
             return {"error": str(e)}, 409
         return {"ok": True, "id": id_, "label": b["label"], "before": b["state"], "confirm_s": outrider.rail.RAIL_CONFIRM_S}, 200
 
-    def set_autotarget(self, enabled=None, delay=None):
-        """The Plot Route tab's toggle and delay (remembered over restarts, like auto honk's toggle)."""
+    def set_autotarget(self, enabled=None, delay=None, smart=None):
+        """The Plot Route tab's toggle and delay, and Smart targeting switch (remembered over restarts, like
+        auto honk's toggle)."""
+        cfg = self.highway_cfg
         if enabled is not None:
-            self.highway_cfg["autotarget"] = bool(enabled)
+            cfg["autotarget"] = bool(enabled)
         if delay is not None:
-            self.highway_cfg["autotarget_delay"] = min(60.0, max(0.0, float(delay)))
-        meta_set(self.db, "autotarget", {"enabled": self.highway_cfg["autotarget"], "delay": self.highway_cfg["autotarget_delay"]})
+            cfg["autotarget_delay"] = min(60.0, max(0.0, float(delay)))
+        if smart is not None:
+            cfg["smart_target"] = bool(smart)
+        meta_set(self.db, "autotarget", {"enabled": cfg["autotarget"], "delay": cfg["autotarget_delay"],
+                                         "smart": bool(cfg.get("smart_target"))})
         self.db.commit()   # now: a failing watcher tick would roll it back
-        if enabled is False:
+        wants = cfg["autotarget"] or bool(cfg.get("smart_target"))   # the automatic run's keyboard
+        if enabled is False or (smart is False and not cfg["autotarget"]):
             self.cancel_autotarget()   # a run under way stops now (the device may stay open for auto honk, CX-F1)
-        if self.honker and self.honker.available and enabled is not None:
-            if enabled and not self.highway_cfg.get("autotarget_dry_run"):   # a dry run presses nothing: no keyboard
+        if smart is False and self.honk_target_pending and not self.autohonk.get("target_next"):
+            self.cancel_autotarget(route="highway")   # the run Smart targeting's honk started stops too
+        if self.honker and self.honker.available and (enabled is not None or smart is not None):
+            if wants and not cfg.get("autotarget_dry_run"):   # a dry run presses nothing: no keyboard
                 self.honker.open("target")
-            elif not enabled:
+            elif not wants:
                 self.honker.close("target")
         self.bump()
 
@@ -17218,7 +17250,8 @@ class State:
             return False
         self._autotarget_boost = b.get("ts")
         now = time.time() if now is None else now
-        if not self.highway_cfg["autotarget"]:
+        # Smart targeting overrides the switch: a run where the route expects this supercharge, and only there
+        if not (self.supercharge_expected() if self.highway_cfg.get("smart_target") else self.highway_cfg["autotarget"]):
             return False
         try:
             if now - ts_seconds(b["ts"]) > HIGHWAY_LIVE_S:
@@ -17344,7 +17377,7 @@ class State:
         if tgt.get("boxel"):   # the boxel opt-in's run: switched off, or another boxel picked meanwhile
             b = self.boxel_active()
             return None if meta_get(self.db, "boxel_auto") and b and b["prefix"] == tgt["boxel"] else "switched off"
-        if not self.highway_cfg["autotarget"]:
+        if not (self.highway_cfg["autotarget"] or self.highway_cfg.get("smart_target")):
             return "switched off"
         if (meta_get(self.db, "highway") or {}).get("id") != tgt.get("route"):
             return "the route changed"
@@ -19235,17 +19268,20 @@ def make_app(state, hosts=None):
         return web.json_response(out, status=status)
 
     async def highway_autotarget_view(request):
-        """The Highway tab's auto-target toggle and delay: {enabled?: bool, delay?: seconds 0-60}."""
+        """The Highway tab's auto-target toggle and delay, and Smart targeting: {enabled?: bool, delay?: seconds 0-60,
+        smart?: bool}."""
         body = await json_object(request)
         if body is None:
             return web.json_response({"error": "expected a JSON object"}, status=400)
-        enabled, delay = body.get("enabled"), body.get("delay")
+        enabled, delay, smart = body.get("enabled"), body.get("delay"), body.get("smart")
         if enabled is not None and not isinstance(enabled, bool):
             return web.json_response({"error": "enabled must be true or false"}, status=400)
+        if smart is not None and not isinstance(smart, bool):
+            return web.json_response({"error": "smart must be true or false"}, status=400)
         if delay is not None and (isinstance(delay, bool) or not isinstance(delay, (int, float))
                                   or not math.isfinite(delay) or not 0 <= delay <= 60):
             return web.json_response({"error": "delay must be 0 to 60 seconds"}, status=400)
-        state.set_autotarget(enabled, delay)
+        state.set_autotarget(enabled, delay, smart)
         return web.json_response(state.autotarget_info())
 
     async def highway_autotarget_test_view(_):
@@ -21105,14 +21141,17 @@ async def run(args, st):
             state.highway_cfg["autotarget"] = saved["enabled"]
         if isinstance(saved.get("delay"), (int, float)) and not isinstance(saved.get("delay"), bool):
             state.highway_cfg["autotarget_delay"] = min(60.0, max(0.0, float(saved["delay"])))
+        if isinstance(saved.get("smart"), bool):
+            state.highway_cfg["smart_target"] = saved["smart"]
     state.clipboard = Clipboard(st["highway"]["clipboard"])
     state.targeter = outrider.target.Targeter(state.honker, LIVE_DIRS, state.autotarget_cfg(),
                                               copy=lambda text: state.clipboard.copy(text, force=True))
     if state.game_pc and not state.simulate:   # never on a server: there is no game window there
         state.game_window = outrider.game_window.GameWindow()
     if not state.game_pc:
-        state.highway_cfg["autotarget"] = False
-    if state.highway_cfg["autotarget"] and state.honker.available and not state.highway_cfg["autotarget_dry_run"]:
+        state.highway_cfg.update(autotarget=False, smart_target=False)
+    if (state.highway_cfg["autotarget"] or state.highway_cfg["smart_target"]) and state.honker.available \
+            and not state.highway_cfg["autotarget_dry_run"]:
         state.honker.open("target")
     print("highway clipboard: " + (f"{state.clipboard.tool} (copies the next system when you arrive at a route system)"
                                    if state.clipboard.tool and state.clipboard.enabled else

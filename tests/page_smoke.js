@@ -4137,6 +4137,17 @@ const releasePayloads = async () => {
     dl.value = "99"; dl.dispatchEvent(new w.Event("change")); await sleep(100);   // refused here, never sent
     got.posts = calls.filter(c => c[0] === "api/highway/autotarget").map(c => JSON.stringify(c[2]));
     got.onNow = [d.getElementById("hwyAutoOn").checked, w.eval("data.autotarget.delay")];
+    // Smart targeting: its tick posted alone, drawn from the answer with its note; the honk's switch sits in this box
+    at.smart_note = "auto honk is off: only after a supercharge";
+    const sm = d.getElementById("hwySmartOn");
+    sm.checked = true; sm.dispatchEvent(new w.Event("change")); await sleep(150);
+    got.smart = [calls.filter(c => c[0] === "api/highway/autotarget").map(c => JSON.stringify(c[2])).slice(-1)[0], sm.checked,
+                 txt("hwySmartNote"), /\(smart\)$/.test(txt("hwyAutoState")),
+                 !!d.querySelector("#hwyAuto #autoHonkTarget") && !d.querySelector("#honkSettings #autoHonkTarget")];
+    // it overrides the two switches: their ticks greyed out, their seconds still open and marked as its own too
+    got.override = [d.getElementById("hwyAutoOn").disabled, d.getElementById("hwyAutoDelay").disabled,
+                    d.getElementById("autoHonkTarget").disabled, d.getElementById("autoHonkTargetDelay").disabled,
+                    [...d.querySelectorAll("#hwyAuto .smartuse")].filter(x => !x.hidden).length];
     d.getElementById("hwyAutoTest").click(); await sleep(150);
     got.refused = txt("hwyAutoTestMsg");
     testAnswer = () => json({system: "Hwy Stop 38", in: 5, seq: 1, dry_run: false});
@@ -4155,6 +4166,8 @@ const releasePayloads = async () => {
     if (!(got.missing[0] === false && /UI_Right: UI Right has no keyboard binding/.test(got.missing[1]))) bad.push("missing");
     if (got.steps !== 2 || !got.hint) bad.push("steps");
     if (JSON.stringify(got.posts) !== JSON.stringify(['{"enabled":true}', '{"delay":7.5}'])) bad.push("posts");
+    if (JSON.stringify(got.override) !== JSON.stringify([true, false, true, false, 2])) bad.push("override");
+    if (JSON.stringify(got.smart) !== JSON.stringify(['{"smart":true}', true, "auto honk is off: only after a supercharge", true, true])) bad.push("smart");
     if (JSON.stringify(got.onNow) !== JSON.stringify([true, 7.5])) bad.push("onNow");
     if (got.refused !== "cannot test: the galaxy map is open (the cockpit must have focus)") bad.push("refused");
     if (got.countdown !== "click into the game: targeting Hwy Stop 38 in 5 s") bad.push("countdown");
@@ -4163,7 +4176,7 @@ const releasePayloads = async () => {
     const goodAT = !bad.length && errors.length === before;
     allOk = allOk && goodAT;
     console.log(goodAT ? "OK" : "FAIL", "| highway auto-target box |", bad.length ? `failed ${bad.join(", ")}: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, got[k]])))}`
-      : "toggle and delay posted (a bad delay refused here), test refused in its words, countdown, done, last result, missing bindings, steps", errors.slice(before));
+      : "toggle and delay posted (a bad delay refused here), Smart targeting and the honk's switch, test refused in its words, countdown, done, last result, missing bindings, steps", errors.slice(before));
     await releasePayloads();
   }
   // review batch 6 on the page: Here follows the in-game target without a scan (F4); the fuel tile when the first

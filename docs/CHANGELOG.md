@@ -2,6 +2,19 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-23 · Smart targeting, and the honk's auto-target moves to Plot Route
+- **Smart targeting** in Plot Route's Auto-target the next system box (off by default; `[highway] smart_target`): on a
+  route plotted here (not the game's own), the next system is targeted after the supercharge where Spansh's plan
+  supercharges (a neutron row, unless the exact plotter's no neutron boost), with the supercharge's seconds; everywhere
+  else after the confirmed auto honk, with the honk's seconds. It overrides Auto-target after a supercharge and after
+  an auto honk: their ticks are greyed out and ignored while it is on, their seconds stay editable and are marked as
+  its own. It needs auto honk for its honk half, and the box says so when that is off.
+- **Auto-target after an auto honk** (was Then target the next route system, in Settings → Auto honk) now sits in the
+  same box, beside Auto-target after a supercharge.
+- `State.supercharge_expected`; `maybe_autotarget`, `honk_then_target` and `_autotarget_stale` count Smart targeting;
+  POST `/api/highway/autotarget` takes `smart`; `autotarget_info` carries `smart` and `smart_note`; meta `autotarget`
+  keeps `smart`.
+
 ## 2026-10-23 · Auto honk can then target the next route system
 - **Then target the next route system, N s after the honk** in ⚙ Settings → Auto honk (off by default; `[autohonk]
   target_next`, `target_delay`, 0 to 60 s, 3 by default). After an auto honk the journal confirms with its discovery

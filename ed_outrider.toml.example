@@ -203,6 +203,10 @@
 # autotarget is on.
 # autotarget = false
 # autotarget_delay = 5      # seconds after the supercharge (0 to 60)
+# smart_target = false     # Smart targeting: on a route plotted in Outrider (not the game's own), target
+#                          # the next system after the supercharge where Spansh expects one (autotarget_delay), and
+#                          # elsewhere after auto honk's honk ([autohonk] target_delay); it overrides autotarget and
+#                          # [autohonk] target_next while on. The Plot Route tab switches it
 # autotarget_entry = "type" # "type" the name (US keyboard layout) or "paste" it (wl-copy/xclip, then Ctrl+V)
 # autotarget_map_wait = 5   # seconds to wait for the galaxy map to open (and to close) before giving up
 # autotarget_search_wait = 2   # seconds after submitting the search for the map to fly to the system

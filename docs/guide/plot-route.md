@@ -158,10 +158,22 @@ in a route system it waits 5 s, then presses keys to make the next route system 
 map, searches for the system, plots the route, closes the map and checks the target took. It says "Successfully
 targeted neutron jump target Hwy Stop 38" (or "Failed to…") under its own alerts row.
 
+The box has two more ways to start the same run on its own:
+
+- **Auto-target after an auto honk** (off by default; `[autohonk] target_next`, `target_delay`): after an auto honk
+  that found its discovery scan, the next route system is targeted the seconds you set later (0 to 60, 3 by default).
+  It needs auto honk on (see [Automation](automation.md)); with no route nothing happens.
+- **Smart targeting** (off by default; `[highway] smart_target`): for a route plotted here, never the game's own. Where
+  Spansh's plan supercharges before the next jump (a neutron star on the route), the next system is targeted after the
+  supercharge, the seconds after it that the box sets; everywhere else after the auto honk, the seconds after the honk
+  set above. It overrides those two switches: while it is on they are greyed out and ignored, and their seconds (still
+  yours to change, marked "Smart targeting uses these seconds") are its own. It needs auto honk on for the honk half
+  (the box says so when it is off). An exact-plotter route plotted with no neutron boost never waits for a supercharge.
+
 - **Keyboard bindings:** Galaxy Map Open, UI Up, UI Select and the galaxy map's Camera Yaw Right and Camera Zoom
   Out need one (the box lists any missing; a built-in preset can't be read). It shares auto honk's virtual keyboard;
   honk goes first.
-- Switching it off, clearing the route or plotting a new one stops a run at once, even mid-way. If the game targets
+- Switching it off (or Smart targeting), clearing the route or plotting a new one stops a run at once, even mid-way. If the game targets
   a different system it says so by name ("Targeted the wrong system: …. Check before you jump."). A waypoint the
   game reaches by a plotted route of several jumps counts as targeted.
 - It never runs docked, landed, in a vehicle or on foot, in danger, with the FSD charging or a panel open. The game
