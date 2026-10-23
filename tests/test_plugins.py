@@ -308,7 +308,7 @@ class Audiobookshelf(unittest.TestCase):
         self.assertEqual(out["events"], ["loaded", "command"])
         self.assertTrue(all(s[2] == "Bearer tok" for s in seen if isinstance(s, tuple)))
 
-    def test_a_dropped_connection_is_said(self):
+    def test_a_cut_answer_is_said(self):
         async def go(c, m, books):
             books.cfg["url"] = "http://127.0.0.1:%d" % port
             return await (await c.get("/api/plugins/audiobookshelf/library")).json()
@@ -319,10 +319,15 @@ class Audiobookshelf(unittest.TestCase):
         ls.listen()
         port = ls.getsockname()[1]
 
-        def drop():   # accepts, reads the request, closes without an answer
-            c, _ = ls.accept()
-            c.recv(4096)
-            c.close()
+        def drop():   # answers with a body cut short, then closes (aiohttp's ClientPayloadError, not an OSError)
+            while True:
+                try:
+                    c, _ = ls.accept()
+                except OSError:
+                    return
+                c.recv(4096)
+                c.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{\"libr")
+                c.close()
         threading.Thread(target=drop, daemon=True).start()
         out, _ = self.run_with(go)
         ls.close()
