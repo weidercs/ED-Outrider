@@ -2,6 +2,20 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-23 · Plugins, and the first one: Audiobookshelf
+- **Plugins:** optional add-ons in `outrider/plugins/<name>/` (or your own in `data/plugins/<name>/`), loaded only
+  when listed in `[plugins] enabled`, each with its own `[plugins.<name>]` table. A plugin can add routes under
+  `/api/plugins/<name>/`, its part of the page's payload, a part of the overlay's new **Plugins** panel, background
+  tasks, voice phrases answered before the AI layer, read-only AI tools (for the voice's AI layer and the MCP bridge)
+  and its own page.js/page.css, which get `window.Outrider` (the payload, Outrider's speech starting and ending, its
+  own events). A plugin that fails to load is left out and said once; Outrider runs as before.
+- **The overlay's Plugins panel** (`[overlay] plugins_panel`, on; empty without a plugin) can draw pictures, fetched
+  from Outrider by the overlay window.
+- **Audiobookshelf:** your audiobooks from your own Audiobookshelf server, played in the page's mini player (cover,
+  chapter, controls, a picker), the audio and cover passed through Outrider so the token stays on the PC, and the
+  position synced back. Outrider's lines duck or pause the book; "pause the book", "resume the book", "next chapter",
+  "what am I listening to" by voice; it can start on a long plotted route and pause when you arrive; the cover and
+  chapter in the overlay's Plugins panel. See Settings and good to know → Plugins.
 ## 2026-10-23 · The voice: a voice server on your network
 - **`[speech] tts_server`** (`host:port`, empty by default) has a Wyoming text-to-speech server say the spoken alerts,
   the kind Home Assistant uses for local voices (wyoming-piper, a Kokoro server...), with **`tts_server_voice`** the

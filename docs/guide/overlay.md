@@ -95,6 +95,8 @@ before.
   switched on in **Settings → Alerts** in the browser that saw it (any of notify, sound or speak ticked), even while
   the voice is off or hushed. The alerts are worded by Outrider's page, so a page must be open somewhere (a browser
   window, the second screen or the tablet): with none open, the panel stays empty. Several windows open count once.
+- **Plugins** (on, empty without a plugin): what the [enabled plugins](settings.md#-plugins) show, an audiobook
+  playing with its cover, chapter and time left. Its pictures come from Outrider, never from outside.
 
 No panel covers the system map, the orrery, the FSS, the SAA or the codex, and over the galaxy map only the Target
 panel and the alerts show. While docked (at a station, a carrier or a port, or on foot inside one) the panels ticked

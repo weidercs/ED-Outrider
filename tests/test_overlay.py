@@ -206,7 +206,7 @@ class Panels(unittest.TestCase):
         for p in panels:
             self.assertTrue(p["items"] and p["w"] > 0 and p["h"] > 0)
             for i in p["items"]:
-                self.assertIn(i["t"], ("text", "runs", "rect", "circle", "line", "marker"))
+                self.assertIn(i["t"], ("text", "runs", "rect", "circle", "line", "marker", "image"))
                 for k in ("c", "f"):
                     if i.get(k) is not None:
                         self.assertRegex(i[k], r"^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$")
@@ -1086,7 +1086,7 @@ class RoutePanel(unittest.TestCase):
         self.assertTrue(O.overlay_settings({"overlay": {"route_panel": True}})["overlay"]["route_panel"])
         self.assertEqual(O.LAYOUT_DEFAULT["route"]["corner"], "ne")
         self.assertEqual(O.PANEL_NAMES["route"], "Route")
-        test = O.test_panels(O.palette())[-1]
+        test = next(p for p in O.test_panels(O.palette()) if p["id"] == "route")
         self.assertEqual((test["id"], texts(test)[0]), ("route", "Route  to Test Sector AB-C d1-9  test panel"))
 def alert(title, t, body="", danger=False, kind="find"):
     return {"kind": kind, "title": title, "body": body, "danger": danger, "t": t}
@@ -1230,7 +1230,7 @@ class Server(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual((out["enabled"], out["theme"], out["panels"], out["test"], out["analysis_only"]),
                          (True, "elite", {"system": True, "body": True, "radar": False, "strip": False, "now": False, "bio": False,
-                                          "alerts": False, "route": False}, O.TEST_SECONDS, []))
+                                          "alerts": False, "route": False, "plugins": True}, O.TEST_SECONDS, []))
         with open(self.state.config_path, encoding="utf-8") as f:   # written for the next start
             text = f.read()
         for line in ('enabled = true', 'theme = "elite"', 'radar = false'):
@@ -1284,7 +1284,7 @@ class Server(unittest.TestCase):
         self.state.overlay_cfg["text_size"] = "small"
         self.state.overlay_layout_set({"system": {"text": "large"}, "radar": {"text": "normal"}})
         self.assertEqual(self.state.overlay_sizes(), {"system": "large", "body": "small", "radar": "normal", "strip": "small",
-                                                      "now": "small", "bio": "small", "alerts": "small", "route": "small"})
+                                                      "now": "small", "bio": "small", "alerts": "small", "route": "small", "plugins": "small"})
         self.state.overlay_set({"test": True}, now=50)
         panels = {p["id"]: p for p in self.state.overlay_view(now=51)["panels"]}
         sizes = lambda p: {it.get("size") for it in p["items"] if it["t"] == "text"} | \

@@ -191,6 +191,7 @@ except ImportError:
 import outrider.materials  # engineering materials and synthesis recipes (no dependencies)
 import outrider.cargo      # the ship's hold and your carrier's, folded from the journal (no dependencies)
 import outrider.dock       # the nearest place to dock: stations and carriers from Spansh, the DSSA list, your carrier
+import outrider.plugins    # optional add-ons ([plugins] enabled; outrider/plugins/__init__.py)
 import outrider.tts        # spoken alerts; Piper itself is optional (the page falls back to browser speech)
 import outrider.wyoming    # [speech] tts_server: spoken alerts from a voice server on the network (Wyoming)
 import outrider.speech     # the words for spoken alerts, per personality (resources/speech.json)
@@ -1170,6 +1171,7 @@ def settings_from(cfg, args, env_journals=None, detected=((), ())):
         # [mcp]: read by the MCP bridge (python3 -m outrider.mcp), not the server; here so --write-config writes it
         **outrider.mcp.mcp_settings(cfg),
         "assistant": outrider.ask.assistant_settings(cfg),   # the voice's optional AI layer (off by default)
+        "plugins": plugin_settings(cfg),                      # [plugins] enabled and each one's own table
         **outrider.uploads.upload_settings(cfg),              # [eddn], [edsm]: written by Settings -> Uploads
         **outrider.overlay.overlay_settings(cfg),             # [overlay]: the in-game overlay (Settings -> In-game overlay)
     }
@@ -1183,6 +1185,53 @@ def _root_relative(path):
     except ValueError:   # another drive (Windows)
         return path
     return path if rel == os.pardir or rel.startswith(os.pardir + os.sep) or os.path.isabs(rel) else rel
+
+
+def plugin_settings(cfg):
+    """[plugins]: {"enabled": [names], "tables": {name: its [plugins.<name>] table}}; a bad name is reported and left
+    out (each plugin checks its own table when it loads)."""
+    names, tables, problems = outrider.plugins.enabled_settings(cfg)
+    for x in problems:
+        print(f"config: {x}", file=sys.stderr)
+    return {"enabled": names, "tables": tables}
+
+
+PLUGIN_SECRET = re.compile(r"(token|key|password|secret)$")   # a plugin's key holding a credential: never sent to the page
+
+
+def toml_value(v):
+    """A TOML value for a plugin's setting as config_text writes it back (text, true/false, a number, a list of those,
+    a table of those); None for anything else."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, str):
+        return outrider.config_edit.basic_string(v)
+    if isinstance(v, list):
+        items = [toml_value(x) for x in v]
+        return None if None in items else "[" + ", ".join(items) + "]"
+    if isinstance(v, dict):
+        items = [f"{outrider.config_edit.basic_string(str(k))} = {toml_value(x)}" for k, x in v.items()]
+        return None if any(i.endswith("= None") for i in items) else "{" + ", ".join(items) + "}"
+    return None
+
+
+def plugins_text(st):
+    """config_text's [plugins] part: the enabled list, then each enabled plugin's table as the file has it."""
+    p = st.get("plugins") or {"enabled": [], "tables": {}}
+    out = ["[plugins]   # optional add-ons (outrider/plugins/, or your own in data/plugins/): only those listed load",
+           "enabled = [" + ", ".join(outrider.config_edit.basic_string(n) for n in p["enabled"]) + "]   # e.g. [\"audiobookshelf\"]; applies at the next start"]
+    for n in p["enabled"]:
+        table = p["tables"].get(n) or {}
+        if not table:
+            continue
+        out += ["", f"[plugins.{n}]"]
+        for k, v in table.items():
+            tv = toml_value(v)
+            if tv is not None and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(k)):
+                out.append(f"{k} = {tv}   # a setting of the {n} plugin (see its documentation)")
+    return "\n".join(out) + "\n"
 
 
 def config_text(st):
@@ -1320,12 +1369,13 @@ now_panel = {"true" if st["overlay"]["now_panel"] else "false"}   # Now (To-Do &
 bio_panel = {"true" if st["overlay"]["bio_panel"] else "false"}   # every bio signal in the system, the ones over your bio_min highlighted, with samples and values
 route_panel = {"true" if st["overlay"]["route_panel"] else "false"}   # the route ahead: the game's own route (jumps, light years, the next jumps with their stars, the next scoop) and the Highway's next stop
 alerts_panel = {"true" if st["overlay"]["alerts_panel"] else "false"}   # the page's alerts for a few seconds (8 s, danger 15 s): every kind switched on in Settings -> Alerts (needs the page open)
+plugins_panel = {"true" if st["overlay"]["plugins_panel"] else "false"}   # what the enabled plugins show ([plugins] below): an audiobook playing, its cover; nothing without a plugin
 system_seconds = {st["overlay"]["system_seconds"]}   # how long the system panel stays after arriving (0: while in supercruise in that system)
 radar_range = {st["overlay"]["radar_range"]}   # metres from the radar's centre to its edge (it widens to fit a colony ring)
-analysis_only = [{", ".join(q(x) for x in st["overlay"]["analysis_only"])}]   # panels shown in your ship only while the HUD is in analysis mode: any of system, body, radar, strip, now, bio, alerts (not in the SRV, on foot or over the galaxy map)
-hide_docked = [{", ".join(q(x) for x in st["overlay"]["hide_docked"])}]   # panels hidden while docked (the ship, or on foot in a station, hangar or social space): any of system, body, strip, now, bio, alerts (the Target panel still shows over the galaxy map)
+analysis_only = [{", ".join(q(x) for x in st["overlay"]["analysis_only"])}]   # panels shown in your ship only while the HUD is in analysis mode: any of system, body, radar, strip, now, bio, alerts, plugins (not in the SRV, on foot or over the galaxy map)
+hide_docked = [{", ".join(q(x) for x in st["overlay"]["hide_docked"])}]   # panels hidden while docked (the ship, or on foot in a station, hangar or social space): any of system, body, strip, now, bio, alerts, plugins (the Target panel still shows over the galaxy map)
 show_inactive = {"true" if st["overlay"]["show_inactive"] else "false"}   # keep showing when Elite is not the active window (still hidden while other windows cover the game, minimised or on another desktop)
-hide_on_foot = [{", ".join(q(x) for x in st["overlay"]["hide_on_foot"])}]   # panels hidden on foot (in a station or on a planet's surface): any of system, body, radar, strip, now, bio, alerts
+hide_on_foot = [{", ".join(q(x) for x in st["overlay"]["hide_on_foot"])}]   # panels hidden on foot (in a station or on a planet's surface): any of system, body, radar, strip, now, bio, alerts, plugins
 hide_mouse_lock = {"true" if st["overlay"]["hide_mouse_lock"] else "false"}   # no overlay at all on foot and in the DSS, where Elite locks the mouse (an overlay can break that lock on some systems)
 pad_diagram = {"true" if st["overlay"]["pad_diagram"] else "false"}   # while docking at a starport or carrier, a diagram of where your pad is under PAD 34, in the overlay's Surface radar place and on Now (false: the number and its words only)
 
@@ -1354,7 +1404,7 @@ enabled = {"true" if st["uploads"]["edsm"]["enabled"] else "false"}   # send you
 # Inara uploads: switched on and off in the page's Settings -> Uploads, which writes this (the API key is set there too).
 enabled = {"true" if st["uploads"]["inara"]["enabled"] else "false"}   # keep your Inara commander profile current
 
-"""
+{plugins_text(st)}"""
 
 POSITION_EVENTS = ("FSDJump", "CarrierJump", "Location")
 STAR_CLASS_EVENTS = ("FSDTarget", "StartJump")
@@ -7293,6 +7343,7 @@ class State:
         self.seller_retry_at = None
         self._sampling_key = None
         self.unsold = None         # compute_unsold() result
+        self.plugins = None        # outrider.plugins.Manager: the enabled plugins (set by run())
         self.unsold_log = []       # [(finished at, result)]: the last few good estimates (sale estimates)
         self.unsold_dirty = outrider.unsold is not None
         self.unsold_at = 0.0
@@ -7644,6 +7695,9 @@ class State:
             "tail_error": self.tail_error,
             "bookmarks": self.bookmarks(),
             "unsold": self.unsold,
+            # the enabled plugins' parts ({name: {data, events}}; outrider/plugins), and which loaded
+            "plugins": self.plugins.payload() if self.plugins else {},
+            "plugins_info": self.plugins.info() if self.plugins else [],
         }
 
     # ---- the voice's hush and the co-pilot channel ----
@@ -7685,7 +7739,8 @@ class State:
                 if s["section"] not in outrider.config_edit.HIDDEN_SECTIONS]
         for sec in secs:
             for k in sec["keys"]:
-                if (sec["section"], k["key"]) in outrider.config_edit.SECRETS:
+                if (sec["section"], k["key"]) in outrider.config_edit.SECRETS or \
+                        sec["section"].startswith("plugins.") and PLUGIN_SECRET.search(k["key"]):
                     k.update(secret=True, set=bool(k["value"]), value=None)
         return {"path": path, "exists": os.path.exists(path), "sections": secs, "problems": problems}
 
@@ -7857,6 +7912,10 @@ class State:
             words = f"{words} {plot}" if plot else words
         elif cmd:   # left_behind filters at the server's thresholds (never a browser's: DESIGN_NOTES)
             words = await outrider.ask.fixed_answer(cmd, get, text=text, limits=(BODY_HIGHLIGHT, BIO_MIN))
+        elif self.plugins and (hit := self.plugins.answer(text)):   # a plugin's phrase ("resume my book")
+            matched, words = f"plugin:{hit[0]}", hit[1]
+            if asyncio.iscoroutine(words):
+                words = await words
         elif self.assistant.get("enabled"):
             matched, trace = "ai", {"rounds": 0, "tools": []}
             try:
@@ -9050,6 +9109,11 @@ class State:
         # the page's alerts (S26): anywhere, for ALERT_SECONDS each
         if cfg.get("alerts_panel"):
             p = outrider.overlay.alerts_panel(self.overlay_alerts, pal, size["alerts"], now)
+            if p:
+                out.append(p)
+        # what the enabled plugins show ([plugins] enabled; an audiobook playing): anywhere, as they say
+        if cfg.get("plugins_panel") and self.plugins:
+            p = outrider.overlay.plugins_panel(self.plugins.overlay_parts(), pal, size["plugins"])
             if p:
                 out.append(p)
         # analysis only (D2a): in your ship with the HUD in combat mode those panels stay off; in the SRV and on foot
@@ -19085,7 +19149,7 @@ def restart_needed(now=None):
     return stamps(now)["restart_needed"]
 
 
-def load_page(tablet=False):
+def load_page(tablet=False, plugin_tags=""):
     """page.html with its script and stylesheet links stamped by modification time, so a browser fetches
     the new copy as soon as either file changes instead of running a cached one. tablet: the /tablet layout. The
     desktop page links the themes too (not the tablet's shell): a browser may choose one (Settings > Display)."""
@@ -19103,6 +19167,8 @@ def load_page(tablet=False):
         except OSError:
             continue
         html = html.replace(f'"static/{name}"', f'"static/{name}?v={stamp}"')
+    if plugin_tags:   # the enabled plugins' page.css / page.js, after Outrider's own (window.Outrider is set by then)
+        html = html.replace("</body>", plugin_tags + "</body>", 1)
     return html
 
 
@@ -19468,7 +19534,7 @@ def make_app(state, hosts=None):
         # the browser defaults go into the page itself, so they are there before page.js reads its settings
         # ("<" escaped: a value holding "</script>" cannot end the script element)
         saved = read_browser_defaults(browser_defaults_path(state.db_path)) if state.db_path else None
-        return web.Response(text=load_page(tablet=request.path == "/tablet").replace("/*SEARCH_OPTIONS*/null", options)
+        return web.Response(text=load_page(tablet=request.path == "/tablet", plugin_tags=state.plugins.page_tags() if state.plugins else "").replace("/*SEARCH_OPTIONS*/null", options)
                             .replace("/*SERVER_DEFAULTS*/null", json.dumps(saved).replace("<", "\\u003c"))
                             .replace("/*SOUNDS*/null", sounds_json())
                             .replace("/*PAGE_STAMP*/null", json.dumps(stamps(fresh=True)["page"])),
@@ -20892,6 +20958,8 @@ def make_app(state, hosts=None):
     app.router.add_post("/api/bookmarks/import", bookmarks_import_view)
     app.router.add_post("/api/rigs/remove", rigs_remove_view)
     app.router.add_post("/api/sites/forget", sites_forget_view)
+    if state.plugins:   # the enabled plugins' routes (/api/plugins/<name>/...) and static files, behind the same guards
+        state.plugins.mount(app)
     return app
 
 
@@ -21670,6 +21738,11 @@ async def run(args, st):
                                if state.speaker.remote else "Piper found, preparing a voice" if state.speaker.available else
                                "Piper not installed, the page uses browser speech (see outrider/tts.py)"))
     state.speaker.start()
+    plug = st.get("plugins") or {"enabled": [], "tables": {}}
+    if plug["enabled"]:
+        state.plugins = outrider.plugins.Manager(plug["enabled"], plug["tables"], state,
+                                                 bump=lambda: loop.call_soon_threadsafe(state.bump))
+        outrider.plugins.register_tools(list(state.plugins.hosts))
     state.game_pc, why = resolve_game_pc(st["game_pc"])
     if not state.game_pc:   # a server away from the game PC: no keys, devices, clipboard or sound on it
         st = dict(simulate_settings(st), server_player="off")
@@ -21759,6 +21832,8 @@ async def run(args, st):
         state.speaker.preload(state.voices_in_use())
     rules_task = asyncio.create_task(check_bio_rules(state)) if outrider.bio else None
     watcher = asyncio.create_task(state.watch())
+    if state.plugins:
+        state.plugins.start()   # the plugins' own tasks (cancelled with the rest at shutdown)
     state.firsts_watch_on = st["watch_firsts"]
     firsts_task = asyncio.create_task(state.watch_firsts()) if st["watch_firsts"] else None
     update_task = asyncio.create_task(state.watch_updates()) if st["update_check"] else None
@@ -21824,7 +21899,7 @@ async def run(args, st):
         if state.overlay_runner:
             state.overlay_runner.stop()   # the overlay window closes with Outrider
         tasks = [t for t in (watcher, rules_task, button_task, firsts_task, update_task, images_task, overlay_task,   # the quit backup: finish_backup
-                             *state.background_tasks()) if t]
+                             *state.background_tasks(), *(state.plugins.tasks() if state.plugins else ())) if t]
         for t in tasks:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)

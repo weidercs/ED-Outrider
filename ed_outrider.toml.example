@@ -265,17 +265,19 @@
 # route_panel = false       # the route ahead: the game's own route (jumps, ly, the next jumps and stars, the next scoop), the Highway's next stop
 # alerts_panel = false      # the page's alerts for a few seconds (8 s, danger 15 s): every kind switched on in Settings ->
 #                           # Alerts (notify, sound or speak); worded by the page, so only while a page is open somewhere
+# plugins_panel = true      # what the enabled plugins show ([plugins] below): an audiobook playing, its cover
 # system_seconds = 0        # how long the system panel stays after arriving (0: while in supercruise in that system)
 # radar_range = 800         # metres from the radar's centre to its edge (it widens to fit a colony ring)
 # analysis_only = []        # panels shown in your ship only while the HUD is in analysis mode, e.g. ["system", "bio"]
-#                           # (any of system, body, radar, strip, now, bio, alerts; not in the SRV, on foot or over the galaxy map)
+#                           # (any of system, body, radar, strip, now, bio, alerts, plugins; not in the SRV, on
+#                           # foot or over the galaxy map)
 # hide_docked = ["system", "body", "now", "bio"]   # panels hidden while docked (the ship, or on foot in a station,
-#                           # hangar or social space): any of system, body, strip, now, bio, alerts; the Target panel
-#                           # still shows over the galaxy map
+#                           # hangar or social space): any of system, body, strip, now, bio, alerts, plugins; the
+#                           # Target panel still shows over the galaxy map
 # show_inactive = false     # keep showing when Elite is not the active window (Settings -> In-game overlay); it still
 #                           # hides while other windows cover the game, or the game is minimised or on another desktop
 # hide_on_foot = []         # panels hidden on foot (in a station or on a planet's surface), e.g. ["now"]: any of
-#                           # system, body, radar, strip, now, bio, alerts
+#                           # system, body, radar, strip, now, bio, alerts, plugins
 # hide_mouse_lock = false   # no overlay at all on foot and in the DSS, where Elite locks the mouse: an overlay can
 #                           # break that lock on some systems
 # pad_diagram = true        # while docking at a starport or carrier: a diagram of where your pad is under PAD 34, in the
@@ -299,6 +301,20 @@
 # model = ""                # one that can call tools (try it with real questions)
 # timeout = 20              # seconds for the whole answer (2 to 120)
 # max_rounds = 4            # tool rounds before it must answer (1 to 8)
+
+[plugins]
+# Optional add-ons (outrider/plugins/, or your own in data/plugins/): only the ones listed load, at the next start.
+# Each has its own [plugins.<name>] table; a key ending in token, key, password or secret stays on this PC.
+# enabled = ["audiobookshelf"]
+
+# [plugins.audiobookshelf]
+# url = "http://abs.lan:13378"   # your Audiobookshelf server
+# token = ""                     # an API token: Audiobookshelf -> Settings -> Users -> your user -> API token
+# duck = "duck"                  # while Outrider speaks: "duck" (quieter), "pause", or "off"
+# duck_volume = 0.25             # the book's volume while ducked (0 to 1)
+# long_route_jumps = 0           # start the book on a plotted route of at least this many jumps (0: never)
+# pause_on_arrival = true        # and pause it when that route ends
+# overlay = true                 # the cover and chapter in the overlay's Plugins panel while it plays
 
 [eddn]
 # EDDN, the Elite Dangerous Data Network: what your journals say as you play (systems, scans, signals, biology

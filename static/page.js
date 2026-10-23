@@ -2690,7 +2690,9 @@ async function speechWorker() {
       const e = item.log, t0 = Date.now();
       if (e) e.waited = t0 - item.at;
       speechPlaying = e || null;
+      pluginFire("speech", {state: "start", kind: item.kind, prio: item.prio});   // a plugin's audio ducks (Audiobookshelf)
       try { await sayNow(item); } catch {}
+      pluginFire("speech", {state: "end", kind: item.kind, more: speechItems.length > 0});
       speechPlaying = null;
       if (e) {
         e.took = Date.now() - t0; e.engine = item.engine || null;
@@ -12348,7 +12350,8 @@ const OV_PANELS = [["system", "System", "the bodies worth your time, in supercru
                    ["now", "Now (To-Do & Info)", "Now, condensed: the target, fuel, data at risk, what to do next, this session"],
                    ["bio", "Bio signals", "every bio signal in the system, the ones worth it highlighted: samples, values"],
                    ["alerts", "Alerts", "the page's alerts for a few seconds (8 s, danger 15 s in red): every kind switched on in Settings → Alerts; needs the page open"],
-                   ["route", "Route", "the route ahead: the game's own route (jumps, light years, the next jumps with their stars, the next scoop) and the Highway's next stop"]];
+                   ["route", "Route", "the route ahead: the game's own route (jumps, light years, the next jumps with their stars, the next scoop) and the Highway's next stop"],
+                   ["plugins", "Plugins", "what the enabled plugins show: an audiobook playing and its cover (nothing without a plugin)"]];
 // the panel table's headings, short so the table fits the Settings dialog (the author, 2026-10-14); the full wording on
 // hover. Combat and Docked sit under "Hide in mode": a ticked box hides the panel in that mode
 const OV_HEADS = (() => {
@@ -13574,10 +13577,37 @@ async function poll(once = false) {
   pageStarting = starting;
   let drawn = guarded("drawing", () => setConnected(ok || !!starting));
   if (fresh) { const alerted = guarded("alerts", onData), rendered = guarded("drawing", render); drawn = drawn && alerted && rendered; }
+  if (fresh) guarded("plugins", pluginPublish);   // after Outrider's own drawing: a plugin's failure never stops it
   if (!drawn && data) guarded("drawing", renderStrip);   // at least the Data tile, which says what failed
   // the server holds the request until something changes, so ask again at once; back off if it failed
   if (!once) setTimeout(poll, ok ? 0 : starting ? STARTING_POLL_MS : 2000);
 }
+// ---- plugins (outrider/plugins): window.Outrider, the page API their static/page.js uses ----
+// on(event, fn): "data" (each payload), "speech" ({state: "start" | "end"} around every spoken line, wherever it is
+// said), "plugin:<name>" (each new event of that plugin's Host.emit, once). api(path, options): fetch + JSON
+// (apiJson). A listener that throws is caught and logged, never stopping the others or the page.
+const pluginListeners = {}, pluginSeen = {};
+function pluginFire(event, detail) {
+  for (const fn of pluginListeners[event] || []) {
+    try { fn(detail); } catch (err) { console.error(`plugin listener for ${event} failed`, err); }
+  }
+}
+function pluginPublish() {
+  pluginFire("data", data);
+  for (const [name, part] of Object.entries((data && data.plugins) || {})) {
+    const evs = (part && part.events) || [], seen = pluginSeen[name];
+    // the first payload only baselines: an event from before this page was opened is not acted on again
+    if (seen !== undefined) for (const ev of evs) if (ev.seq > seen) pluginFire(`plugin:${name}`, ev);
+    pluginSeen[name] = evs.reduce((m, ev) => Math.max(m, ev.seq), seen ?? 0);
+  }
+}
+const OutriderAPI = {
+  on(event, fn) { (pluginListeners[event] = pluginListeners[event] || []).push(fn); },
+  api: (path, opts) => apiJson(path, opts), esc, toast,
+  get data() { return data; },
+  speaking: () => !!speechNow,
+};
+if (typeof window !== "undefined") window.Outrider = OutriderAPI;
 poll();
 
 // ---- newer page files: an open page reloads itself ----
