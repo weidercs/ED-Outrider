@@ -6,6 +6,7 @@
   const O = window.Outrider;
   if (!O) return;
   const BASE = "api/plugins/audiobookshelf/", SYNC_MS = 15000, SKIP = 30;
+  const RATES = [0.75, 0.9, 1, 1.1, 1.2, 1.25, 1.3, 1.4, 1.5, 1.75, 2, 2.25, 2.5, 3];
   const rel = p => String(p || "").replace(/^\/+/, "");
   const store = {
     get(k, d) { try { const v = localStorage.getItem("abs." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
@@ -17,6 +18,7 @@
   audio.preload = "auto";
   let book = null, track = 0, cfg = {}, ducked = null, lastSync = 0, listened = 0, tickAt = 0, picking = false;
   let volume = store.get("volume", 1);
+  let rate = RATES.includes(store.get("rate", 1)) ? store.get("rate", 1) : 1;
 
   const box = document.createElement("div");
   box.id = "absPlayer";
@@ -27,12 +29,14 @@
     <div class="absCtl"><button data-do="prev" title="Previous chapter">⏮</button><button data-do="back" title="Back ${SKIP} s">⟲</button>
     <button data-do="toggle" class="absPlay" title="Play / pause">▶</button><button data-do="forward" title="On ${SKIP} s">⟳</button>
     <button data-do="next" title="Next chapter">⏭</button><button data-do="pick" title="Pick a book">📚</button>
+    <select class="absRate" title="Playback speed" aria-label="Audiobook playback speed">${RATES.map(r => `<option value="${r}">${r}×</option>`).join("")}</select>
     <input type="range" class="absVol" min="0" max="1" step="0.05" title="Volume" aria-label="Audiobook volume"></div>
     <div class="absPick" hidden></div><div class="absErr"></div></div>`;
   document.body.appendChild(box);
   const $ = s => box.querySelector(s);
   box.classList.toggle("absCollapsed", !!store.get("collapsed", false));
   $(".absVol").value = volume;
+  $(".absRate").value = String(rate);
   for (const img of [$(".absCover")]) {   // a cover that fails (none on the server) is not a broken picture
     img.addEventListener("error", () => img.classList.add("absNone"));
     img.addEventListener("load", () => img.classList.remove("absNone"));
@@ -44,6 +48,9 @@
   const chapterAt = t => { const cs = (book && book.chapters) || []; let i = cs.findIndex(c => t >= c.start && t < c.end);
     if (i < 0 && cs.length && t >= cs[cs.length - 1].end) i = cs.length - 1; return i; };
   const applyVolume = () => { audio.volume = Math.max(0, Math.min(1, volume * (ducked === "duck" ? (cfg.duck_volume ?? 0.25) : 1))); };
+  // the default rate too: a new track (src) starts at it, where playbackRate alone would go back to 1
+  const applyRate = () => { audio.defaultPlaybackRate = audio.playbackRate = rate; audio.preservesPitch = true; };
+  applyRate();
 
   function seek(t) {
     if (!book || !book.tracks.length) return;
@@ -74,7 +81,7 @@
     if (!force && t - lastSync < SYNC_MS) return;
     lastSync = t;
     const got = await O.api(BASE + "sync", {method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({position: pos(), listened: Math.round(listened), playing: !audio.paused, player: ME})});
+      body: JSON.stringify({position: pos(), listened: Math.round(listened), playing: !audio.paused, rate, player: ME})});
     listened = 0;
     if (got && got.error) $(".absErr").textContent = got.error;
   }
@@ -134,6 +141,7 @@
     if (b.dataset.do) act(b.dataset.do);
   });
   $(".absVol").addEventListener("input", e => { volume = +e.target.value; store.set("volume", volume); applyVolume(); });
+  $(".absRate").addEventListener("change", e => { rate = +e.target.value; store.set("rate", rate); applyRate(); sync(true); });
 
   audio.addEventListener("ended", () => {
     if (book && track + 1 < book.tracks.length) { track += 1; audio.src = `${BASE}stream/${track}?s=${encodeURIComponent(book.session)}`; audio.play().catch(() => {}); }
@@ -191,5 +199,5 @@
     }
   });
   addEventListener("pagehide", () => { if (book && !audio.paused) navigator.sendBeacon && navigator.sendBeacon(BASE + "sync",
-    new Blob([JSON.stringify({position: pos(), listened: Math.round(listened), playing: false, player: ME})], {type: "application/json"})); });
+    new Blob([JSON.stringify({position: pos(), listened: Math.round(listened), playing: false, rate, player: ME})],{type: "application/json"})); });
 })();

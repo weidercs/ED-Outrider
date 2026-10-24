@@ -112,8 +112,8 @@ shipped plugins are in `outrider/plugins/`; your own go in `data/plugins/<name>/
 Outrider's page. Audiobookshelf's apps cannot be controlled from outside, so the book plays in the page where you
 press ▶ (the 📖 mini player, bottom right): the audio comes through Outrider, so the token never reaches a browser,
 and where you are is saved back to Audiobookshelf, so the phone app carries on from there.
-- **The mini player:** the cover, title, author and narrator, the chapter, ⏮ ⟲ ▶ ⟳ ⏭, the volume, and 📚 to pick a
-  book in progress. ▶ with nothing loaded starts the book you listened to last.
+- **The mini player:** the cover, title, author and narrator, the chapter, ⏮ ⟲ ▶ ⟳ ⏭, the speed (0.75× to 3×), the volume, and
+  📚 to pick a book in progress. Speed and volume are kept per browser; the time left is said at that speed. ▶ with nothing loaded starts the book you listened to last.
 - **Ducking:** while Outrider says a line, the book is turned down (`duck = "duck"`, to `duck_volume`), paused
   (`"pause"`), or left alone (`"off"`). Only lines said by the page playing the book duck it.
 - **By voice:** "pause the book", "resume the book", "next chapter", "previous chapter", "rewind the book" and
