@@ -21,6 +21,9 @@
 .absCtl { grid-column: 1 / -1; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .absPlay { min-width: 2.4em; }
 .absVol { width: 80px; accent-color: var(--accent); }
+.absRate { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 2px 2px;
+  font-size: 13px; cursor: pointer; }
+.absRate:hover { border-color: var(--accent); }
 .absPick { grid-column: 1 / -1; display: grid; gap: 4px; max-height: 260px; overflow: auto; }
 .absPick button { display: flex; gap: 8px; align-items: center; text-align: left; font-size: 13px !important; }
 .absPick img { width: 36px; color: transparent; height: 36px; object-fit: cover; border-radius: 4px; }

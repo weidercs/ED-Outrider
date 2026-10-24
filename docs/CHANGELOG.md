@@ -2,6 +2,10 @@
 
 Newest first, one entry per commit.
 
+## 2026-10-23 · Audiobookshelf: a playback speed
+- The mini player has a **speed** list beside the volume (0.75× to 3×, kept per browser, the pitch kept), held across
+  the book's tracks. The page sends it with each sync: the overlay's position runs at it, and the time left (the
+  overlay, "what am I listening to", the AI tool's `now_playing`, which also gives `rate`) is listening time at it.
 ## 2026-10-23 · Plugins, and the first one: Audiobookshelf
 - **Plugins:** optional add-ons in `outrider/plugins/<name>/` (or your own in `data/plugins/<name>/`), loaded only
   when listed in `[plugins] enabled`, each with its own `[plugins.<name>]` table. A plugin can add routes under

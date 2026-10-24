@@ -36,6 +36,7 @@ TIMEOUT = ClientTimeout(total=15)
 STREAM_TIMEOUT = ClientTimeout(total=None, sock_connect=10, sock_read=60)
 SHOWN_AFTER_PAUSE = 30     # s: the overlay part stays this long after the book is paused
 LONG_ROUTE_CHECK_S = 3     # s: how often the long-route watcher looks
+RATE_MIN, RATE_MAX = 0.5, 3.0   # the page's playback speed, as the server counts it on between syncs
 MIME = ["audio/flac", "audio/mpeg", "audio/mp4", "audio/ogg", "audio/aac", "audio/webm", "audio/x-m4a"]
 
 PHRASES = {
@@ -198,21 +199,22 @@ class Books:
                 "duck": self.cfg["duck"], "duck_volume": self.cfg["duck_volume"]}
 
     def position(self, now=None):
-        """Where the book is now: the last synced position, moved on by the time since while it plays."""
+        """Where the book is now: the last synced position, moved on by the time since (at the page's speed) while it plays."""
         n = self.now or {}
         t = n.get("position", 0)
         if n.get("playing"):
-            t += (now or time.time()) - n.get("updated", now or time.time())
+            t += ((now or time.time()) - n.get("updated", now or time.time())) * n.get("rate", 1.0)
         return min(t, n.get("duration") or t)
 
     def brief(self, now=None):
         if not self.now:
             return None
-        t = self.position(now)
+        t, rate = self.position(now), self.now.get("rate", 1.0)
         i, ch = chapter_at(self.now["chapters"], t)
+        left = max(0.0, self.now["duration"] - t) / rate   # listening time, at the page's speed
         return {"title": self.now["title"], "author": self.now["author"], "narrator": self.now["narrator"],
-                "series": self.now["series"], "playing": bool(self.now.get("playing")),
-                "position": round(t), "duration": round(self.now["duration"]), "left": clock(self.now["duration"] - t),
+                "series": self.now["series"], "playing": bool(self.now.get("playing")), "rate": rate,
+                "position": round(t), "duration": round(self.now["duration"]), "left": clock(left), "left_s": round(left),
                 "chapter": ch["title"] if ch else None, "chapter_number": i + 1 if i is not None else None,
                 "chapters": len(self.now["chapters"])}
 
@@ -258,13 +260,14 @@ class Books:
         if not s.get("id") or not s.get("audioTracks"):
             raise RuntimeError("Audiobookshelf started no session for that item (is it an audiobook?)")
         self._track_urls = [t.get("contentUrl") or "" for t in s["audioTracks"]]
-        self.now = dict(session_view(s), playing=False, updated=time.time())
+        self.now = dict(session_view(s), playing=False, updated=time.time(), rate=1.0)
         self.error = None
         self.host.emit("loaded", {"session": self.now["session"]})
         return self.now
 
-    async def sync(self, position, listened, playing, player=None):
-        """The page's report (every 15 s while playing, and at pause): kept, and passed on to Audiobookshelf."""
+    async def sync(self, position, listened, playing, player=None, rate=None):
+        """The page's report (every 15 s while playing, at pause and at a change of speed): kept, and passed on to
+        Audiobookshelf. `rate` is the page's playback speed (RATE_MIN to RATE_MAX; None keeps the last)."""
         if not self.now:
             return {"error": "no book loaded"}
         n = self.now
@@ -272,6 +275,8 @@ class Books:
                  updated=time.time())
         if player:
             self.player = str(player)[:40]
+        if rate is not None:
+            n["rate"] = min(RATE_MAX, max(RATE_MIN, float(rate)))
         self.host.state and self.host.state.bump()
         try:
             await self.call("POST", f"/api/session/{n['session']}/sync",
@@ -305,7 +310,7 @@ class Books:
             if not b:
                 return "No audiobook is loaded."
             return (f"{b['title']}, by {b['author']}" + (f", chapter {b['chapter_number']}" if b["chapter_number"] else "") +
-                    f", {said_clock(b['duration'] - b['position'])} left." + ("" if b["playing"] else " It is paused."))
+                    f", {said_clock(b['left_s'])} left." + ("" if b["playing"] else " It is paused."))
         if kind == "play":
             if not self.now:
                 try:
@@ -376,9 +381,12 @@ def setup(host):
         try:
             b = await request.json()
             position, listened = float(b.get("position", 0)), float(b.get("listened", 0))
+            rate = float(b["rate"]) if b.get("rate") is not None else None
         except (TypeError, ValueError, AttributeError):
-            return web.json_response({"error": "expected {position, listened, playing}"}, status=400)
-        return web.json_response(await books.sync(position, listened, b.get("playing"), b.get("player")))
+            return web.json_response({"error": "expected {position, listened, playing, rate}"}, status=400)
+        if rate is not None and not rate > 0:   # NaN and nonsense too
+            rate = None
+        return web.json_response(await books.sync(position, listened, b.get("playing"), b.get("player"), rate))
 
     async def command(request):
         b = await request.json()

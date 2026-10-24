@@ -50,7 +50,7 @@ def plugin_dir(tmp, name, body=FAKE):
     os.makedirs(os.path.join(d, "static"))
     with open(os.path.join(d, "plugin.py"), "w") as f:
         f.write(body.replace("{name}", name))
-    with open(os.path.join(d, "static", "page.js"), "w") as f:
+    with open(os.path.join(d, "static", "page.js"), "w", newline="\n") as f:   # "\n" on Windows too
         f.write("// fake\n")
     return d
 
@@ -307,6 +307,29 @@ class Audiobookshelf(unittest.TestCase):
         self.assertEqual(out["pause"], "Book paused.")
         self.assertEqual(out["events"], ["loaded", "command"])
         self.assertTrue(all(s[2] == "Bearer tok" for s in seen if isinstance(s, tuple)))
+
+    def test_playback_speed(self):
+        async def go(c, m, books):
+            await c.post("/api/plugins/audiobookshelf/play", json={})
+            out = {}
+            for rate in (2, "fast", -1, None, 9):
+                r = await c.post("/api/plugins/audiobookshelf/sync",
+                                 json={"position": 1800, "listened": 0, "playing": False, "rate": rate})
+                out[str(rate)] = (r.status, books.now["rate"])
+            await c.post("/api/plugins/audiobookshelf/sync", json={"position": 1800, "listened": 0, "playing": True, "rate": 2})
+            t = books.now["updated"]
+            out["position"] = books.position(t + 10)   # 10 s at 2x: 20 s of the book
+            out["brief"] = books.brief(t)
+            out["what"] = await m.answer("what am I listening to")[1]
+            return out
+        out, _ = self.run_with(go)
+        self.assertEqual(out["2"], (200, 2.0))
+        self.assertEqual(out["fast"], (400, 2.0))       # not a number: refused, the speed kept
+        self.assertEqual((out["-1"], out["None"]), ((200, 2.0), (200, 2.0)))   # nonsense or none: the speed kept
+        self.assertEqual(out["9"], (200, 3.0))          # clamped
+        self.assertEqual(out["position"], 1820)
+        self.assertEqual((out["brief"]["rate"], out["brief"]["left"], out["brief"]["left_s"]), (2.0, "15 m", 900))
+        self.assertIn("15 minutes left", out["what"])   # the listening time left, at that speed
 
     def test_a_cut_answer_is_said(self):
         async def go(c, m, books):
